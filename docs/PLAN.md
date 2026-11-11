@@ -155,6 +155,57 @@ The 90% target is **not met yet**. The remaining misses fall into three groups:
 River mouths on dune and estuary flats are ambiguous (the Waipoua reaches the sea 700 m from
 REC2's mouth), so named rivers are measured ≥ 500 m inland.
 
+## Phases 5-8: status 2026-11-11 (reference regions)
+
+**Terrain.** Both regions are now routed on LiDAR at 5 m: the national 1 m mosaic, read through
+its 4 m overviews, with gaps filled from the 8 m DEM (coverage was 100% in both). REC2 agreement
+improved (within 10%, reaches > 5 km²): Kaimai 70% → 76%, Tutamoe 75% → 88%. All six named
+rivers are within 1-9%.
+
+**Reaches (phase 5).** `reaches.py` splits the channel network (≥ 0.5 km²) into ~250 m
+segments. Each gets gradient, steepest 50 m, `k_sn`, a knick ratio, gorge depth, catchment
+height above channel, plateau share upstream, resistant-rock share upstream, bed rock (GNS),
+mean annual flood (NIWA Henderson & Collins) and stream power. Kaimai has 8,743 segments,
+Tutamoe 10,220.
+
+**Hydrology.** The MfE rainfall grid could not be fetched (data.govt.nz blocks scripts; the MfE
+portal needs an API key). NIWA's mean annual flood per REC1 reach is used instead: specific
+MAF from the nearest REC1 reach of similar size, times our catchment area. For flood runs this
+is arguably the better measure. Kaimai pumice catchments have a much lower specific MAF (median
+0.7 m³/s/km²) than Northland clay ones (about 3), so per-region flow thresholds matter.
+
+**Geology profile (phase 6).** Known-run segments sit on resistant rock (ignimbrite, rhyolite,
+andesite, basalt) far more often than other reaches: Kaimai 97% vs 60%, Tutamoe 73% vs 37%.
+They are in deeper gorges (73 vs 46 m, 63 vs 37 m) and are steeper. The plateau share upstream
+is *not* distinctive at reach level. The plateau signal comes through catchment height above
+channel and stream power instead.
+
+**Scoring (phases 6-8).** `scoring.py` provides three scores, all as percentiles:
+- similarity to the known-run feature centroid (the reference signature);
+- a user-weighted composite;
+- an L2 logistic regression.
+
+Labels are a stop-gap: steep (≥ 10 m/km), ≥ 2 km² segments on listed reference rivers count as
+known runs. The real guidebook sections are needed (beads issue). The Mangakarengorengo is held
+out entirely.
+
+**Hold-out test: passed.** With default settings the Mangakarengorengo is **#1 and #2 of 47** runs
+not in the guides in the Kaimai box. Its best segment is at the 99.9th percentile (regression),
+99.1th (signature) and 96.8th (default composite). Leaving each listed river out in turn still
+ranks it highly (median 81st-99th percentile). The Tuakopae is weakest (small creeks are
+under-represented in the labels).
+Caveat: the "big rivers count at lower gradients" rule was added after seeing the
+Mangakarengorengo profile (15-22 m/km at a mean annual flood near 70 m³/s). The regression
+ranking does not depend on it.
+
+**Run finder (phase 7).** Segments that pass the gradient band, minimum flood flow and length
+are chained downstream into runs, allowing one-segment gaps. Optionally the minimum gradient is
+scaled by (MAF/20)^-0.5 so big rivers count at lower gradients. The same logic runs live in the
+viewer with sliders.
+
+**Not done yet:** road/access distance (OSM and LINZ hosts unreachable), the NZRCA guide as the
+"known" layer (needs the guide or your list), North Island scaling.
+
 ## Open questions
 
 See the beads issue labelled `question`. Answers get recorded with `bd remember`.

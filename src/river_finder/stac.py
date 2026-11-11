@@ -97,3 +97,26 @@ def read_dem(path: Path):
         valid = ds.read_masks(1) > 0
         valid &= np.isfinite(z) & (z > NODATA + 1)
         return z, valid, ds.profile.copy()
+
+
+def hybrid_mosaic(fine: str, coarse: str, bbox_wgs84, bbox_nztm, res: float, out_path: Path, cache_dir: Path) -> Path:
+    """LiDAR (``fine``) mosaic at ``res``, with gaps filled from the ``coarse`` DEM.
+
+    Reads the COG overviews nearest to ``res``, so a 5 m grid pulls the 4 m LiDAR overview rather
+    than full 1 m data. Writes a band tag ``source_fraction_fine`` with the share of LiDAR cells.
+    """
+    tmp_f, tmp_c = out_path.with_suffix(".fine.tif"), out_path.with_suffix(".coarse.tif")
+    mosaic(fine, bbox_wgs84, bbox_nztm, res, tmp_f, cache_dir)
+    mosaic(coarse, bbox_wgs84, bbox_nztm, res, tmp_c, cache_dir)
+    with rasterio.open(tmp_f) as f, rasterio.open(tmp_c) as c:
+        zf, zc, profile = f.read(1), c.read(1), f.profile
+    have = zf > NODATA + 1
+    out = np.where(have, zf, zc)
+    land = out > NODATA + 1
+    with rasterio.open(out_path, "w", **profile) as dst:
+        dst.write(out, 1)
+        dst.update_tags(source=f"{fine} (LiDAR) filled from {coarse}",
+                        source_fraction_fine=f"{have[land].mean() if land.any() else 0:.4f}")
+    tmp_f.unlink()
+    tmp_c.unlink()
+    return out_path

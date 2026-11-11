@@ -34,6 +34,9 @@ layer 105690. The BOPRC ImageServer also serves the BoP DEM.
 
 ## 2. Rainfall / runoff
 
+**In use (Nov 2026):** NIWA Henderson & Collins (2018) flood statistics per REC1 reach, via the public FeatureServer `NZ_Flood_Statistics_Henderson_Collins_V2_REC1_Layer_WFL1` (mean annual, 10- and 100-year floods). The MfE rainfall grid below is blocked for scripts (bot protection on data.govt.nz; the MfE portal needs an API key).
+
+
 | Dataset | Resolution | Use |
 |---|---|---|
 | MfE / NIWA *Average annual rainfall 1972–2016* (ASCII grid) — [data.govt.nz](https://catalogue.data.govt.nz/dataset/average-annual-rainfall-19722016/resource/071be53e-b7dc-4dd8-9447-db692c47cc79) | ~500 m | Catchment-mean rainfall gives a mean-flow proxy. **Start here.** |
@@ -46,7 +49,7 @@ layer 105690. The BOPRC ImageServer also serves the BoP DEM.
 
 | Dataset | Notes |
 |---|---|
-| GNS 1:250 000 Geological Map of NZ (QMAP seamless) — [FeatureServer](https://gis.gns.cri.nz/server/rest/services/NZL_GNS_250K_Geology_2014/NZL_GNS_250K_geology_FeatureService/FeatureServer) · [data.govt.nz](https://catalogue.data.govt.nz/dataset/nzl-gns-1-250k-geology-2nd-edition1) | Lithology polygons with rock type, age and group. Used to build "same geology as the reference regions" masks. Can be queried from the ArcGIS REST service in EPSG:2193. |
+| **In use:** GNS 250K geology 2023, `NZL_GNS_250K_Geology_2023/NZL_GNS_250K_geology_FeatureService_NZ/FeatureServer/55` (geological units; fields rockgroup, rockclass, mainrock). Older: GNS 1:250 000 Geological Map of NZ (QMAP seamless) — [FeatureServer](https://gis.gns.cri.nz/server/rest/services/NZL_GNS_250K_Geology_2014/NZL_GNS_250K_geology_FeatureService/FeatureServer) · [data.govt.nz](https://catalogue.data.govt.nz/dataset/nzl-gns-1-250k-geology-2nd-edition1) | Lithology polygons with rock type, age and group. Used to build "same geology as the reference regions" masks. Can be queried from the ArcGIS REST service in EPSG:2193. |
 | Free digital QMAP sheets — [GNS](https://www.gns.cri.nz/data-and-resources/digital-qmap-geological-maps-at-1250000/) | Georeferenced JPEGs. Good for checking by eye. |
 
 ## 4. Existing river network (validation + "already known" mask)

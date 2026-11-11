@@ -28,7 +28,8 @@ class Region:
     role: str
     bbox_wgs84: tuple[float, float, float, float]
     dem_coarse: str
-    dem_fine: list[str] = field(default_factory=list)
+    lidar: str | None = None
+    routing_res: float = 8.0
     known_runs: list[KnownRun] = field(default_factory=list)
 
     def bbox_nztm(self, res: float = 8.0) -> tuple[float, float, float, float]:
@@ -69,7 +70,8 @@ def load_region(name_or_path: str) -> Region:
         role=d.get("role", "search"),
         bbox_wgs84=tuple(d["bbox_wgs84"]),
         dem_coarse=d["dem"]["coarse"],
-        dem_fine=list(d["dem"].get("fine", [])),
+        lidar=d["dem"].get("lidar"),
+        routing_res=float(d["dem"].get("routing_res", 8.0)),
         known_runs=[
             KnownRun(r["river"], r.get("status", "listed"), tuple(r["outlet_wgs84"]), r.get("rec2_cum_area_km2"))
             for r in runs

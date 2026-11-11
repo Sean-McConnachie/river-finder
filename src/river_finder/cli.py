@@ -11,15 +11,21 @@ from .regions import REPO_ROOT, list_regions, load_region
 
 
 def _fetch(region, args):
-    from . import rec2
-    from .stac import mosaic
+    from . import context, rec2
+    from .stac import hybrid_mosaic, mosaic
 
+    cache, d = REPO_ROOT / "data" / "_stac", region.data_dir()
     t = time.time()
-    p = mosaic(region.dem_coarse, region.bbox_wgs84, region.bbox_nztm(8.0), 8.0,
-               region.data_dir() / "dem_8m.tif", REPO_ROOT / "data" / "_stac")
-    print(f"[{region.name}] DEM -> {p} ({time.time() - t:.0f}s)")
-    rec2.fetch_region(region.bbox_wgs84, region.data_dir())
-    print(f"[{region.name}] REC2 reaches -> {region.data_dir()}")
+    p = mosaic(region.dem_coarse, region.bbox_wgs84, region.bbox_nztm(8.0), 8.0, d / "dem_8m.tif", cache)
+    print(f"[{region.name}] 8 m DEM -> {p} ({time.time() - t:.0f}s)")
+    if region.lidar and region.routing_res < 8.0:
+        t, res = time.time(), region.routing_res
+        p = hybrid_mosaic(region.lidar, region.dem_coarse, region.bbox_wgs84, region.bbox_nztm(res), res,
+                          d / f"dem_{res:g}m.tif", cache)
+        print(f"[{region.name}] {res:g} m LiDAR hybrid -> {p} ({time.time() - t:.0f}s)")
+    rec2.fetch_region(region.bbox_wgs84, d)
+    context.fetch_region(region, d)
+    print(f"[{region.name}] REC2 reaches, GNS geology, NIWA flood statistics -> {d}")
 
 
 def _route(region, args):
@@ -39,20 +45,34 @@ def _validate(region, args):
         print(f"   {n['river']:26s} {n.get('status', ''):9s} model {model} km2 vs REC2 {ref} km2")
 
 
+def _reaches(region, args):
+    from .reaches import run
+
+    t = time.time()
+    print(f"[{region.name}] reach segments -> {run(region)} ({time.time() - t:.0f}s)")
+
+
+def _score(regions, args):
+    from .scoring import score_and_write
+
+    summary = score_and_write(regions, REPO_ROOT / "data")
+    print("score:", json.dumps(summary, indent=1))
+
+
 def _export(region, args):
     from .export import export_region
 
     print(f"[{region.name}] GIS export -> {export_region(region)}")
 
 
-STEPS = {"fetch": _fetch, "route": _route, "validate": _validate, "export": _export}
+STEPS = {"fetch": _fetch, "route": _route, "validate": _validate, "reaches": _reaches, "export": _export}
 
 
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="river-finder", description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in [*STEPS, "run"]:
-        p = sub.add_parser(name, help="all steps + viewer" if name == "run" else f"{name} step")
+    for name in [*STEPS, "score", "run"]:
+        p = sub.add_parser(name, help="all steps + score + viewer" if name == "run" else f"{name} step")
         p.add_argument("regions", nargs="*", help=f"region names (default: all of {list_regions()})")
     pv = sub.add_parser("viewer", help="build the browser viewer for the given regions")
     pv.add_argument("regions", nargs="*")
@@ -67,11 +87,15 @@ def main(argv: list[str] | None = None) -> None:
         full, _ = build(regions, args.out, args.max_px)
         print(f"viewer -> {full} ({full.stat().st_size / 1e6:.1f} MB)")
         return
+    if args.cmd == "score":
+        _score(regions, args)
+        return
     steps = list(STEPS) if args.cmd == "run" else [args.cmd]
     for r in regions:
         for s in steps:
             STEPS[s](r, args)
     if args.cmd == "run":
+        _score(regions, args)
         main(["viewer", *[r.name for r in regions]])
 
 

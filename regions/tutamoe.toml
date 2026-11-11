@@ -12,10 +12,9 @@ crs = "EPSG:2193"
 
 [dem]
 coarse = "new-zealand/new-zealand-contour/dem_8m/2193"
-fine = [
-  "northland/northland_2018-2020/dem_1m/2193",
-  "northland/northland_2024/dem_1m/2193",
-]
+# National best-available LiDAR mosaic; routed at 5 m (4 m overviews), gaps filled from the 8 m DEM.
+lidar = "new-zealand/new-zealand/dem_1m/2193"
+routing_res = 5.0
 
 [[known_runs]]
 river = "Waima River"

@@ -17,6 +17,9 @@
   --line: #d9ded9;
   --accent: #2a78d6;      /* UI accent = heat-map blue */
   --unlisted: #eb6834;    /* runs missing from the guides */
+  --cand: #eb6834;        /* candidate runs (second sequential hue: orange) */
+  --score-lo: #f7d2bd;    /* score overlay, low end */
+  --score-hi: #b5431a;    /* score overlay, high end */
   --water: #dce5e8;
   --hs-lo: #8c928d;       /* hillshade, shadow end */
   --hs-hi: #f7f8f5;       /* hillshade, lit end */
@@ -29,12 +32,14 @@
   :root:not([data-theme="light"]) {
     --bg: #151716; --surface: #1d201f; --fg: #e6eae7; --muted: #9aa39e; --line: #2d3230;
     --accent: #3987e5; --unlisted: #d95926; --water: #18202a;
+    --cand: #f08a5d; --score-lo: #5a2a17; --score-hi: #ffb48c;
     --hs-lo: #0f1110; --hs-hi: #4b504d; --ramp-dir: -1; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #151716; --surface: #1d201f; --fg: #e6eae7; --muted: #9aa39e; --line: #2d3230;
   --accent: #3987e5; --unlisted: #d95926; --water: #18202a;
+    --cand: #f08a5d; --score-lo: #5a2a17; --score-hi: #ffb48c;
   --hs-lo: #0f1110; --hs-hi: #4b504d; --ramp-dir: -1; color-scheme: dark;
 }
 
@@ -117,6 +122,29 @@ table.val th { font-weight: 600; color: var(--muted); }
 .leaflet-tooltip.run-label.unlisted { color: var(--unlisted); border-color: var(--unlisted); }
 .leaflet-tooltip-left.run-label::before, .leaflet-tooltip-right.run-label::before { display: none; }
 
+select { font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); width: 100%; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.count { font-size: 13px; color: var(--muted); }
+.count b { color: var(--fg); font-family: var(--font-data); }
+.cands { display: grid; gap: 6px; }
+.cand {
+  display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 2px 8px; align-items: baseline;
+  padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface);
+  cursor: pointer; text-align: left; font: inherit; color: inherit; width: 100%;
+}
+.cand:hover, .cand:focus-visible { border-color: var(--cand); outline: none; }
+.cand .rank { font-family: var(--font-data); color: var(--muted); font-size: 12px; }
+.cand .nm { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.cand .sc { font-family: var(--font-data); font-weight: 500; }
+.cand .meta { grid-column: 2 / 4; font-size: 12px; color: var(--muted); font-family: var(--font-data); }
+.pill.cand-pill { border-color: var(--cand); color: var(--cand); }
+.test { padding: 10px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); display: grid; gap: 4px; }
+.test .big { font-size: 16px; font-weight: 600; }
+details summary { cursor: pointer; font-weight: 600; }
+details .wrow { display: grid; grid-template-columns: minmax(0, 1fr) 90px 34px; gap: 8px; align-items: center; font-size: 12px; margin-top: 6px; }
+details .wrow output { font-family: var(--font-data); text-align: right; }
+.swatch { display: inline-block; width: 22px; height: 5px; border-radius: 3px; vertical-align: middle; margin-right: 6px; }
+
 @media (max-width: 760px) {
   html, body { height: auto; }
   .app { display: flex; flex-direction: column; height: auto; }
@@ -131,13 +159,56 @@ table.val th { font-weight: 600; color: var(--muted); }
   <aside class="panel" aria-label="Controls">
     <header style="display:grid;gap:4px">
       <h1>River Finder</h1>
-      <p class="sub">Upstream catchment area for every 8&nbsp;m cell, from the LINZ elevation model with D8 flow routing.</p>
+      <p class="sub">Steep, well-fed river sections from LINZ LiDAR at 5&nbsp;m, ranked by how much they look like the known runs. Orange lines are runs that are not in the guides.</p>
     </header>
 
     <nav class="tabs" role="tablist" id="tabs" aria-label="Region"></nav>
     <p class="sub" id="region-desc"></p>
 
+    <section class="ctl" aria-label="Run finder">
+      <h2>Find runs</h2>
+      <div class="pair">
+        <div class="ctl"><div class="ctl-row"><label for="gmin">Min gradient</label><output id="gminOut" class="num"></output></div>
+          <input type="range" id="gmin" min="5" max="60" step="1" value="20"></div>
+        <div class="ctl"><div class="ctl-row"><label for="gmax">Max gradient</label><output id="gmaxOut" class="num"></output></div>
+          <input type="range" id="gmax" min="30" max="200" step="5" value="80"></div>
+      </div>
+      <div class="pair">
+        <div class="ctl"><div class="ctl-row"><label for="minMaf">Min flood flow</label><output id="minMafOut" class="num"></output></div>
+          <input type="range" id="minMaf" min="0" max="1000" value="500"></div>
+        <div class="ctl"><div class="ctl-row"><label for="minLen">Min length</label><output id="minLenOut" class="num"></output></div>
+          <input type="range" id="minLen" min="0.25" max="5" step="0.25" value="1"></div>
+      </div>
+      <label class="checks" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="flowScaled" checked> Let big rivers count at lower gradients</label>
+      <p class="note">Flood flow is the estimated mean annual flood (NIWA). With big rivers allowed, the minimum gradient drops in proportion to the square root of flow above 20&nbsp;m³/s, down to a third of the setting.</p>
+      <div class="ctl" style="margin-top:6px"><label for="colorBy">Rank and colour reaches by</label>
+        <select id="colorBy">
+          <option value="reg">Model trained on the known runs</option>
+          <option value="comp">Your feature weights</option>
+          <option value="sig">Similarity to the known runs</option>
+          <option value="none">Runs only, no reach colours</option>
+        </select></div>
+      <p class="count" id="runCount"></p>
+    </section>
+
+    <section aria-label="Held-out test">
+      <h2>Held-out test</h2>
+      <div class="test" id="holdout"></div>
+    </section>
+
+    <section aria-label="Candidates">
+      <h2>Top runs not in the guides</h2>
+      <div class="cands" id="cands"></div>
+    </section>
+
+    <details id="weights">
+      <summary>Feature weights</summary>
+      <p class="note" style="margin-top:6px">Used when ranking by your feature weights. Each feature is standardised across both regions; the score is the weighted sum. The model's own weights are shown on the right for comparison.</p>
+      <div id="wrows"></div>
+    </details>
+
     <section class="ctl">
+      <h2>Catchment heat map</h2>
       <div class="ctl-row"><label for="minArea">Smallest catchment shown</label><output id="minAreaOut" class="num"></output></div>
       <input type="range" id="minArea" min="0" max="1000" value="400">
       <div class="ctl-row" style="margin-top:8px"><label for="opacity">Heat map opacity</label><output id="opacityOut" class="num"></output></div>
@@ -146,7 +217,7 @@ table.val th { font-weight: 600; color: var(--muted); }
 
     <section class="checks">
       <label><input type="checkbox" id="showRec2"> NIWA REC2 river lines (order 3+)</label>
-      <label><input type="checkbox" id="showRuns" checked> Reference runs</label>
+      <label><input type="checkbox" id="showRuns" checked> Reference rivers</label>
       <label><input type="checkbox" id="dimTrunc" checked> Fade catchments cut off by the box edge</label>
     </section>
 
@@ -157,7 +228,7 @@ table.val th { font-weight: 600; color: var(--muted); }
     </section>
 
     <section>
-      <h2>Reference runs</h2>
+      <h2>Reference rivers</h2>
       <div class="runs" id="runs"></div>
       <p class="note" style="margin-top:6px">Areas are measured on each river 500 m or more inland from the sea, where the markers sit: our model vs NIWA REC2.</p>
     </section>
@@ -168,12 +239,12 @@ table.val th { font-weight: 600; color: var(--muted); }
       <p class="note" style="margin-top:6px">Reaches over 5 km² whose whole catchment is inside the box. "Within 10%" uses a search radius of up to 256 m, because REC2 lines and our channels can sit apart on flat valley floors.</p>
     </section>
 
-    <p class="note">Elevation: LINZ 8&nbsp;m DEM (CC BY 4.0). Rivers: NIWA REC2. Built by river-finder.</p>
+    <p class="note">Elevation: LINZ LiDAR DEM (CC BY 4.0). Rivers and flood statistics: NIWA. Geology: GNS Science 1:250k. Built by river-finder. Candidates are leads from terrain data only: check access, land ownership, hazards and local knowledge before going anywhere.</p>
   </aside>
 
   <main class="mapwrap">
     <div id="map" role="application" aria-label="Catchment area map"></div>
-    <div class="readout" id="readout" aria-live="polite"><span class="sub">Click the map to read the catchment area at that point.</span></div>
+    <div class="readout" id="readout" aria-live="polite"><span class="sub">Click the map to read the catchment area at that point. Hover a run for its numbers.</span></div>
   </main>
 </div>
 
@@ -182,7 +253,8 @@ table.val th { font-weight: 600; color: var(--muted); }
 <script>
 (() => {
   "use strict";
-  const REGIONS = JSON.parse(document.getElementById("rf-data").textContent);
+  const DATA = JSON.parse(document.getElementById("rf-data").textContent);
+  const REGIONS = DATA.regions, MODEL = DATA.model;
   const $ = (id) => document.getElementById(id);
   const MIN_LOG = Math.log10(0.05), MAX_LOG = 2.0;     // slider range: 0.05 .. 100 km²
   // Sequential blue, small -> large catchment. The pale steps would vanish into the hillshade, so
@@ -349,6 +421,145 @@ table.val th { font-weight: 600; color: var(--muted); }
     if (state.showRuns) runsLayer.addTo(map);
   }
 
+
+  // ---------- run finder (mirrors river_finder.scoring.assemble_runs) ----------
+  const runState = { gmin: 20, gmax: 80, minMaf: 5, minLen: 1, flowScaled: true, maxGap: 1, colorBy: "reg",
+                     weights: Object.assign({}, MODEL ? MODEL.default_weights : {}) };
+  let segLayer = null, runLayer = null, lastRuns = [];
+  const mafFromSlider = (v) => 10 ** (-0.5 + 3 * v / 1000);          // 0.3 .. 300 m³/s, log
+  const sliderFromMaf = (m) => Math.round((Math.log10(m) + 0.5) / 3 * 1000);
+
+  function percentiles(values, refMask) {
+    const ref = []; for (let i = 0; i < values.length; i++) if (refMask[i]) ref.push(values[i]);
+    ref.sort((a, b) => a - b);
+    return values.map((v) => {
+      let lo = 0, hi = ref.length; while (lo < hi) { const m = (lo + hi) >> 1; if (ref[m] <= v) lo = m + 1; else hi = m; }
+      return 100 * lo / Math.max(ref.length, 1);
+    });
+  }
+
+  function segScores(S) {
+    if (runState.colorBy === "reg") return S.reg;
+    if (runState.colorBy === "sig") return S.sig;
+    if (runState.colorBy === "none") return S.reg;
+    const w = S.features.map((f) => runState.weights[f] ?? 0);
+    const raw = S.z.map((row) => row.reduce((acc, v, k) => acc + v * w[k], 0));
+    return percentiles(raw, S.a.map((a) => a >= 2));
+  }
+
+  function assembleRuns(S, scores) {
+    const n = S.g.length, ok = new Uint8Array(n), runId = new Int32Array(n).fill(-1), runs = [];
+    for (let i = 0; i < n; i++) {
+      let lo = runState.gmin;
+      if (runState.flowScaled) lo = runState.gmin * Math.min(1, Math.max(1 / 3, Math.pow(Math.max(S.maf[i], 1e-3) / 20, -0.5)));
+      ok[i] = S.g[i] >= lo && S.g[i] <= runState.gmax && S.maf[i] >= runState.minMaf ? 1 : 0;
+    }
+    const listed = new Set(S.listed);
+    for (let s = 0; s < n; s++) {
+      if (!ok[s] || runId[s] >= 0 || (S.u[s] >= 0 && ok[S.u[s]])) continue;
+      const members = []; let gap = [], cur = s;
+      while (cur >= 0 && runId[cur] < 0) {
+        if (ok[cur]) { members.push(...gap, cur); gap = []; }
+        else { gap.push(cur); if (gap.length > runState.maxGap) break; }
+        cur = S.d[cur];
+      }
+      const len = members.reduce((t, m) => t + S.len[m], 0) / 1000;
+      if (len < runState.minLen) continue;
+      const rid = runs.length; members.forEach((m) => { runId[m] = rid; });
+      const counts = {}; let ho = false, score = 0, s50 = 0;
+      members.forEach((m) => {
+        if (S.r[m] >= 0) counts[S.r[m]] = (counts[S.r[m]] || 0) + 1;
+        ho = ho || S.ho[m] === 1; score = Math.max(score, scores[m]); s50 = Math.max(s50, S.s50[m]);
+      });
+      const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+      const river = top ? S.rivers[+top[0]] : "";
+      const first = members[0], last = members[members.length - 1], drop = S.zt[first] - S.zb[last];
+      runs.push({ rid, members, len, drop, grad: drop / (len * 1000) * 1000, s50, aTop: S.a[first], aBot: S.a[last],
+                  maf: S.maf[last], river, score,
+                  status: listed.has(river) ? "listed" : ho ? "heldout" : "candidate" });
+    }
+    return runs;
+  }
+
+  function scoreColor(t) {
+    const a = hex(css("--score-lo")), b = hex(css("--score-hi"));
+    return `rgb(${[0, 1, 2].map((k) => Math.round(a[k] + (b[k] - a[k]) * t)).join(",")})`;
+  }
+
+  function updateRuns() {
+    const D = cache[state.region]; if (!D) return;
+    const S = D.R.segments; if (!S) return;
+    const scores = segScores(S);
+    const runs = assembleRuns(S, scores);
+    lastRuns = runs;
+    if (segLayer) map.removeLayer(segLayer);
+    if (runLayer) map.removeLayer(runLayer);
+    const toLL = (line) => line.map(([x, y]) => [y, x]);
+    const segLines = [];
+    if (runState.colorBy !== "none") {
+      for (let i = 0; i < S.c.length; i++) {
+        if (scores[i] < 70 || S.a[i] < 1) continue;
+        const t = (scores[i] - 70) / 30;
+        segLines.push(L.polyline(toLL(S.c[i]), { color: scoreColor(t), weight: 1.5 + 2 * t, opacity: 0.55 + 0.45 * t, interactive: false }));
+      }
+    }
+    segLayer = L.layerGroup(segLines).addTo(map);
+    const runLines = [];
+    const ink = css("--fg"), cand = css("--cand"), surf = css("--surface");
+    runs.forEach((r) => {
+      const coords = r.members.map((m) => toLL(S.c[m]));
+      const col = r.status === "listed" ? ink : cand;
+      const tip = `<b>${r.river || "Unnamed creek"}</b> · ${r.status === "listed" ? "in guides" : r.status === "heldout" ? "held-out reference" : "not in guides"}<br>`
+        + `<span class="num">${r.len.toFixed(1)} km · ${r.grad.toFixed(0)} m/km · drop ${r.drop.toFixed(0)} m · steepest 50 m ${r.s50.toFixed(0)} m/km<br>`
+        + `${fmtKm2(r.aBot)} km² · flood ${r.maf.toFixed(0)} m³/s · score ${r.score.toFixed(1)}</span>`;
+      runLines.push(L.polyline(coords, { color: surf, weight: 8, opacity: 0.9, interactive: false }));
+      runLines.push(L.polyline(coords, { color: col, weight: 4.5, opacity: 1 }).bindTooltip(tip, { sticky: true }));
+    });
+    runLayer = L.layerGroup(runLines).addTo(map);
+
+    const cands = runs.filter((r) => r.status !== "listed").sort((a, b) => b.score - a.score);
+    const nListed = runs.length - cands.length;
+    $("runCount").innerHTML = `<b>${runs.length}</b> runs found: <b>${cands.length}</b> not in the guides, <b>${nListed}</b> on rivers in the guides.`;
+    const box = $("cands"); box.innerHTML = "";
+    cands.slice(0, 12).forEach((r, k) => {
+      const b = document.createElement("button"); b.type = "button"; b.className = "cand";
+      const pill = r.status === "heldout" ? '<span class="pill unlisted">Held out</span>' : '<span class="pill cand-pill">Not in guides</span>';
+      b.innerHTML = `<span class="rank">#${k + 1}</span><span class="nm">${r.river || "Unnamed creek"} ${pill}</span><span class="sc">${r.score.toFixed(1)}</span>`
+        + `<span class="meta">${r.len.toFixed(1)} km · ${r.grad.toFixed(0)} m/km · ${fmtKm2(r.aBot)} km² · flood ${r.maf.toFixed(0)} m³/s</span>`;
+      b.addEventListener("click", () => {
+        const bounds = L.latLngBounds(r.members.flatMap((m) => toLL(S.c[m])));
+        map.flyToBounds(bounds.pad(0.6), { duration: 0.6, maxZoom: 15 });
+      });
+      box.appendChild(b);
+    });
+    if (!cands.length) box.innerHTML = '<p class="note">No runs match these settings.</p>';
+
+    const ho = $("holdout");
+    const hoName = (D.R.runs.find((r) => r.status !== "listed") || {}).river;
+    if (!hoName) { ho.innerHTML = '<p class="note">This region has no held-out river. The Mangakarengorengo test lives in the Kaimai Range.</p>'; return; }
+    const idx = cands.findIndex((r) => r.status === "heldout");
+    ho.innerHTML = idx >= 0
+      ? `<span class="big">${hoName}: #${idx + 1} of ${cands.length}</span><span class="note">It is not in any guide and the model never saw it as a run. With these settings it ranks #${idx + 1} among runs not in the guides.</span>`
+      : `<span class="big">${hoName}: not found</span><span class="note">No run on it passes these settings. Its gorge averages about 15–22 m/km at a mean annual flood near 70 m³/s, so it needs "big rivers at lower gradients" or a lower minimum gradient.</span>`;
+  }
+  const scheduleRuns = (() => { let t = 0; return () => { clearTimeout(t); t = setTimeout(updateRuns, 60); }; })();
+
+  function buildWeights() {
+    if (!MODEL) { $("weights").hidden = true; return; }
+    const box = $("wrows"); box.innerHTML = "";
+    Object.keys(MODEL.default_weights).forEach((f) => {
+      const row = document.createElement("div"); row.className = "wrow";
+      const id = "w_" + f;
+      row.innerHTML = `<label for="${id}">${MODEL.descriptions[f] || f}</label><input type="range" id="${id}" min="-2" max="2" step="0.25" value="${runState.weights[f]}"><output class="num">${runState.weights[f].toFixed(2)}</output>`;
+      row.title = `Model weight: ${(MODEL.coef[f] ?? 0).toFixed(2)}`;
+      row.querySelector("input").addEventListener("input", (e) => {
+        runState.weights[f] = +e.target.value; row.querySelector("output").textContent = (+e.target.value).toFixed(2);
+        if (runState.colorBy === "comp") scheduleRuns();
+      });
+      box.appendChild(row);
+    });
+  }
+
   function fillPanel(R) {
     $("region-desc").textContent = `${R.description}. ${(R.stats.valid_cells / 1e6).toFixed(1)} million cells at ${R.stats.cellsize_m} m, routed in ${R.stats.routing_seconds} s. Map pixels are ${R.pixel_m} m.`;
     const runs = $("runs"); runs.innerHTML = "";
@@ -382,8 +593,8 @@ table.val th { font-weight: 600; color: var(--muted); }
     if (overlay) map.removeLayer(overlay);
     overlay = new CanvasOverlay(D.canvas, R.bounds, { interactive: false }).addTo(map);
     if (clickMarker) { map.removeLayer(clickMarker); clickMarker = null; }
-    $("readout").innerHTML = '<span class="sub">Click the map to read the catchment area at that point.</span>';
-    buildLayers(R); fillPanel(R); render();
+    $("readout").innerHTML = '<span class="sub">Click the map to read the catchment area at that point. Hover a run for its numbers.</span>';
+    buildLayers(R); fillPanel(R); render(); updateRuns();
   }
 
   // ---------- controls ----------
@@ -404,6 +615,19 @@ table.val th { font-weight: 600; color: var(--muted); }
   $("showRec2").addEventListener("change", (e) => { state.showRec2 = e.target.checked; e.target.checked ? rec2Layer.addTo(map) : map.removeLayer(rec2Layer); });
   $("showRuns").addEventListener("change", (e) => { state.showRuns = e.target.checked; e.target.checked ? runsLayer.addTo(map) : map.removeLayer(runsLayer); });
   syncOutputs();
+
+  const syncRunOutputs = () => {
+    $("gminOut").textContent = runState.gmin + " m/km"; $("gmaxOut").textContent = runState.gmax + " m/km";
+    $("minMafOut").textContent = (runState.minMaf >= 10 ? runState.minMaf.toFixed(0) : runState.minMaf.toFixed(1)) + " m³/s";
+    $("minLenOut").textContent = runState.minLen.toFixed(2) + " km";
+  };
+  $("minMaf").value = sliderFromMaf(runState.minMaf);
+  [["gmin", (v) => { runState.gmin = +v; }], ["gmax", (v) => { runState.gmax = +v; }],
+   ["minMaf", (v) => { runState.minMaf = mafFromSlider(+v); }], ["minLen", (v) => { runState.minLen = +v; }]]
+    .forEach(([id, set]) => $(id).addEventListener("input", (e) => { set(e.target.value); syncRunOutputs(); scheduleRuns(); }));
+  $("flowScaled").addEventListener("change", (e) => { runState.flowScaled = e.target.checked; scheduleRuns(); });
+  $("colorBy").addEventListener("change", (e) => { runState.colorBy = e.target.value; scheduleRuns(); });
+  syncRunOutputs(); buildWeights();
 
   map.on("zoomend", () => {
     if (!overlay || !overlay.getElement()) return;
@@ -439,7 +663,7 @@ table.val th { font-weight: 600; color: var(--muted); }
   });
 
   // Re-colour when the theme changes (system setting or the viewer's explicit choice).
-  const rethemed = () => { if (state.region) { buildLayers(cache[state.region].R); schedule(); } };
+  const rethemed = () => { if (state.region) { buildLayers(cache[state.region].R); schedule(); updateRuns(); } };
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", rethemed);
   new MutationObserver(rethemed).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   window.addEventListener("hashchange", () => { const id = location.hash.slice(1); if (id && id !== state.region) selectRegion(id); });

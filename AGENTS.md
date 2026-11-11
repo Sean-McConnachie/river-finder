@@ -133,10 +133,14 @@ bd prime                # Refresh Beads context
 uv sync                                   # install (Python 3.12+)
 uv run pytest -q                          # unit tests (synthetic DEMs + pysheds cross-check)
 uv run ruff check src tests               # lint
-uv run river-finder run kaimai tutamoe    # fetch DEM + REC2, route, validate, GIS export, viewer
+uv run river-finder run kaimai tutamoe    # fetch (8 m + 5 m LiDAR, REC2, geology, floods), route,
+                                          # validate, reaches, export, pooled score, viewer (~15 min)
+uv run river-finder score kaimai tutamoe  # re-score only (regression is pooled across the regions given)
 ```
 
 Outputs go to `data/<region>/` (gitignored): `area_km2.tif`, `validation_summary.json`, `gis/`
 (COG + .qml + GeoPackage). The browser viewer is `data/viewer/viewer.html`.
-Code: `src/river_finder/` (`routing.py` holds the graph algorithms: Priority-Flood, D8, flat
-resolution, Kahn accumulation).
+Code: `src/river_finder/`. `routing.py` holds the graph algorithms (Priority-Flood, D8, flat
+resolution, Kahn accumulation), `reaches.py` the channel network and reach metrics, `scoring.py`
+the run finder, signature, composite and regression, and `context.py` the geology and flood
+fetchers. An 80 M-cell (5 m) region routes in about 100 s on this 4-core, 15 GB machine.

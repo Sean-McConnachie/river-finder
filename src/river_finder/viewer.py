@@ -80,6 +80,47 @@ def _rec2_features(path: Path, min_order: int) -> list[dict]:
     return out
 
 
+def _segments(region: Region, min_area_km2: float = 1.0) -> dict | None:
+    """Columnar segment table for the run finder and score overlays (WGS84, simplified)."""
+    import geopandas as gpd
+
+    path = region.data_dir() / "segments_scored.gpkg"
+    if not path.exists():
+        return None
+    g = gpd.read_file(path)
+    g = g[g["area_km2"] >= min_area_km2].copy()
+    idx = {int(s): i for i, s in enumerate(g["seg_id"])}
+    g["geometry"] = g.geometry.simplify(6.0)
+    g = g.to_crs(4326)
+    rivers = sorted({r for r in g["river"] if r})
+    rix = {r: i for i, r in enumerate(rivers)}
+    zcols = [c for c in g.columns if c.startswith("z_")]
+    listed = {r.river for r in region.known_runs if r.status == "listed"}
+    return {
+        "rivers": rivers,
+        "listed": sorted(listed & set(rivers)),
+        "features": [c[2:] for c in zcols],
+        "d": [idx.get(int(v), -1) for v in g["down_seg"]],
+        "u": [idx.get(int(v), -1) for v in g["up_seg"]],
+        "len": [round(float(v)) for v in g["length_m"]],
+        "g": [round(float(v), 1) for v in g["grad_s"]],
+        "s50": [round(float(v)) for v in g["steepest_50m_m_per_km"]],
+        "a": [round(float(v), 2) for v in g["area_km2"]],
+        "maf": [round(float(v), 1) for v in g["maf_m3s"]],
+        "gorge": [round(float(v)) for v in g["gorge_depth_m"]],
+        "zt": [round(float(v), 1) for v in g["z_top"]],
+        "zb": [round(float(v), 1) for v in g["z_bot"]],
+        "hard": [int(v) for v in g["bed_hard"]],
+        "r": [rix.get(v, -1) for v in g["river"]],
+        "lab": [int(v) for v in g["label"]],
+        "ho": [int(v) for v in g["holdout"]],
+        "reg": [round(float(v), 1) for v in g["score_regression"]],
+        "sig": [round(float(v), 1) for v in g["score_signature"]],
+        "z": [[round(float(v), 2) for v in row] for row in g[zcols].to_numpy()],
+        "c": [[[round(x, 5), round(y, 5)] for x, y in geom.coords] for geom in g.geometry],
+    }
+
+
 def region_payload(region: Region, max_px: int = 1800, rec2_min_order: int = 3) -> dict:
     d = region.data_dir()
     area, tr = _warp(d / "area_km2.tif", max_px, Resampling.max, np.nan)
@@ -127,6 +168,7 @@ def region_payload(region: Region, max_px: int = 1800, rec2_min_order: int = 3) 
         "runs": runs,
         "stats": stats,
         "validation": validation,
+        "segments": _segments(region),
     }
 
 
@@ -135,7 +177,15 @@ def build(regions: list[Region], out_dir: Path, max_px: int = 1800) -> tuple[Pat
     publishing as a claude.ai artifact, which supplies its own document skeleton)."""
     tpl = resources.files("river_finder").joinpath("assets/viewer_template.html").read_text()
     css = resources.files("river_finder").joinpath("assets/leaflet-1.9.4.css").read_text()
-    payload = [region_payload(r, max_px) for r in regions]
+    payload = {"regions": [region_payload(r, max_px) for r in regions], "model": None}
+    model_path = regions[0].data_dir().parent / "model.json"
+    if model_path.exists():
+        m = json.loads(model_path.read_text())
+        from .scoring import FEATURES
+
+        payload["model"] = {"coef": m["coef"], "holdout": m["holdout"], "lorocv": m["lorocv"],
+                            "run_params": m["run_params"], "descriptions": m["feature_descriptions"],
+                            "default_weights": {k: v[1] for k, v in FEATURES.items()}}
     data = json.dumps(payload, separators=(",", ":")).replace("</", "<\\/")
     page = tpl.replace("/*%%LEAFLET_CSS%%*/", css).replace("%%DATA%%", data)
     out_dir.mkdir(parents=True, exist_ok=True)

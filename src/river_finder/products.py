@@ -36,8 +36,14 @@ def _write(path: Path, arr: np.ndarray, profile: dict, dtype: str, nodata, **tag
             dst.update_tags(**tags)
 
 
-def run_routing(region: Region, dem_name: str = "dem_8m.tif") -> dict:
+def routing_dem(region: Region) -> str:
+    """Prefer the 5 m LiDAR/8 m hybrid when it has been fetched."""
+    return "dem_5m.tif" if (region.data_dir() / "dem_5m.tif").exists() else "dem_8m.tif"
+
+
+def run_routing(region: Region, dem_name: str | None = None) -> dict:
     d = region.data_dir()
+    dem_name = dem_name or routing_dem(region)
     z, valid, profile = read_dem(d / dem_name)
     cellsize = profile["transform"].a
     t = time.time()
@@ -51,6 +57,8 @@ def run_routing(region: Region, dem_name: str = "dem_8m.tif") -> dict:
     _write(d / "fill_depth_m.tif", np.where(valid, out["fill_depth"], np.nan).astype(np.float32), profile,
            "float32", np.nan, description="Depth of depression filling (m)")
     _write(d / "hillshade.tif", hillshade(z, valid, cellsize), profile, "uint8", 0)
+    _write(d / "filled.tif", np.where(valid, out["filled"], np.nan).astype(np.float32), profile, "float32", np.nan,
+           description="Depression-filled DEM used for flow routing (m)")
     np.save(d / "receivers.npy", out["rec"].astype(np.int32 if out["rec"].size < 2**31 else np.int64))
     stats = {
         "region": region.name, "dem": dem_name, "shape": list(z.shape), "cellsize_m": cellsize,
