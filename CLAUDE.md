@@ -79,6 +79,7 @@ geology, starting from three reference regions (Kaimai Range, Karangahake Gorge,
 
 - Plan: `docs/PLAN.md` · data: `docs/data-sources.md` · algorithms: `docs/flow-routing-algorithms.md`
 - Region definitions: `regions/*.toml` (bbox in WGS84, processing in EPSG:2193 NZTM)
+- Known runnability labels (status, grade, extent): `labels/known_runs.toml` (`labels.py`)
 
 ## Build & Test
 

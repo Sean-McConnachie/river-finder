@@ -87,7 +87,11 @@ def _segments(region: Region, min_area_km2: float = 1.0) -> dict | None:
     path = region.data_dir() / "segments_scored.gpkg"
     if not path.exists():
         return None
+    from .labels import segment_labels
+
     g = gpd.read_file(path)
+    status, grade, held, _, secs = segment_labels(g, region.name)
+    g["lab_status"], g["lab_grade"], g["lab_held"] = status, grade, held
     g = g[g["area_km2"] >= min_area_km2].copy()
     idx = {int(s): i for i, s in enumerate(g["seg_id"])}
     g["geometry"] = g.geometry.simplify(6.0)
@@ -111,6 +115,13 @@ def _segments(region: Region, min_area_km2: float = 1.0) -> dict | None:
         "zt": [round(float(v), 1) for v in g["z_top"]],
         "zb": [round(float(v), 1) for v in g["z_bot"]],
         "hard": [int(v) for v in g["bed_hard"]],
+        "ksn": [round(float(v), 1) for v in g["ksn_s"]],
+        "pow": [round(float(v), 3) for v in g["power_kw_m"]],
+        "head": [round(float(v)) for v in g["head_m"]],
+        "sta": [int(v) for v in g["lab_status"]],
+        "gr": [None if not np.isfinite(v) else round(float(v), 2) for v in g["lab_grade"]],
+        "lho": [int(v) for v in g["lab_held"]],
+        "sections": [{"river": x.river, "status": x.status, "grade": x.grade, "source": x.source} for x in secs],
         "mel": [round(float(v), 4) for v in g["melton"]],
         "hw": [round(float(v), 3) for v in g["height_to_width"]],
         "r": [rix.get(v, -1) for v in g["river"]],

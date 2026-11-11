@@ -1,0 +1,59 @@
+# Known runnability labels for reaches. Edit freely: this file feeds the 3D separation viewer
+# (and later, model training). One [[section]] per known section.
+#
+# status   = "runnable" | "not_runnable"
+# grade    = optional, international/NZ grade as written in guides: "3", "4-4+", "5", "III+", ...
+# held_out = true keeps it out of model training (the Mangakarengorengo test)
+# Extent, in order of precedence (all coordinates are [lon, lat] WGS84):
+#   put_in + take_out     -> reaches on the flow path between the two points
+#   outlet + upstream_km  -> main stem upstream of a point for that distance
+#   (neither)             -> every steep reach (>= 10 m/km, >= 2 km2) of the named river; APPROXIMATE
+# river must match the REC2 name (see the viewer's river tooltips).
+
+[[section]]
+region = "kaimai"
+river = "Wairoa River"
+status = "runnable"
+grade = "5"
+source = "Commercial rafting listings describe the dam-release Wairoa as Grade 5. Extent approximate (whole steep river)."
+
+[[section]]
+region = "kaimai"
+river = "Tuakopae Stream"
+status = "runnable"
+source = "Sean: one of the top Kaimai runs (spelled Tuakopai locally). Grade not recorded yet."
+
+[[section]]
+region = "kaimai"
+river = "Mangakarengorengo River"
+status = "runnable"
+held_out = true
+source = "Sean: known locally as a flood run; not in online guides. Held out from training."
+
+[[section]]
+region = "karangahake"
+river = "Ohinemuri River"
+status = "runnable"
+grade = "4-4+"
+outlet = [175.7217, -37.4233]
+upstream_km = 4.0
+source = "Karangahake Gorge: Class IV-IV+ bouldery rapids above Karangahake, flood only (industry report). Extent approximate: 4 km above Karangahake."
+
+[[section]]
+region = "tutamoe"
+river = "Mangakahia River"
+status = "runnable"
+grade = "3"
+source = "Described as Northland's longest stretch of technical Grade 3 (North Island rivers notes). Extent approximate (whole steep river)."
+
+[[section]]
+region = "tutamoe"
+river = "Waima River"
+status = "runnable"
+source = "Sean: reference run near Omapere/Kaikohe. Grade not recorded yet."
+
+[[section]]
+region = "tutamoe"
+river = "Waipoua River"
+status = "runnable"
+source = "Sean: reference run ('Waipo'). Grade not recorded yet."

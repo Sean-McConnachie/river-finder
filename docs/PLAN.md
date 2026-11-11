@@ -248,6 +248,29 @@ on the frontier.
 finds the K Gorge as a run. Leaving it out of training, it still ranks at the 78th percentile
 (median), with half its reaches in the top 10%.
 
+## 3D separation viewer (2026-11-11)
+
+The viewer has a "3D separation" tab. It plots any three of 11 measures (default: flood flow,
+gradient, height-to-area) for runs at the current run-finder settings, or for every reach over
+2 km², in one region or all three. Points are coloured by what we know:
+- runnable with a known grade: ordinal blue ramp, II-VI;
+- runnable, grade unknown: green;
+- unknown: yellow;
+- not runnable: red. None are labelled yet.
+
+The Mangakarengorengo is drawn as a diamond (held out). Clicking a point jumps to it on the map.
+A table gives each axis's AUC (runnable vs unknown).
+
+Labels live in `labels/known_runs.toml`. Each entry has a status and an optional grade, and its
+extent is one of: put-in/take-out, an outlet plus a distance upstream, or the whole steep river.
+Current grades: Wairoa 5 (rafting listings), Ohinemuri / K Gorge IV-IV+ (flood), Mangakahia 3.
+
+First reading (runs, all regions, default settings): flood flow separates strongly (AUC 88%;
+runnable median 73 vs unknown 14 m³/s), gradient not at all (48%), and height-to-area separates
+*inversely* (14%: known runs have lower relief/√area). The labelled runs are mostly big rivers,
+so this mostly measures size. We need more labels, especially small creeks and no-go reaches,
+before these numbers mean much.
+
 ## Open questions
 
 See the beads issue labelled `question`. Answers get recorded with `bd remember`.

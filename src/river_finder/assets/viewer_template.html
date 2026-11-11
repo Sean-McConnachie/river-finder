@@ -20,6 +20,9 @@
   --cand: #eb6834;        /* candidate runs (second sequential hue: orange) */
   --score-lo: #f7d2bd;    /* score overlay, low end */
   --score-hi: #b5431a;    /* score overlay, high end */
+  --ok: #0ca30c;          /* runnable, grade unknown (status good) */
+  --unk: #fab219;         /* unknown (status warning) */
+  --no: #d03b3b;          /* not runnable (status critical) */
   --water: #dce5e8;
   --hs-lo: #8c928d;       /* hillshade, shadow end */
   --hs-hi: #f7f8f5;       /* hillshade, lit end */
@@ -33,6 +36,7 @@
     --bg: #151716; --surface: #1d201f; --fg: #e6eae7; --muted: #9aa39e; --line: #2d3230;
     --accent: #3987e5; --unlisted: #d95926; --water: #18202a;
     --cand: #f08a5d; --score-lo: #5a2a17; --score-hi: #ffb48c;
+    --ok: #0ca30c; --unk: #fab219; --no: #d03b3b;
     --hs-lo: #0f1110; --hs-hi: #4b504d; --ramp-dir: -1; color-scheme: dark;
   }
 }
@@ -40,6 +44,7 @@
   --bg: #151716; --surface: #1d201f; --fg: #e6eae7; --muted: #9aa39e; --line: #2d3230;
   --accent: #3987e5; --unlisted: #d95926; --water: #18202a;
     --cand: #f08a5d; --score-lo: #5a2a17; --score-hi: #ffb48c;
+    --ok: #0ca30c; --unk: #fab219; --no: #d03b3b;
   --hs-lo: #0f1110; --hs-hi: #4b504d; --ramp-dir: -1; color-scheme: dark;
 }
 
@@ -156,6 +161,19 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
 .scatter .axis line, .scatter .grid line { stroke: var(--line); }
 .scatter .band { fill: var(--accent); opacity: 0.07; }
 
+.viewtabs { position: absolute; z-index: 1200; top: calc(10px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px)); display: flex; gap: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--surface); }
+.viewtabs button { font: inherit; font-weight: 600; font-size: 13px; padding: 6px 12px; border: 0; background: var(--surface); color: var(--fg); cursor: pointer; }
+.viewtabs button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.sep { position: absolute; inset: 0; z-index: 1100; background: var(--bg); overflow-y: auto; display: grid; grid-template-rows: auto auto auto; align-content: start; gap: 10px; padding: 52px 16px 16px; }
+.sep-ctl { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; }
+.sep-ctl .ctl { min-width: 150px; flex: 1 1 150px; }
+#sepPlot { height: clamp(380px, 62vh, 680px); overflow: hidden; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); position: relative; }
+.sep-foot { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.legend-list { display: grid; gap: 4px; font-size: 13px; }
+.legend-list .sw { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; vertical-align: -1px; }
+.gradebar { height: 10px; border-radius: 3px; margin: 4px 0 2px; }
+.gradeticks { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); font-family: var(--font-data); }
+@media (max-width: 760px) { .sep-foot { grid-template-columns: 1fr; } .sep { padding-top: 48px; } }
 @media (max-width: 760px) {
   html, body { height: auto; }
   .app { display: flex; flex-direction: column; height: auto; }
@@ -277,6 +295,36 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
 
   <main class="mapwrap">
     <div id="map" role="application" aria-label="Catchment area map"></div>
+    <div class="viewtabs" role="group" aria-label="View">
+      <button type="button" id="viewMap" aria-pressed="true">Map</button>
+      <button type="button" id="viewSep" aria-pressed="false">3D separation</button>
+    </div>
+    <section class="sep" id="sep" hidden aria-label="3D separation viewer">
+      <div class="sep-ctl">
+        <div class="ctl"><label for="axX">X axis</label><select id="axX"></select></div>
+        <div class="ctl"><label for="axY">Y axis</label><select id="axY"></select></div>
+        <div class="ctl"><label for="axZ">Z axis</label><select id="axZ"></select></div>
+        <div class="ctl"><label for="sepPts">Points</label><select id="sepPts">
+          <option value="runs">Runs (current run-finder settings)</option>
+          <option value="reaches">Every reach over 2 km²</option></select></div>
+        <div class="ctl"><label for="sepScope">Regions</label><select id="sepScope">
+          <option value="all">All regions</option><option value="one">This region only</option></select></div>
+      </div>
+      <div id="sepPlot" role="img" aria-label="3D scatter of the selected parameters"><p class="note" style="padding:16px">Loading the 3D plot…</p></div>
+      <div class="sep-foot">
+        <div>
+          <h2>Colour key</h2>
+          <div class="legend-list" id="sepLegend"></div>
+          <p class="note" style="margin-top:8px">Labels come from <span class="num">labels/known_runs.toml</span> in the repo. Most extents are approximate (whole steep river) until real put-ins and take-outs are added. Drag to rotate, scroll to zoom, click a point to see it on the map.</p>
+        </div>
+        <div>
+          <h2>How well each axis separates runnable from unknown</h2>
+          <table class="val" id="sepAuc"></table>
+          <p class="note" style="margin-top:6px">AUC: the chance that a random runnable point sits higher on that axis than a random unknown one. 50% means no separation; values far from 50% in either direction separate well.</p>
+        </div>
+      </div>
+    </section>
+
     <div class="readout" id="readout" aria-live="polite"><span class="sub">Click the map to read the catchment area at that point. Hover a run for its numbers.</span></div>
   </main>
 </div>
@@ -670,7 +718,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
       ? `<span class="big">${hoName}: #${idx + 1} of ${cands.length}</span><span class="note">Not in any guide, and never used for training. ${hr.layer === 1 ? "It is on the Pareto frontier." : `It sits in Pareto layer ${hr.layer}: other runs beat it on flow, gradient and height-to-area at once.`} Try ranking by the model trained on the known runs to compare.</span>`
       : `<span class="big">${hoName}: not found</span><span class="note">No run on it passes these settings. Its gorge averages about 15–22 m/km at a mean annual flood near 70 m³/s; keep "big rivers count at lower gradients" on, or lower the gradient band.</span>`;
   }
-  const scheduleRuns = (() => { let t = 0; return () => { clearTimeout(t); t = setTimeout(updateRuns, 60); }; })();
+  const scheduleRuns = (() => { let t = 0; return () => { clearTimeout(t); t = setTimeout(() => { updateRuns(); if (sepState.open) drawSeparation(); }, 60); }; })();
 
   function buildWeights() {
     if (!MODEL) return;
@@ -809,8 +857,161 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     else clickMarker = L.circleMarker(e.latlng, { radius: 5, weight: 2, color: css("--fg"), fillOpacity: 0 }).addTo(map);
   });
 
+
+  // ---------- 3D separation viewer ----------
+  const AXES = {
+    flow: { label: "Flood flow (mean annual flood), m³/s", log: true, seg: (S, i) => S.maf[i], run: (r) => r.maf },
+    grad: { label: "Gradient, m/km", log: false, seg: (S, i) => S.g[i], run: (r) => r.grad },
+    effg: { label: "Gradient, big-river adjusted, m/km", log: false, seg: (S, i) => S.g[i] * Math.min(3, Math.max(1, Math.sqrt(Math.max(S.maf[i], 1e-3) / 20))), run: (r) => r.effG },
+    mel: { label: "Height-to-area: relief / √area", log: true, seg: (S, i) => S.mel[i], run: (r) => r.agg.mel },
+    hw: { label: "Height-to-width: gorge depth / valley width", log: true, seg: (S, i) => S.hw[i], run: (r) => r.agg.hw },
+    gorge: { label: "Gorge depth, m", log: false, seg: (S, i) => S.gorge[i], run: (r) => r.agg.gorge },
+    ksn: { label: "Channel steepness k_sn", log: true, seg: (S, i) => S.ksn[i], run: (r) => r.agg.ksn },
+    pow: { label: "Stream power at mean annual flood, kW/m", log: true, seg: (S, i) => S.pow[i], run: (r) => r.agg.pow },
+    area: { label: "Catchment area, km²", log: true, seg: (S, i) => S.a[i], run: (r) => r.aBot },
+    s50: { label: "Steepest 50 m, m/km", log: false, seg: (S, i) => S.s50[i], run: (r) => r.s50 },
+    head: { label: "Catchment height above channel, m", log: false, seg: (S, i) => S.head[i], run: (r) => r.agg.head },
+  };
+  const sepState = { x: "flow", y: "grad", z: "mel", pts: "runs", scope: "all", open: false };
+  const GRADE_LIGHT = ["#86b6ef", "#3987e5", "#256abf", "#184f95", "#0d366b"];   // II .. VI, ordinal blue
+  const GRADE_DARK = ["#2a78d6", "#5598e7", "#86b6ef", "#b7d3f6", "#cde2fb"];
+  const romans = ["", "I", "II", "III", "IV", "V", "VI"];
+  let plotlyReady = null;
+
+  function loadPlotly() {
+    if (window.Plotly) return Promise.resolve();
+    if (!plotlyReady) plotlyReady = new Promise((res, rej) => {
+      const sc = document.createElement("script");
+      sc.src = "https://cdn.jsdelivr.net/npm/plotly.js-gl3d-dist-min@2.35.2/plotly-gl3d.min.js";
+      sc.onload = res; sc.onerror = () => { plotlyReady = null; rej(new Error("Could not load the 3D plotting library.")); };
+      document.head.appendChild(sc);
+    });
+    return plotlyReady;
+  }
+
+  function median(a) { if (!a.length) return NaN; const b = a.slice().sort((x, y) => x - y); return b[b.length >> 1]; }
+
+  async function regionPoints(R) {
+    const C = await loadRegion(R), S = R.segments; if (!S) return [];
+    const pts = [];
+    if (sepState.pts === "reaches") {
+      for (let i = 0; i < S.g.length; i++) {
+        if (S.a[i] < 2) continue;
+        const v = {}; Object.keys(AXES).forEach((k) => { v[k] = AXES[k].seg(S, i); });
+        pts.push({ v, sta: S.sta[i], gr: S.gr[i], held: S.lho[i] === 1, river: S.r[i] >= 0 ? S.rivers[S.r[i]] : "", region: R.title,
+                   R, members: [i], len: S.len[i] / 1000 });
+      }
+      return pts;
+    }
+    const D = segmentScores(S), runs = assembleRuns(S, D, rankScores(S, D));
+    runs.forEach((r) => {
+      const agg = {}; ["mel", "hw", "gorge", "ksn", "pow", "head"].forEach((k) => { agg[k] = median(r.members.map((m) => S[k][m])); });
+      r.agg = agg; r.grad = r.members.reduce((t, m) => t + S.g[m] * S.len[m], 0) / (r.len * 1000);
+      const v = {}; Object.keys(AXES).forEach((k) => { v[k] = AXES[k].run(r); });
+      let sta = 0, gr = null, held = false;
+      r.members.forEach((m) => { sta = Math.max(sta, S.sta[m]); if (S.gr[m] != null) gr = Math.max(gr ?? 0, S.gr[m]); held = held || S.lho[m] === 1; });
+      pts.push({ v, sta, gr, held, river: r.river, region: R.title, R, members: r.members, len: r.len });
+    });
+    return pts;
+  }
+
+  function auc(pos, neg) {
+    if (!pos.length || !neg.length) return NaN;
+    const all = pos.map((v) => [v, 1]).concat(neg.map((v) => [v, 0])).sort((a, b) => a[0] - b[0]);
+    let rank = 0, sumPos = 0;
+    for (let i = 0; i < all.length;) {
+      let j = i; while (j < all.length && all[j][0] === all[i][0]) j++;
+      const avg = (i + j + 1) / 2; for (let k = i; k < j; k++) if (all[k][1]) sumPos += avg;
+      rank = j; i = j;
+    }
+    return (sumPos - pos.length * (pos.length + 1) / 2) / (pos.length * neg.length);
+  }
+
+  async function drawSeparation() {
+    if (!sepState.open) return;
+    const plot = $("sepPlot");
+    try { await loadPlotly(); } catch (e) { plot.innerHTML = `<p class="note" style="padding:16px">${e.message} Check the connection and reopen this view.</p>`; return; }
+    const regions = sepState.scope === "all" ? REGIONS : REGIONS.filter((R) => R.id === state.region);
+    const pts = (await Promise.all(regions.map(regionPoints))).flat();
+    const dark = (parseFloat(css("--ramp-dir")) || 1) < 0, ramp = dark ? GRADE_DARK : GRADE_LIGHT;
+    const fg = css("--fg"), muted = css("--muted"), line = css("--line"), surf = css("--surface");
+    const ax = [sepState.x, sepState.y, sepState.z];
+    const val = (p, k) => { const v = p.v[ax[k]]; return AXES[ax[k]].log ? Math.max(v, 1e-4) : v; };
+    const hover = (p) => `<b>${p.river || "Unnamed creek"}</b> (${p.region})<br>${ax.map((k) => `${AXES[k].label}: ${(+p.v[k]).toPrecision(3)}`).join("<br>")}`
+      + `<br>${p.sta === 1 ? `Runnable${p.gr != null ? `, grade ${p.gr.toFixed(1)}` : ""}` : p.sta === 2 ? "Not runnable" : "Unknown"}${p.held ? " (held out)" : ""}`;
+    const groups = [
+      { name: "Unknown", f: (p) => p.sta === 0, color: css("--unk"), size: 3, op: 0.45 },
+      { name: "Runnable, grade unknown", f: (p) => p.sta === 1 && p.gr == null, color: css("--ok"), size: 6, op: 1 },
+      { name: "Not runnable", f: (p) => p.sta === 2, color: css("--no"), size: 6, op: 1 },
+    ];
+    const traces = groups.map((gp) => {
+      const sel = pts.filter(gp.f);
+      return { type: "scatter3d", mode: "markers", name: `${gp.name} (${sel.length})`, x: sel.map((p) => val(p, 0)), y: sel.map((p) => val(p, 1)), z: sel.map((p) => val(p, 2)),
+               text: sel.map(hover), hovertemplate: "%{text}<extra></extra>", customdata: sel.map((p) => pts.indexOf(p)),
+               marker: { size: sel.map((p) => (p.held ? 9 : gp.size)), color: gp.color, opacity: gp.op, symbol: sel.map((p) => (p.held ? "diamond" : "circle")),
+                         line: { width: gp.op < 1 ? 0 : 1, color: surf } } };
+    });
+    const graded = pts.filter((p) => p.sta === 1 && p.gr != null);
+    traces.push({ type: "scatter3d", mode: "markers", name: `Runnable, graded (${graded.length})`, x: graded.map((p) => val(p, 0)), y: graded.map((p) => val(p, 1)), z: graded.map((p) => val(p, 2)),
+      text: graded.map(hover), hovertemplate: "%{text}<extra></extra>", customdata: graded.map((p) => pts.indexOf(p)),
+      marker: { size: 7, color: graded.map((p) => p.gr), cmin: 2, cmax: 6, colorscale: ramp.map((c, k) => [k / (ramp.length - 1), c]),
+                symbol: graded.map((p) => (p.held ? "diamond" : "circle")), line: { width: 1, color: surf }, opacity: 1,
+                colorbar: { title: { text: "Grade", font: { color: fg } }, tickvals: [2, 3, 4, 5, 6], ticktext: ["II", "III", "IV", "V", "VI"], tickfont: { color: muted }, len: 0.5, thickness: 10, outlinewidth: 0 } } });
+    const axis = (k) => ({ title: { text: AXES[ax[k]].label, font: { size: 11, color: fg } }, type: AXES[ax[k]].log ? "log" : "linear",
+      gridcolor: line, zerolinecolor: line, linecolor: line, tickfont: { color: muted, size: 10 }, backgroundcolor: surf, showbackground: true });
+    const layout = { paper_bgcolor: surf, plot_bgcolor: surf, font: { family: "Public Sans, system-ui, sans-serif", color: fg },
+      margin: { l: 0, r: 0, t: 10, b: 0 }, legend: { orientation: "h", y: 1.02, x: 0, font: { size: 11, color: fg } },
+      scene: { xaxis: axis(0), yaxis: axis(1), zaxis: axis(2), camera: { eye: { x: 1.6, y: -1.6, z: 0.9 } } }, uirevision: ax.join("|") };
+    plot.innerHTML = "";
+    await Plotly.react(plot, traces, layout, { displaylogo: false, responsive: true, modeBarButtonsToRemove: ["toImage"] });
+    plot.removeAllListeners && plot.removeAllListeners("plotly_click");
+    plot.on("plotly_click", (ev) => {
+      const p = pts[ev.points[0].customdata]; if (!p) return;
+      setView(false);
+      const go = () => {
+        const S = p.R.segments;
+        const b = L.latLngBounds(p.members.flatMap((m) => S.c[m].map(([x, y]) => [y, x])));
+        map.flyToBounds(b.pad(0.6), { duration: 0.6, maxZoom: 15 });
+      };
+      if (p.R.id !== state.region) selectRegion(p.R.id).then(go); else go();
+    });
+    // legend + AUC
+    const nRun = pts.filter((p) => p.sta === 1).length, nNo = pts.filter((p) => p.sta === 2).length, nUnk = pts.filter((p) => p.sta === 0).length;
+    $("sepLegend").innerHTML =
+      `<div><span class="sw" style="background:var(--ok)"></span>Runnable, grade unknown</div>`
+      + `<div>Runnable with a known grade:<div class="gradebar" style="background:linear-gradient(90deg,${ramp.join(",")})"></div><div class="gradeticks"><span>II</span><span>III</span><span>IV</span><span>V</span><span>VI</span></div></div>`
+      + `<div><span class="sw" style="background:var(--unk)"></span>Unknown: not yet known whether it can be paddled (${nUnk})</div>`
+      + `<div><span class="sw" style="background:var(--no)"></span>Not runnable${nNo ? ` (${nNo})` : ": none labelled yet"}</div>`
+      + `<div><span class="sw" style="background:transparent;border:2px solid var(--fg);border-radius:2px;transform:rotate(45deg)"></span>Diamond: held out from training (Mangakarengorengo)</div>`;
+    const rows = ax.map((k) => {
+      const pos = pts.filter((p) => p.sta === 1).map((p) => p.v[k]), neg = pts.filter((p) => p.sta === 0).map((p) => p.v[k]);
+      const a = auc(pos, neg);
+      return `<tr><td>${AXES[k].label}</td><td class="num">${isFinite(a) ? (100 * a).toFixed(0) + "%" : "–"}</td><td class="num">${(+median(pos)).toPrecision(3)}</td><td class="num">${(+median(neg)).toPrecision(3)}</td></tr>`;
+    }).join("");
+    $("sepAuc").innerHTML = `<tr><th>Axis</th><th>AUC</th><th>Runnable median</th><th>Unknown median</th></tr>${rows}`
+      + `<tr><td colspan="4" class="note">${nRun} runnable and ${nUnk} unknown points.</td></tr>`;
+  }
+
+  function setView(sep) {
+    sepState.open = sep;
+    $("sep").hidden = !sep;
+    $("viewMap").setAttribute("aria-pressed", String(!sep));
+    $("viewSep").setAttribute("aria-pressed", String(sep));
+    if (sep) drawSeparation(); else map.invalidateSize();
+  }
+  ["axX", "axY", "axZ"].forEach((id, k) => {
+    const el = $(id);
+    Object.entries(AXES).forEach(([key, a]) => { const o = document.createElement("option"); o.value = key; o.textContent = a.label; el.appendChild(o); });
+    el.value = [sepState.x, sepState.y, sepState.z][k];
+    el.addEventListener("change", (e) => { sepState[["x", "y", "z"][k]] = e.target.value; drawSeparation(); });
+  });
+  $("sepPts").addEventListener("change", (e) => { sepState.pts = e.target.value; drawSeparation(); });
+  $("sepScope").addEventListener("change", (e) => { sepState.scope = e.target.value; drawSeparation(); });
+  $("viewMap").addEventListener("click", () => setView(false));
+  $("viewSep").addEventListener("click", () => setView(true));
+
   // Re-colour when the theme changes (system setting or the viewer's explicit choice).
-  const rethemed = () => { if (state.region) { buildLayers(cache[state.region].R); schedule(); updateRuns(); } };
+  const rethemed = () => { if (state.region) { buildLayers(cache[state.region].R); schedule(); updateRuns(); if (sepState.open) drawSeparation(); } };
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", rethemed);
   new MutationObserver(rethemed).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   window.addEventListener("hashchange", () => { const id = location.hash.slice(1); if (id && id !== state.region) selectRegion(id); });
