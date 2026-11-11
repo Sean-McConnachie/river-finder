@@ -61,15 +61,16 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 ## Beads in an ephemeral cloud container
 
 The Dolt database (`.beads/embeddeddolt/`) is NOT committed. `.beads/issues.jsonl` is the
-committed snapshot of issues and memories. In a fresh clone:
+committed snapshot of issues (auto-exported by the hook). `.beads/memories.jsonl` holds
+the `bd remember` memories. In a fresh clone:
 
 ```bash
 npm install -g @beads/bd
 bd init --prefix rf --non-interactive   # skip if .beads/embeddeddolt exists
-bd import .beads/issues.jsonl
+bd import .beads/issues.jsonl && bd import .beads/memories.jsonl
 ```
 
-Before every commit: `bd export --include-memories -o .beads/issues.jsonl`.
+After `bd remember`: `bd export --include-memories | grep '"_type":"memory"' > .beads/memories.jsonl`.
 
 ## Project overview
 
