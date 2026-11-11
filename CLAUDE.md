@@ -58,20 +58,33 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 <!-- END BEADS INTEGRATION -->
 
 
-## Build & Test
+## Beads in an ephemeral cloud container
 
-_Add your build and test commands here_
+The Dolt database (`.beads/embeddeddolt/`) is NOT committed. `.beads/issues.jsonl` is the
+committed snapshot of issues and memories. In a fresh clone:
 
 ```bash
-# Example:
-# npm install
-# npm test
+npm install -g @beads/bd
+bd init --prefix rf --non-interactive   # skip if .beads/embeddeddolt exists
+bd import .beads/issues.jsonl
 ```
 
-## Architecture Overview
+Before every commit: `bd export --include-memories -o .beads/issues.jsonl`.
 
-_Add a brief overview of your project architecture_
+## Project overview
+
+river-finder finds unexplored whitewater in NZ. It uses terrain (LINZ DEMs), rainfall and
+geology, starting from two reference regions (Kaimai Range, Tutamoe/Waima plateau).
+
+- Plan: `docs/PLAN.md` · data: `docs/data-sources.md` · algorithms: `docs/flow-routing-algorithms.md`
+- Region definitions: `regions/*.toml` (bbox in WGS84, processing in EPSG:2193 NZTM)
+
+## Build & Test
+
+_No code yet. Planned: Python 3.12+ with uv (`uv sync`, `uv run pytest`, `uv run ruff check`)._
 
 ## Conventions & Patterns
 
-_Add your project-specific conventions here_
+- All rasters are processed in EPSG:2193. Elevations use NZVD2016.
+- Route flow on DEMs only, never DSMs.
+- Downloaded data goes in `data/` (gitignored). Never commit rasters.

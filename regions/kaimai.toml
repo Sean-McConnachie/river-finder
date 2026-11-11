@@ -1,0 +1,18 @@
+# Reference region: Kaimai Range (Bay of Plenty / Waikato)
+# The bbox is approximate. Refine it once the 8 m DEM is loaded.
+name = "kaimai"
+description = "Kaimai Range plateau and eastern gorges draining to the Wairoa"
+role = "reference"
+bbox_wgs84 = [175.80, -37.95, 176.10, -37.60]  # [min_lon, min_lat, max_lon, max_lat]
+crs = "EPSG:2193"
+
+[dem]
+coarse = "new-zealand/new-zealand-contour/dem_8m/2193"
+fine = [
+  "bay-of-plenty/bay-of-plenty_2019-2022/dem_1m/2193",
+  "waikato/waikato_2021/dem_1m/2193",
+]
+
+[known_runs]
+# Names to confirm with the user (see the beads question issue)
+rivers = ["Wairoa", "Tuakopai", "Mangakarengorengo"]
