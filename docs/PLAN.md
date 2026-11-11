@@ -206,6 +206,48 @@ viewer with sliders.
 **Not done yet:** road/access distance (OSM and LINZ hosts unreachable), the NZRCA guide as the
 "known" layer (needs the guide or your list), North Island scaling.
 
+## Phase 9: three-parameter runnability model (2026-11-11)
+
+Sean's framing: **flow, gradient and height-to-area** (or height-to-width) are the three main
+signs that a reach is runnable.
+
+**Measures (per ~250 m reach)**
+- Flow: NIWA mean annual flood (m³/s).
+- Gradient: smoothed over ~750 m. With "big rivers count at lower gradients" on, it is multiplied
+  by clip(√(MAF/20), 1, 3).
+- Height-to-area: Melton ruggedness, catchment relief / √catchment area (relief = highest point
+  upstream minus channel elevation).
+- Height-to-width (alternative): gorge depth / valley-floor width. The width is the ground within
+  5 m of its own channel (HAND), per metre of channel.
+
+**Scoring.** Flow and gradient get trapezoid bands. The defaults give full credit at 8-300 m³/s
+and 20-80 m/km, falling to zero at 2 / 2000 m³/s and 5 / 150 m/km. Height-to-area gets an
+increasing ramp from the 10th to the 60th percentile of all reaches. The weighted mean must reach
+the threshold (default 0.7). With the gate on, every parameter must also be above 0. Passing
+reaches chain into runs, and runs are put into Pareto layers by non-dominated sorting on
+(log flow, effective gradient, height-to-area). Layer 1 is the frontier. Everything is live in the
+viewer (bands, weights, threshold, measure), with a flow-vs-gradient scatter plot of all runs.
+
+**What the data says**
+- Percentile of each known run's median among all reaches (Kaimai): Tuakopae 76th (Melton) /
+  80th (height-to-width), Mangakarengorengo 54th / 58th, Wairoa 38th / 76th. Height-to-area
+  separates the known runs only weakly.
+- In the trained model, once steepness and stream power are included, both height measures get
+  *negative* weights (Melton -0.66, height-to-width -0.42). The labelled runs are mostly large
+  rivers, and Melton falls with size.
+- The Pareto frontier collects the extremes: small, very steep, rugged creeks and the biggest
+  rivers. Big-volume flood runs sit inside it. The Mangakarengorengo ranks **#25 of 90** by
+  "Pareto, then weighted score" (layer 2), but **#2 of 90** by the trained model.
+
+**Next (beads rf-zmy.4)**: once real guide sections exist, fit the weights (logistic, or XGBoost
+with monotone constraints) on the three parameters plus context, and report where known runs sit
+on the frontier.
+
+**Karangahake Gorge** was added as a third reference region: the Ohinemuri above Karangahake,
+208 km² (306 km² with the Waitawheta), routed on 5 m LiDAR (REC2 within 10%: 88%). The model
+finds the K Gorge as a run. Leaving it out of training, it still ranks at the 78th percentile
+(median), with half its reaches in the top 10%.
+
 ## Open questions
 
 See the beads issue labelled `question`. Answers get recorded with `bd remember`.

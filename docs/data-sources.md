@@ -66,7 +66,7 @@ layer 105690. The BOPRC ImageServer also serves the BoP DEM.
 
 | Source | Notes |
 |---|---|
-| Whitewater NZ / NZRCA online River Guide — [whitewater.nz](https://whitewater.nz/nzrca-river-guide-now-online/) | Seeded from Graham Charles, *New Zealand Whitewater* (4th ed.). Our main "known" list. Check the terms of use before any scraping. A hand-digitised list of put-in/take-out points may be simpler. |
+| Whitewater NZ / NZRCA online River Guide, now at **riverguide.co.nz** (a React app; per-guide map markers come from a GraphQL API at api.riverguide.co.nz). Scripted API access was blocked in this session; markers have to be read in a browser or supplied by hand. — [whitewater.nz](https://whitewater.nz/nzrca-river-guide-now-online/) | Seeded from Graham Charles, *New Zealand Whitewater* (4th ed.). Our main "known" list. Check the terms of use before any scraping. A hand-digitised list of put-in/take-out points may be simpler. |
 | Graham Charles, *New Zealand Whitewater* (guidebook) | Print reference. |
 | NZ Canoeing Association 1981 North Island river survey (NIWA Water & Soil misc. pubs [14](https://webstatic.niwa.co.nz/library/w&smp14.pdf), [15](https://webstatic.niwa.co.nz/library/w&smp15.pdf)) | Historical list. Covers the Wairoa and Mangakahia. |
 | Local knowledge and club sites (for example [north island rivers](https://sites.google.com/a/verner.co.nz/north-island-rivers)) | Fill gaps. |

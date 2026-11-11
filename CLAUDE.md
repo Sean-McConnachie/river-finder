@@ -75,7 +75,7 @@ After `bd remember`: `bd export --include-memories | grep '"_type":"memory"' > .
 ## Project overview
 
 river-finder finds unexplored whitewater in NZ. It uses terrain (LINZ DEMs), rainfall and
-geology, starting from two reference regions (Kaimai Range, Tutamoe/Waima plateau).
+geology, starting from three reference regions (Kaimai Range, Karangahake Gorge, Tutamoe/Waima plateau).
 
 - Plan: `docs/PLAN.md` · data: `docs/data-sources.md` · algorithms: `docs/flow-routing-algorithms.md`
 - Region definitions: `regions/*.toml` (bbox in WGS84, processing in EPSG:2193 NZTM)
@@ -86,9 +86,9 @@ geology, starting from two reference regions (Kaimai Range, Tutamoe/Waima platea
 uv sync                                   # install (Python 3.12+)
 uv run pytest -q                          # unit tests (synthetic DEMs + pysheds cross-check)
 uv run ruff check src tests               # lint
-uv run river-finder run kaimai tutamoe    # fetch (8 m + 5 m LiDAR, REC2, geology, floods), route,
+uv run river-finder run kaimai karangahake tutamoe  # fetch (8 m + 5 m LiDAR, REC2, geology, floods), route,
                                           # validate, reaches, export, pooled score, viewer (~15 min)
-uv run river-finder score kaimai tutamoe  # re-score only (regression is pooled across the regions given)
+uv run river-finder score kaimai karangahake tutamoe  # re-score only (regression is pooled across the regions given)
 ```
 
 Outputs go to `data/<region>/` (gitignored): `area_km2.tif`, `validation_summary.json`, `gis/`

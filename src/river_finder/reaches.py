@@ -81,6 +81,73 @@ def extract_links(rec, chan):
     return cells[:k], ptr[: nl + 1], nxt[:nl]
 
 
+@njit(cache=True)
+def upstream_order(rec):
+    """Kahn topological order of all cells, upstream first."""
+    n = rec.size
+    indeg = np.zeros(n, dtype=np.int32)
+    for i in range(n):
+        if rec[i] >= 0:
+            indeg[rec[i]] += 1
+    order = np.empty(n, dtype=np.int64)
+    head = 0
+    tail = 0
+    for i in range(n):
+        if indeg[i] == 0:
+            order[tail] = i
+            tail += 1
+    while head < tail:
+        v = order[head]
+        head += 1
+        r = rec[v]
+        if r >= 0:
+            indeg[r] -= 1
+            if indeg[r] == 0:
+                order[tail] = r
+                tail += 1
+    return order[:tail]
+
+
+@njit(cache=True)
+def accumulate_max(rec, values, order):
+    """Maximum of ``values`` over each cell's upstream area (including itself)."""
+    out = values.copy()
+    for k in range(order.size):
+        v = order[k]
+        r = rec[v]
+        if r >= 0 and out[v] > out[r]:
+            out[r] = out[v]
+    return out
+
+
+@njit(cache=True)
+def channel_target(rec, chan, order):
+    """For every cell, the first channel cell reached by flowing downstream (-1 if none)."""
+    n = rec.size
+    tgt = np.full(n, -1, dtype=np.int64)
+    for k in range(order.size - 1, -1, -1):  # downstream first
+        v = order[k]
+        if chan[v]:
+            tgt[v] = v
+        elif rec[v] >= 0:
+            tgt[v] = tgt[rec[v]]
+    return tgt
+
+
+@njit(cache=True)
+def floor_width_counts(tgt, seg_of_cell, hand, max_hand, nseg):
+    """Number of cells per segment whose height above their channel is <= max_hand."""
+    cnt = np.zeros(nseg, dtype=np.int64)
+    for i in range(tgt.size):
+        t = tgt[i]
+        if t < 0:
+            continue
+        s = seg_of_cell[t]
+        if s >= 0 and hand[i] <= max_hand:
+            cnt[s] += 1
+    return cnt
+
+
 def _step_len(a: int, b: int, ncol: int, cellsize: float) -> float:
     ra, ca = divmod(a, ncol)
     rb, cb = divmod(b, ncol)
@@ -133,6 +200,8 @@ def build_segments(region: Region, min_area_km2: float = 0.5, seg_len_m: float =
     z_up, _, _ = accumulate(rec, zz.ravel().astype(np.float64), edge)
     flat_up, _, _ = accumulate(rec, flat.ravel().astype(np.float64), edge)
     hard_up, _, _ = accumulate(rec, (hard.ravel() & valid.ravel()).astype(np.float64), edge)
+    order = upstream_order(rec)
+    zmax_up = accumulate_max(rec, np.where(valid, filled, -1e9).ravel().astype(np.float64), order)
     with np.errstate(invalid="ignore", divide="ignore"):
         mean_z_up = z_up / n_up
         flat_frac = flat_up / n_up
@@ -147,6 +216,7 @@ def build_segments(region: Region, min_area_km2: float = 0.5, seg_len_m: float =
     chan = (np.nan_to_num(area, nan=0.0) >= min_area_km2).ravel()
     cells, ptr, nxt = extract_links(rec, chan)
     af, ff, zf, zmf = area.ravel(), filled.ravel(), z.ravel(), zmax.ravel()
+    seg_of_cell = np.full(rec.size, -1, dtype=np.int64)
     with rasterio.open(d / "truncated.tif") as ds:
         trf = ds.read(1).ravel() == 1
     hard_f = hard.ravel()
@@ -183,6 +253,7 @@ def build_segments(region: Region, min_area_km2: float = 0.5, seg_len_m: float =
             a_mid = float(np.nanmean(af[idx[:-1]]))
             mid = idx[len(idx) // 2]
             body = idx[:-1] if len(idx) > 1 else idx
+            relief = float(zmax_up[mid] - ff[mid])
             ksn = (drop / length if length > 0 else 0.0) * (a_mid * 1e6) ** THETA
             rows, cols = np.divmod(idx, ncol)
             xs, ys = rasterio.transform.xy(transform, rows, cols)
@@ -192,6 +263,7 @@ def build_segments(region: Region, min_area_km2: float = 0.5, seg_len_m: float =
                 keep.append(len(xs) - 1)
             geom = LineString([(xs[k], ys[k]) for k in keep])
             seg_id = len(seg_rows)
+            seg_of_cell[body] = seg_id
             if s == 0:
                 first_seg_of_link[li] = seg_id
             last_seg_of_link[li] = seg_id
@@ -203,6 +275,9 @@ def build_segments(region: Region, min_area_km2: float = 0.5, seg_len_m: float =
                 "area_km2": round(a_bot, 4), "area_mid_km2": round(a_mid, 4),
                 "ksn": round(ksn, 2),
                 "gorge_depth_m": round(float(np.mean(zmf[body] - zf[body])), 2),
+                "relief_m": round(relief, 1),
+                # Melton ruggedness number: catchment relief / sqrt(catchment area), both in metres
+                "melton": round(relief / math.sqrt(max(a_mid, 1e-6) * 1e6), 4),
                 "head_m": round(float(mean_z_up[mid] - ff[mid]), 2),
                 "upstream_flat_frac": round(float(flat_frac[mid]), 4),
                 "upstream_hard_frac": round(float(hard_frac[mid]), 4),
@@ -218,6 +293,18 @@ def build_segments(region: Region, min_area_km2: float = 0.5, seg_len_m: float =
         down_link = cell_link.get(int(nxt[li]))
         if down_link is not None and first_seg_of_link[down_link] >= 0:
             seg_rows[last]["down_seg"] = int(first_seg_of_link[down_link])
+    # Valley-floor width from HAND (height above nearest drainage): the area of ground within
+    # ``floor_hand_m`` of its channel, per metre of channel. Height-to-width = gorge depth / width.
+    floor_hand_m = 5.0
+    tgt = channel_target(rec, chan, order)
+    ok_t = tgt >= 0
+    hand = np.full(rec.size, np.inf)
+    hand[ok_t] = ff[ok_t] - ff[tgt[ok_t]]
+    cnt = floor_width_counts(tgt, seg_of_cell, hand, floor_hand_m, len(seg_rows))
+    for k, row in enumerate(seg_rows):
+        width = max(cnt[k] * cs * cs / max(row["length_m"], cs), cs)
+        row["valley_width_m"] = round(width, 1)
+        row["height_to_width"] = round(row["gorge_depth_m"] / width, 4)
     gdf = gpd.GeoDataFrame(seg_rows, geometry=seg_geoms, crs="EPSG:2193")
     # knick ratio: ksn relative to the next segment downstream
     ksn = gdf["ksn"].to_numpy()

@@ -41,17 +41,35 @@ FEATURES: dict[str, tuple] = {
     "hard_up": (lambda g: g["upstream_hard_frac"], 0.5, "Resistant-rock share of catchment"),
     "bed_hard": (lambda g: g["bed_hard"].astype(float), 0.5, "Channel on resistant rock"),
     "knick": (lambda g: np.log(g["knick_ratio"].fillna(1).clip(0.1, 10)), 0.25, "k_sn jump vs downstream, log"),
+    "melton": (lambda g: np.log10(g["melton"].clip(1e-3, None)), 0.5, "Height-to-area: relief / sqrt(area), log"),
+    "h_to_w": (lambda g: np.log1p(g["height_to_width"].clip(0, 20)), 0.5,
+               "Height-to-width: gorge depth / valley width, log"),
 }
 
 
 @dataclass
 class RunParams:
-    gradient_min: float = 20.0       # m/km
-    gradient_max: float = 80.0
-    min_maf_m3s: float = 5.0         # mean annual flood
+    """Sean's three-parameter runnability model: flow, gradient, height-to-area.
+
+    Each parameter maps to a 0-1 *desirability*:
+    - flow and gradient: trapezoid bands (a, b, c, d). Zero at or below a, ramps up to full credit
+      from b to c, then ramps back to zero at d. Flow is ramped on a log scale.
+    - height-to-area: an increasing ramp (lo, hi). ``None`` means "use the 10th-60th percentile of
+      all reaches >= 2 km2 in the scored regions".
+
+    A segment passes when the weighted mean desirability is >= ``threshold``. With ``gate``, every
+    parameter must also be above zero. Passing segments are chained downstream into runs.
+    """
+    flow_band: tuple = (2.0, 8.0, 300.0, 2000.0)       # mean annual flood, m3/s
+    gradient_band: tuple = (5.0, 20.0, 80.0, 150.0)    # m/km
+    ha_measure: str = "melton"                         # "melton" (relief/sqrt(area)) or "height_to_width"
+    ha_ramp: tuple | None = None
+    weights: tuple = (1.0, 1.0, 1.0)                   # flow, gradient, height-to-area
+    threshold: float = 0.7
+    gate: bool = True
+    flow_scaled: bool = True     # big rivers count at lower gradients: g * clip((MAF/20)^0.5, 1, 3)
     min_length_km: float = 1.0
-    max_gap_segments: int = 1        # pools / flatter bits allowed inside a run
-    flow_scaled: bool = True         # big rivers may run at lower gradients (see below)
+    max_gap_segments: int = 1    # pools / flatter bits allowed inside a run
 
 
 @dataclass
@@ -166,16 +184,63 @@ def composite_scores(Xs: np.ndarray, names: list[str], weights: dict[str, float]
 
 
 # ---------------------------------------------------------------------------- run assembly
+def trapezoid(x, band) -> np.ndarray:
+    a, b, c, d = band
+    x = np.asarray(x, dtype=float)
+    up = np.clip((x - a) / max(b - a, 1e-9), 0, 1)
+    down = np.clip((d - x) / max(d - c, 1e-9), 0, 1)
+    return np.minimum(up, down)
+
+
+def effective_gradient(g: pd.DataFrame, p: RunParams) -> np.ndarray:
+    grad = g["grad_s"].to_numpy(dtype=float)
+    if not p.flow_scaled:
+        return grad
+    return grad * np.clip((np.maximum(g["maf_m3s"].to_numpy(dtype=float), 1e-3) / 20.0) ** 0.5, 1.0, 3.0)
+
+
+def default_ha_ramp(frames, measure: str) -> tuple[float, float]:
+    v = np.concatenate([f.loc[f["area_km2"] >= 2.0, measure].to_numpy(dtype=float) for f in frames])
+    v = v[np.isfinite(v)]
+    return float(np.percentile(v, 10)), float(np.percentile(v, 60))
+
+
+def desirability(g: pd.DataFrame, p: RunParams) -> pd.DataFrame:
+    """Per-segment desirabilities d_flow, d_gradient, d_ha and their weighted mean ``wscore``."""
+    maf = np.maximum(g["maf_m3s"].to_numpy(dtype=float), 1e-3)
+    d_flow = trapezoid(np.log10(maf), tuple(np.log10(p.flow_band)))
+    d_grad = trapezoid(effective_gradient(g, p), p.gradient_band)
+    lo, hi = p.ha_ramp if p.ha_ramp is not None else default_ha_ramp([g], p.ha_measure)
+    d_ha = np.clip((g[p.ha_measure].to_numpy(dtype=float) - lo) / max(hi - lo, 1e-9), 0, 1)
+    w = np.asarray(p.weights, dtype=float)
+    wscore = (w[0] * d_flow + w[1] * d_grad + w[2] * d_ha) / max(w.sum(), 1e-9)
+    return pd.DataFrame({"d_flow": d_flow, "d_gradient": d_grad, "d_ha": d_ha, "wscore": wscore}, index=g.index)
+
+
 def passes(g: pd.DataFrame, p: RunParams) -> np.ndarray:
-    grad = g["grad_s"].to_numpy()
-    maf = g["maf_m3s"].to_numpy()
-    lo = np.full(len(g), p.gradient_min)
-    if p.flow_scaled:
-        # Big-volume rivers run at lower gradients: scale the minimum by (MAF/20)^-0.5, never below
-        # a third of it. At MAF 20 m3/s the band is unchanged; at 70 m3/s (the Mangakarengorengo) the
-        # minimum drops to ~53%.
-        lo = p.gradient_min * np.clip((np.maximum(maf, 1e-3) / 20.0) ** -0.5, 1 / 3, 1.0)
-    return (grad >= lo) & (grad <= p.gradient_max) & (maf >= p.min_maf_m3s)
+    d = desirability(g, p)
+    ok = d["wscore"].to_numpy() >= p.threshold
+    if p.gate:
+        ok &= (d[["d_flow", "d_gradient", "d_ha"]].to_numpy() > 0).all(1)
+    return ok
+
+
+def pareto_layers(points: np.ndarray) -> np.ndarray:
+    """Non-dominated sorting (all objectives maximised). Layer 1 is the Pareto frontier."""
+    n = len(points)
+    layer = np.zeros(n, dtype=int)
+    remaining = np.arange(n)
+    k = 0
+    while remaining.size:
+        k += 1
+        P = points[remaining]
+        dominated = np.zeros(len(remaining), dtype=bool)
+        for i in range(len(remaining)):
+            ge = (P >= P[i]).all(1) & (P > P[i]).any(1)
+            dominated[i] = ge.any()
+        layer[remaining[~dominated]] = k
+        remaining = remaining[dominated]
+    return layer
 
 
 def assemble_runs(g: pd.DataFrame, p: RunParams) -> pd.DataFrame:
@@ -220,11 +285,21 @@ def assemble_runs(g: pd.DataFrame, p: RunParams) -> pd.DataFrame:
             "area_bottom_km2": round(float(sub["area_km2"].iloc[-1]), 2),
             "maf_bottom_m3s": round(float(sub["maf_m3s"].iloc[-1]), 1),
             "gorge_depth_m": round(float(sub["gorge_depth_m"].mean()), 1),
+            "melton": round(float(sub["melton"].median()), 4) if "melton" in sub else np.nan,
+            "height_to_width": round(float(sub["height_to_width"].median()), 3) if "height_to_width" in sub else np.nan,
+            "eff_gradient": round(float(np.average(effective_gradient(sub, p), weights=sub["length_m"])), 1),
+            "wscore": round(float(np.average(desirability(sub, p)["wscore"], weights=sub["length_m"])), 3)
+            if p.ha_ramp is not None else np.nan,
             "hard_bed_frac": round(float(sub["bed_hard"].mean()), 2),
             "river": (sub["river"][sub["river"] != ""].mode().iloc[0] if (sub["river"] != "").any() else ""),
         })
     g["run_id"] = run_id
-    return pd.DataFrame(runs)
+    out = pd.DataFrame(runs)
+    if len(out):
+        ha = out[p.ha_measure].to_numpy(dtype=float)
+        pts = np.column_stack([np.log10(np.maximum(out["maf_bottom_m3s"], 1e-3)), out["eff_gradient"], ha])
+        out["pareto_layer"] = pareto_layers(np.nan_to_num(pts, nan=-1e9))
+    return out
 
 
 # ---------------------------------------------------------------------------- end-to-end
@@ -309,6 +384,9 @@ def score_and_write(regions: list, data_root, params: RunParams | None = None) -
     params = params or RunParams()
     data_root = Path(data_root)
     frames = {r.name: gpd.read_file(r.data_dir() / "segments.gpkg") for r in regions}
+    ha_defaults = {m: default_ha_ramp(list(frames.values()), m) for m in ("melton", "height_to_width")}
+    if params.ha_ramp is None:
+        params.ha_ramp = ha_defaults[params.ha_measure]
     regmap = {r.name: r for r in regions}
     scored, model = score_regions(frames, regmap)
     summary = {"holdout": model.holdout, "leave_one_river_out": model.lorocv, "coef": model.coef, "regions": {}}
@@ -332,7 +410,7 @@ def score_and_write(regions: list, data_root, params: RunParams | None = None) -
             geoms = [g.geometry.iloc[g.index[g["run_id"] == rid]].union_all() for rid in runs["run_id"]]
             rg = gpd.GeoDataFrame(runs, geometry=geoms, crs=g.crs)
             rg.to_crs(4326).to_file(d / "runs.geojson", driver="GeoJSON")
-            cand = runs[runs["status"] != "listed"].sort_values("score_regression", ascending=False)
+            cand = runs[runs["status"] != "listed"].sort_values(["pareto_layer", "wscore"], ascending=[True, False])
             cand.to_csv(d / "candidates.csv", index=False)
         summary["regions"][name] = {
             "segments": len(g), "positives": int(g["label"].sum()), "runs": len(runs),
@@ -342,6 +420,6 @@ def score_and_write(regions: list, data_root, params: RunParams | None = None) -
             if len(runs) else [],
         }
     (data_root / "model.json").write_text(json.dumps(
-        {**model.__dict__, "run_params": params.__dict__,
+        {**model.__dict__, "run_params": params.__dict__, "ha_defaults": ha_defaults,
          "feature_descriptions": {k: v[2] for k, v in FEATURES.items()}}, indent=2))
     return summary

@@ -145,6 +145,17 @@ details .wrow { display: grid; grid-template-columns: minmax(0, 1fr) 90px 34px; 
 details .wrow output { font-family: var(--font-data); text-align: right; }
 .swatch { display: inline-block; width: 22px; height: 5px; border-radius: 3px; vertical-align: middle; margin-right: 6px; }
 
+.param { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.param-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 600; flex-wrap: wrap; }
+.param-h .w { display: flex; align-items: center; gap: 6px; font-weight: 400; font-size: 12px; color: var(--muted); }
+.param-h .w input { width: 80px; }
+.scatter { position: relative; width: 100%; }
+.scatter svg { display: block; width: 100%; height: auto; overflow: visible; }
+.scatter .tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-size: 12px; box-shadow: 0 2px 8px rgb(0 0 0 / 0.15); z-index: 2; max-width: 240px; }
+.scatter .axis text { fill: var(--muted); font-size: 10px; font-family: var(--font-data); }
+.scatter .axis line, .scatter .grid line { stroke: var(--line); }
+.scatter .band { fill: var(--accent); opacity: 0.07; }
+
 @media (max-width: 760px) {
   html, body { height: auto; }
   .app { display: flex; flex-direction: column; height: auto; }
@@ -159,36 +170,58 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
   <aside class="panel" aria-label="Controls">
     <header style="display:grid;gap:4px">
       <h1>River Finder</h1>
-      <p class="sub">Steep, well-fed river sections from LINZ LiDAR at 5&nbsp;m, ranked by how much they look like the known runs. Orange lines are runs that are not in the guides.</p>
+      <p class="sub">River sections from LINZ LiDAR at 5&nbsp;m, scored on flow, gradient and height-to-area. Orange lines are runs that are not in the guides; thicker ones are on the Pareto frontier.</p>
     </header>
 
     <nav class="tabs" role="tablist" id="tabs" aria-label="Region"></nav>
     <p class="sub" id="region-desc"></p>
 
     <section class="ctl" aria-label="Run finder">
-      <h2>Find runs</h2>
-      <div class="pair">
-        <div class="ctl"><div class="ctl-row"><label for="gmin">Min gradient</label><output id="gminOut" class="num"></output></div>
-          <input type="range" id="gmin" min="5" max="60" step="1" value="20"></div>
-        <div class="ctl"><div class="ctl-row"><label for="gmax">Max gradient</label><output id="gmaxOut" class="num"></output></div>
-          <input type="range" id="gmax" min="30" max="200" step="5" value="80"></div>
+      <h2>Runnability: flow, gradient, height-to-area</h2>
+      <p class="note">Each parameter scores 0 to 1 inside its band. A reach counts when the weighted score is over the threshold (and, with the gate on, every parameter scores above 0). Consecutive counting reaches form a run.</p>
+      <div class="param">
+        <div class="param-h"><span>Flow (mean annual flood)</span><label class="w">weight <input type="range" id="wQ" min="0" max="2" step="0.25" value="1"><output id="wQOut" class="num"></output></label></div>
+        <div class="pair">
+          <div class="ctl"><div class="ctl-row"><label for="qLo">Full credit from</label><output id="qLoOut" class="num"></output></div><input type="range" id="qLo" min="0" max="1000"></div>
+          <div class="ctl"><div class="ctl-row"><label for="qHi">to</label><output id="qHiOut" class="num"></output></div><input type="range" id="qHi" min="0" max="1000"></div>
+        </div>
+      </div>
+      <div class="param">
+        <div class="param-h"><span>Gradient</span><label class="w">weight <input type="range" id="wS" min="0" max="2" step="0.25" value="1"><output id="wSOut" class="num"></output></label></div>
+        <div class="pair">
+          <div class="ctl"><div class="ctl-row"><label for="gLo">Full credit from</label><output id="gLoOut" class="num"></output></div><input type="range" id="gLo" min="5" max="60" step="1"></div>
+          <div class="ctl"><div class="ctl-row"><label for="gHi">to</label><output id="gHiOut" class="num"></output></div><input type="range" id="gHi" min="30" max="200" step="5"></div>
+        </div>
+        <label class="checks" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="flowScaled" checked> Big rivers count at lower gradients</label>
+      </div>
+      <div class="param">
+        <div class="param-h"><span>Height-to-area</span><label class="w">weight <input type="range" id="wH" min="0" max="2" step="0.25" value="1"><output id="wHOut" class="num"></output></label></div>
+        <select id="haMeasure" aria-label="Height measure">
+          <option value="melton">Catchment relief / √area (Melton)</option>
+          <option value="height_to_width">Gorge depth / valley-floor width</option>
+        </select>
+        <div class="ctl"><div class="ctl-row"><label for="haHi">Full credit from</label><output id="haHiOut" class="num"></output></div><input type="range" id="haHi" min="0" max="1000"></div>
       </div>
       <div class="pair">
-        <div class="ctl"><div class="ctl-row"><label for="minMaf">Min flood flow</label><output id="minMafOut" class="num"></output></div>
-          <input type="range" id="minMaf" min="0" max="1000" value="500"></div>
-        <div class="ctl"><div class="ctl-row"><label for="minLen">Min length</label><output id="minLenOut" class="num"></output></div>
-          <input type="range" id="minLen" min="0.25" max="5" step="0.25" value="1"></div>
+        <div class="ctl"><div class="ctl-row"><label for="thr">Threshold</label><output id="thrOut" class="num"></output></div><input type="range" id="thr" min="0.3" max="1" step="0.01" value="0.7"></div>
+        <div class="ctl"><div class="ctl-row"><label for="minLen">Min run length</label><output id="minLenOut" class="num"></output></div><input type="range" id="minLen" min="0.25" max="5" step="0.25" value="1"></div>
       </div>
-      <label class="checks" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="flowScaled" checked> Let big rivers count at lower gradients</label>
-      <p class="note">Flood flow is the estimated mean annual flood (NIWA). With big rivers allowed, the minimum gradient drops in proportion to the square root of flow above 20&nbsp;m³/s, down to a third of the setting.</p>
-      <div class="ctl" style="margin-top:6px"><label for="colorBy">Rank and colour reaches by</label>
+      <label class="checks" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="gate" checked> Every parameter must score above 0</label>
+      <div class="ctl" style="margin-top:6px"><label for="colorBy">Rank and colour by</label>
         <select id="colorBy">
+          <option value="pareto">Pareto frontier, then weighted score</option>
+          <option value="wsum">Weighted score</option>
           <option value="reg">Model trained on the known runs</option>
-          <option value="comp">Your feature weights</option>
           <option value="sig">Similarity to the known runs</option>
-          <option value="none">Runs only, no reach colours</option>
+          <option value="comp">Your feature weights (all features)</option>
         </select></div>
       <p class="count" id="runCount"></p>
+    </section>
+
+    <section aria-label="Pareto plot">
+      <h2>Runs: flow vs gradient</h2>
+      <div id="scatter" class="scatter"></div>
+      <p class="note">Each dot is a run. Colour shows height-to-area (darker is higher). Ringed dots are on the Pareto frontier: no other run beats them on all three parameters. Squares are runs in the guides; the diamond is the held-out test. Click a dot to go there.</p>
     </section>
 
     <section aria-label="Held-out test">
@@ -202,7 +235,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     </section>
 
     <details id="weights">
-      <summary>Feature weights</summary>
+      <summary>Feature weights (all features)</summary>
       <p class="note" style="margin-top:6px">Used when ranking by your feature weights. Each feature is standardised across both regions; the score is the weighted sum. The model's own weights are shown on the right for comparison.</p>
       <div id="wrows"></div>
     </details>
@@ -422,12 +455,23 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
   }
 
 
-  // ---------- run finder (mirrors river_finder.scoring.assemble_runs) ----------
-  const runState = { gmin: 20, gmax: 80, minMaf: 5, minLen: 1, flowScaled: true, maxGap: 1, colorBy: "reg",
-                     weights: Object.assign({}, MODEL ? MODEL.default_weights : {}) };
+  // ---------- run finder (mirrors river_finder.scoring: desirability, assemble_runs, pareto_layers) ----------
+  const RP = (MODEL && MODEL.run_params) || {};
+  const HAD = (MODEL && MODEL.ha_defaults) || { melton: [0.03, 0.1], height_to_width: [0.1, 1.5] };
+  const runState = {
+    q: [(RP.flow_band || [2, 8, 300, 2000])[1], (RP.flow_band || [2, 8, 300, 2000])[2]],
+    g: [(RP.gradient_band || [5, 20, 80, 150])[1], (RP.gradient_band || [5, 20, 80, 150])[2]],
+    haMeasure: RP.ha_measure || "melton", haHi: {}, w: (RP.weights || [1, 1, 1]).slice(),
+    threshold: RP.threshold ?? 0.7, gate: RP.gate ?? true, flowScaled: RP.flow_scaled ?? true,
+    minLen: RP.min_length_km ?? 1, maxGap: RP.max_gap_segments ?? 1, colorBy: "pareto",
+    weights: Object.assign({}, MODEL ? MODEL.default_weights : {}),
+  };
+  Object.keys(HAD).forEach((k) => { runState.haHi[k] = HAD[k][1]; });
   let segLayer = null, runLayer = null, lastRuns = [];
-  const mafFromSlider = (v) => 10 ** (-0.5 + 3 * v / 1000);          // 0.3 .. 300 m³/s, log
-  const sliderFromMaf = (m) => Math.round((Math.log10(m) + 0.5) / 3 * 1000);
+  // log sliders: flow 1..3000 m³/s; height-to-area spans 0.25x..4x of its default
+  const qFromS = (v) => 10 ** (3.477 * v / 1000), sFromQ = (q) => Math.round(Math.log10(q) / 3.477 * 1000);
+  const haFromS = (v, m) => HAD[m][1] * 10 ** ((v - 500) / 500 * 0.6), sFromHa = (x, m) => Math.round(500 + Math.log10(x / HAD[m][1]) / 0.6 * 500);
+  const trap = (x, a, b, c, d) => Math.max(0, Math.min((x - a) / Math.max(b - a, 1e-9), (d - x) / Math.max(d - c, 1e-9), 1));
 
   function percentiles(values, refMask) {
     const ref = []; for (let i = 0; i < values.length; i++) if (refMask[i]) ref.push(values[i]);
@@ -438,22 +482,55 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     });
   }
 
-  function segScores(S) {
-    if (runState.colorBy === "reg") return S.reg;
-    if (runState.colorBy === "sig") return S.sig;
-    if (runState.colorBy === "none") return S.reg;
-    const w = S.features.map((f) => runState.weights[f] ?? 0);
-    const raw = S.z.map((row) => row.reduce((acc, v, k) => acc + v * w[k], 0));
-    return percentiles(raw, S.a.map((a) => a >= 2));
+  function segmentScores(S) {
+    const n = S.g.length, effG = new Float64Array(n), dQ = new Float64Array(n), dS = new Float64Array(n), dH = new Float64Array(n), ws = new Float64Array(n);
+    const [qb, qc] = runState.q, [gb, gc] = runState.g, m = runState.haMeasure, ha = m === "melton" ? S.mel : S.hw;
+    const lo = HAD[m][0], hi = Math.max(runState.haHi[m], lo * 1.01), w = runState.w, wsum = Math.max(w[0] + w[1] + w[2], 1e-9);
+    for (let i = 0; i < n; i++) {
+      const maf = Math.max(S.maf[i], 1e-3);
+      effG[i] = runState.flowScaled ? S.g[i] * Math.min(3, Math.max(1, Math.sqrt(maf / 20))) : S.g[i];
+      const lq = Math.log10(maf);
+      dQ[i] = trap(lq, Math.log10(qb / 4), Math.log10(qb), Math.log10(qc), Math.log10(qc * 6.67));
+      dS[i] = trap(effG[i], gb / 4, gb, gc, gc * 1.875);
+      dH[i] = Math.min(1, Math.max(0, (ha[i] - lo) / (hi - lo)));
+      ws[i] = (w[0] * dQ[i] + w[1] * dS[i] + w[2] * dH[i]) / wsum;
+    }
+    return { effG, dQ, dS, dH, ws, ha };
   }
 
-  function assembleRuns(S, scores) {
-    const n = S.g.length, ok = new Uint8Array(n), runId = new Int32Array(n).fill(-1), runs = [];
-    for (let i = 0; i < n; i++) {
-      let lo = runState.gmin;
-      if (runState.flowScaled) lo = runState.gmin * Math.min(1, Math.max(1 / 3, Math.pow(Math.max(S.maf[i], 1e-3) / 20, -0.5)));
-      ok[i] = S.g[i] >= lo && S.g[i] <= runState.gmax && S.maf[i] >= runState.minMaf ? 1 : 0;
+  function rankScores(S, D) {
+    if (runState.colorBy === "reg") return S.reg;
+    if (runState.colorBy === "sig") return S.sig;
+    if (runState.colorBy === "comp") {
+      const w = S.features.map((f) => runState.weights[f] ?? 0);
+      return percentiles(S.z.map((row) => row.reduce((acc, v, k) => acc + v * w[k], 0)), S.a.map((a) => a >= 2));
     }
+    return Array.from(D.ws, (v) => 100 * v);
+  }
+
+  function paretoLayers(pts) {
+    const n = pts.length, layer = new Int32Array(n); let rem = [...Array(n).keys()], k = 0;
+    while (rem.length) {
+      k++;
+      const keep = [], next = [];
+      for (const i of rem) {
+        let dom = false;
+        for (const j of rem) {
+          if (j === i) continue;
+          const p = pts[j], q = pts[i];
+          if (p[0] >= q[0] && p[1] >= q[1] && p[2] >= q[2] && (p[0] > q[0] || p[1] > q[1] || p[2] > q[2])) { dom = true; break; }
+        }
+        (dom ? next : keep).push(i);
+      }
+      keep.forEach((i) => { layer[i] = k; });
+      rem = next;
+    }
+    return layer;
+  }
+
+  function assembleRuns(S, D, scores) {
+    const n = S.g.length, ok = new Uint8Array(n), runId = new Int32Array(n).fill(-1), runs = [];
+    for (let i = 0; i < n; i++) ok[i] = D.ws[i] >= runState.threshold && (!runState.gate || (D.dQ[i] > 0 && D.dS[i] > 0 && D.dH[i] > 0)) ? 1 : 0;
     const listed = new Set(S.listed);
     for (let s = 0; s < n; s++) {
       if (!ok[s] || runId[s] >= 0 || (S.u[s] >= 0 && ok[S.u[s]])) continue;
@@ -466,86 +543,137 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
       const len = members.reduce((t, m) => t + S.len[m], 0) / 1000;
       if (len < runState.minLen) continue;
       const rid = runs.length; members.forEach((m) => { runId[m] = rid; });
-      const counts = {}; let ho = false, score = 0, s50 = 0;
+      const counts = {}; let ho = false, score = 0, s50 = 0, eg = 0, wsc = 0;
+      const has = [];
       members.forEach((m) => {
         if (S.r[m] >= 0) counts[S.r[m]] = (counts[S.r[m]] || 0) + 1;
         ho = ho || S.ho[m] === 1; score = Math.max(score, scores[m]); s50 = Math.max(s50, S.s50[m]);
+        eg += D.effG[m] * S.len[m]; wsc += D.ws[m] * S.len[m]; has.push(D.ha[m]);
       });
+      has.sort((a, b) => a - b);
       const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
       const river = top ? S.rivers[+top[0]] : "";
       const first = members[0], last = members[members.length - 1], drop = S.zt[first] - S.zb[last];
-      runs.push({ rid, members, len, drop, grad: drop / (len * 1000) * 1000, s50, aTop: S.a[first], aBot: S.a[last],
-                  maf: S.maf[last], river, score,
-                  status: listed.has(river) ? "listed" : ho ? "heldout" : "candidate" });
+      runs.push({ rid, members, len, drop, grad: drop / (len * 1000) * 1000, effG: eg / (len * 1000), s50,
+                  aTop: S.a[first], aBot: S.a[last], maf: S.maf[last], ha: has[has.length >> 1], ws: wsc / (len * 1000),
+                  river, score, status: listed.has(river) ? "listed" : ho ? "heldout" : "candidate" });
     }
+    const layers = paretoLayers(runs.map((r) => [Math.log10(Math.max(r.maf, 1e-3)), r.effG, r.ha]));
+    runs.forEach((r, i) => { r.layer = layers[i]; if (runState.colorBy === "pareto" || runState.colorBy === "wsum") r.score = 100 * r.ws; });
     return runs;
   }
 
   function scoreColor(t) {
     const a = hex(css("--score-lo")), b = hex(css("--score-hi"));
-    return `rgb(${[0, 1, 2].map((k) => Math.round(a[k] + (b[k] - a[k]) * t)).join(",")})`;
+    return `rgb(${[0, 1, 2].map((k) => Math.round(a[k] + (b[k] - a[k]) * Math.min(Math.max(t, 0), 1))).join(",")})`;
+  }
+
+  function sortCands(runs) {
+    const c = runs.filter((r) => r.status !== "listed");
+    return runState.colorBy === "pareto" ? c.sort((a, b) => a.layer - b.layer || b.ws - a.ws) : c.sort((a, b) => b.score - a.score);
+  }
+
+  function flyToRun(S, r) {
+    const bounds = L.latLngBounds(r.members.flatMap((m) => S.c[m].map(([x, y]) => [y, x])));
+    map.flyToBounds(bounds.pad(0.6), { duration: 0.6, maxZoom: 15 });
+  }
+
+  function drawScatter(S, runs) {
+    const el = $("scatter"), W = 320, H = 230, m = { l: 44, r: 8, t: 8, b: 26 };
+    const xs = (q) => m.l + (Math.log10(Math.max(q, 1)) / 3.5) * (W - m.l - m.r);
+    const ys = (g) => H - m.b - Math.min(g, 160) / 160 * (H - m.t - m.b);
+    const has = runs.map((r) => r.ha).sort((a, b) => a - b);
+    const hlo = has[0] ?? 0, hhi = has[has.length - 1] ?? 1;
+    const ink = css("--fg"), surf = css("--surface");
+    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Runs plotted by flood flow and gradient">`;
+    svg += `<rect class="band" x="${xs(runState.q[0])}" y="${ys(runState.g[1])}" width="${Math.max(xs(runState.q[1]) - xs(runState.q[0]), 0)}" height="${Math.max(ys(runState.g[0]) - ys(runState.g[1]), 0)}"/>`;
+    svg += '<g class="grid axis">';
+    [1, 10, 100, 1000].forEach((q) => { svg += `<line x1="${xs(q)}" x2="${xs(q)}" y1="${m.t}" y2="${H - m.b}"/><text x="${xs(q)}" y="${H - m.b + 13}" text-anchor="middle">${q}</text>`; });
+    [0, 40, 80, 120, 160].forEach((g) => { svg += `<line x1="${m.l}" x2="${W - m.r}" y1="${ys(g)}" y2="${ys(g)}"/><text x="${m.l - 4}" y="${ys(g) + 3}" text-anchor="end">${g}</text>`; });
+    svg += `<text x="${(W + m.l) / 2}" y="${H - 1}" text-anchor="middle">flood flow, m³/s</text><text transform="translate(8 ${(H - m.b) / 2}) rotate(-90)" text-anchor="middle">gradient, m/km</text></g>`;
+    const order = runs.map((r, i) => i).sort((a, b) => (runs[b].layer === 1) - (runs[a].layer === 1));
+    order.reverse().forEach((i) => {
+      const r = runs[i], x = xs(r.maf), y = ys(r.effG), fill = scoreColor((r.ha - hlo) / Math.max(hhi - hlo, 1e-9));
+      const front = r.layer === 1, ring = front ? `stroke="${ink}" stroke-width="1.5"` : `stroke="${surf}" stroke-width="1"`;
+      const sz = front ? 5 : 3.5;
+      if (r.status === "listed") svg += `<rect data-i="${i}" x="${x - sz}" y="${y - sz}" width="${2 * sz}" height="${2 * sz}" fill="${ink}" ${ring} style="cursor:pointer"/>`;
+      else if (r.status === "heldout") svg += `<path data-i="${i}" d="M${x} ${y - 7}L${x + 7} ${y}L${x} ${y + 7}L${x - 7} ${y}Z" fill="${css("--unlisted")}" stroke="${ink}" stroke-width="1.5" style="cursor:pointer"/>`;
+      else svg += `<circle data-i="${i}" cx="${x}" cy="${y}" r="${sz}" fill="${fill}" ${ring} style="cursor:pointer"/>`;
+    });
+    svg += "</svg>";
+    el.innerHTML = svg + '<div class="tip" hidden></div>';
+    const tip = el.querySelector(".tip");
+    el.querySelectorAll("[data-i]").forEach((node) => {
+      const r = runs[+node.dataset.i];
+      node.addEventListener("mouseenter", () => {
+        tip.hidden = false;
+        tip.innerHTML = `<b>${r.river || "Unnamed creek"}</b>${r.layer === 1 ? " · Pareto frontier" : ` · layer ${r.layer}`}<br><span class="num">${r.maf.toFixed(0)} m³/s · ${r.effG.toFixed(0)} m/km (eff.) · ${runState.haMeasure === "melton" ? "relief/√area" : "depth/width"} ${r.ha.toFixed(3)}<br>${r.len.toFixed(1)} km · score ${(100 * r.ws).toFixed(0)}</span>`;
+        const bx = el.getBoundingClientRect(), nb = node.getBoundingClientRect();
+        tip.style.left = Math.min(nb.left - bx.left + 10, bx.width - 200) + "px"; tip.style.top = (nb.top - bx.top - 50) + "px";
+      });
+      node.addEventListener("mouseleave", () => { tip.hidden = true; });
+      node.addEventListener("click", () => flyToRun(S, r));
+    });
   }
 
   function updateRuns() {
-    const D = cache[state.region]; if (!D) return;
-    const S = D.R.segments; if (!S) return;
-    const scores = segScores(S);
-    const runs = assembleRuns(S, scores);
+    const C = cache[state.region]; if (!C) return;
+    const S = C.R.segments; if (!S) return;
+    const D = segmentScores(S);
+    const scores = rankScores(S, D);
+    const runs = assembleRuns(S, D, scores);
     lastRuns = runs;
     if (segLayer) map.removeLayer(segLayer);
     if (runLayer) map.removeLayer(runLayer);
     const toLL = (line) => line.map(([x, y]) => [y, x]);
-    const segLines = [];
-    if (runState.colorBy !== "none") {
-      for (let i = 0; i < S.c.length; i++) {
-        if (scores[i] < 70 || S.a[i] < 1) continue;
-        const t = (scores[i] - 70) / 30;
-        segLines.push(L.polyline(toLL(S.c[i]), { color: scoreColor(t), weight: 1.5 + 2 * t, opacity: 0.55 + 0.45 * t, interactive: false }));
-      }
+    const segLines = [], cut = runState.colorBy === "pareto" || runState.colorBy === "wsum" ? 100 * runState.threshold * 0.85 : 70;
+    for (let i = 0; i < S.c.length; i++) {
+      if (scores[i] < cut || S.a[i] < 1) continue;
+      const t = (scores[i] - cut) / Math.max(100 - cut, 1);
+      segLines.push(L.polyline(toLL(S.c[i]), { color: scoreColor(t), weight: 1.5 + 2 * t, opacity: 0.55 + 0.45 * t, interactive: false }));
     }
     segLayer = L.layerGroup(segLines).addTo(map);
-    const runLines = [];
-    const ink = css("--fg"), cand = css("--cand"), surf = css("--surface");
+    const runLines = [], ink = css("--fg"), cand = css("--cand"), surf = css("--surface");
     runs.forEach((r) => {
       const coords = r.members.map((m) => toLL(S.c[m]));
       const col = r.status === "listed" ? ink : cand;
-      const tip = `<b>${r.river || "Unnamed creek"}</b> · ${r.status === "listed" ? "in guides" : r.status === "heldout" ? "held-out reference" : "not in guides"}<br>`
+      const tip = `<b>${r.river || "Unnamed creek"}</b> · ${r.status === "listed" ? "in guides" : r.status === "heldout" ? "held-out reference" : "not in guides"}${r.layer === 1 ? " · Pareto frontier" : ""}<br>`
         + `<span class="num">${r.len.toFixed(1)} km · ${r.grad.toFixed(0)} m/km · drop ${r.drop.toFixed(0)} m · steepest 50 m ${r.s50.toFixed(0)} m/km<br>`
-        + `${fmtKm2(r.aBot)} km² · flood ${r.maf.toFixed(0)} m³/s · score ${r.score.toFixed(1)}</span>`;
-      runLines.push(L.polyline(coords, { color: surf, weight: 8, opacity: 0.9, interactive: false }));
-      runLines.push(L.polyline(coords, { color: col, weight: 4.5, opacity: 1 }).bindTooltip(tip, { sticky: true }));
+        + `${fmtKm2(r.aBot)} km² · flood ${r.maf.toFixed(0)} m³/s · height-to-area ${r.ha.toFixed(3)} · score ${r.score.toFixed(0)}</span>`;
+      runLines.push(L.polyline(coords, { color: surf, weight: r.layer === 1 ? 9 : 8, opacity: 0.9, interactive: false }));
+      runLines.push(L.polyline(coords, { color: col, weight: r.layer === 1 ? 5.5 : 4.5, opacity: 1 }).bindTooltip(tip, { sticky: true }));
     });
     runLayer = L.layerGroup(runLines).addTo(map);
+    drawScatter(S, runs);
 
-    const cands = runs.filter((r) => r.status !== "listed").sort((a, b) => b.score - a.score);
-    const nListed = runs.length - cands.length;
-    $("runCount").innerHTML = `<b>${runs.length}</b> runs found: <b>${cands.length}</b> not in the guides, <b>${nListed}</b> on rivers in the guides.`;
+    const cands = sortCands(runs);
+    const nFront = runs.filter((r) => r.layer === 1).length;
+    $("runCount").innerHTML = `<b>${runs.length}</b> runs: <b>${cands.length}</b> not in the guides, <b>${runs.length - cands.length}</b> on rivers in the guides, <b>${nFront}</b> on the Pareto frontier.`;
     const box = $("cands"); box.innerHTML = "";
     cands.slice(0, 12).forEach((r, k) => {
       const b = document.createElement("button"); b.type = "button"; b.className = "cand";
       const pill = r.status === "heldout" ? '<span class="pill unlisted">Held out</span>' : '<span class="pill cand-pill">Not in guides</span>';
-      b.innerHTML = `<span class="rank">#${k + 1}</span><span class="nm">${r.river || "Unnamed creek"} ${pill}</span><span class="sc">${r.score.toFixed(1)}</span>`
-        + `<span class="meta">${r.len.toFixed(1)} km · ${r.grad.toFixed(0)} m/km · ${fmtKm2(r.aBot)} km² · flood ${r.maf.toFixed(0)} m³/s</span>`;
-      b.addEventListener("click", () => {
-        const bounds = L.latLngBounds(r.members.flatMap((m) => toLL(S.c[m])));
-        map.flyToBounds(bounds.pad(0.6), { duration: 0.6, maxZoom: 15 });
-      });
+      const front = r.layer === 1 ? ' <span class="pill">Frontier</span>' : "";
+      b.innerHTML = `<span class="rank">#${k + 1}</span><span class="nm">${r.river || "Unnamed creek"} ${pill}${front}</span><span class="sc">${r.score.toFixed(0)}</span>`
+        + `<span class="meta">${r.len.toFixed(1)} km · ${r.grad.toFixed(0)} m/km · flood ${r.maf.toFixed(0)} m³/s · h/a ${r.ha.toFixed(3)}</span>`;
+      b.addEventListener("click", () => flyToRun(S, r));
       box.appendChild(b);
     });
     if (!cands.length) box.innerHTML = '<p class="note">No runs match these settings.</p>';
 
     const ho = $("holdout");
-    const hoName = (D.R.runs.find((r) => r.status !== "listed") || {}).river;
+    const hoName = (C.R.runs.find((r) => r.status !== "listed") || {}).river;
     if (!hoName) { ho.innerHTML = '<p class="note">This region has no held-out river. The Mangakarengorengo test lives in the Kaimai Range.</p>'; return; }
     const idx = cands.findIndex((r) => r.status === "heldout");
+    const hr = cands[idx];
     ho.innerHTML = idx >= 0
-      ? `<span class="big">${hoName}: #${idx + 1} of ${cands.length}</span><span class="note">It is not in any guide and the model never saw it as a run. With these settings it ranks #${idx + 1} among runs not in the guides.</span>`
-      : `<span class="big">${hoName}: not found</span><span class="note">No run on it passes these settings. Its gorge averages about 15–22 m/km at a mean annual flood near 70 m³/s, so it needs "big rivers at lower gradients" or a lower minimum gradient.</span>`;
+      ? `<span class="big">${hoName}: #${idx + 1} of ${cands.length}</span><span class="note">Not in any guide, and never used for training. ${hr.layer === 1 ? "It is on the Pareto frontier." : `It sits in Pareto layer ${hr.layer}: other runs beat it on flow, gradient and height-to-area at once.`} Try ranking by the model trained on the known runs to compare.</span>`
+      : `<span class="big">${hoName}: not found</span><span class="note">No run on it passes these settings. Its gorge averages about 15–22 m/km at a mean annual flood near 70 m³/s; keep "big rivers count at lower gradients" on, or lower the gradient band.</span>`;
   }
   const scheduleRuns = (() => { let t = 0; return () => { clearTimeout(t); t = setTimeout(updateRuns, 60); }; })();
 
   function buildWeights() {
-    if (!MODEL) { $("weights").hidden = true; return; }
+    if (!MODEL) return;
     const box = $("wrows"); box.innerHTML = "";
     Object.keys(MODEL.default_weights).forEach((f) => {
       const row = document.createElement("div"); row.className = "wrow";
@@ -616,18 +744,37 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
   $("showRuns").addEventListener("change", (e) => { state.showRuns = e.target.checked; e.target.checked ? runsLayer.addTo(map) : map.removeLayer(runsLayer); });
   syncOutputs();
 
+  const fmtQ = (q) => (q >= 10 ? q.toFixed(0) : q.toFixed(1)) + " m³/s";
   const syncRunOutputs = () => {
-    $("gminOut").textContent = runState.gmin + " m/km"; $("gmaxOut").textContent = runState.gmax + " m/km";
-    $("minMafOut").textContent = (runState.minMaf >= 10 ? runState.minMaf.toFixed(0) : runState.minMaf.toFixed(1)) + " m³/s";
-    $("minLenOut").textContent = runState.minLen.toFixed(2) + " km";
+    const m = runState.haMeasure;
+    $("qLoOut").textContent = fmtQ(runState.q[0]); $("qHiOut").textContent = fmtQ(runState.q[1]);
+    $("gLoOut").textContent = runState.g[0] + " m/km"; $("gHiOut").textContent = runState.g[1] + " m/km";
+    $("haHiOut").textContent = runState.haHi[m].toFixed(m === "melton" ? 3 : 2);
+    $("thrOut").textContent = runState.threshold.toFixed(2); $("minLenOut").textContent = runState.minLen.toFixed(2) + " km";
+    ["wQ", "wS", "wH"].forEach((id, k) => { $(id + "Out").textContent = runState.w[k].toFixed(2); });
   };
-  $("minMaf").value = sliderFromMaf(runState.minMaf);
-  [["gmin", (v) => { runState.gmin = +v; }], ["gmax", (v) => { runState.gmax = +v; }],
-   ["minMaf", (v) => { runState.minMaf = mafFromSlider(+v); }], ["minLen", (v) => { runState.minLen = +v; }]]
-    .forEach(([id, set]) => $(id).addEventListener("input", (e) => { set(e.target.value); syncRunOutputs(); scheduleRuns(); }));
+  const setInputs = () => {
+    $("qLo").value = sFromQ(runState.q[0]); $("qHi").value = sFromQ(runState.q[1]);
+    $("gLo").value = runState.g[0]; $("gHi").value = runState.g[1];
+    $("haMeasure").value = runState.haMeasure; $("haHi").value = sFromHa(runState.haHi[runState.haMeasure], runState.haMeasure);
+    $("thr").value = runState.threshold; $("minLen").value = runState.minLen; $("gate").checked = runState.gate;
+    $("flowScaled").checked = runState.flowScaled;
+    ["wQ", "wS", "wH"].forEach((id, k) => { $(id).value = runState.w[k]; });
+  };
+  const onIn = (id, set) => $(id).addEventListener("input", (e) => { set(e.target.value); syncRunOutputs(); scheduleRuns(); });
+  onIn("qLo", (v) => { runState.q[0] = Math.min(qFromS(+v), runState.q[1]); });
+  onIn("qHi", (v) => { runState.q[1] = Math.max(qFromS(+v), runState.q[0]); });
+  onIn("gLo", (v) => { runState.g[0] = Math.min(+v, runState.g[1]); });
+  onIn("gHi", (v) => { runState.g[1] = Math.max(+v, runState.g[0]); });
+  onIn("haHi", (v) => { runState.haHi[runState.haMeasure] = haFromS(+v, runState.haMeasure); });
+  onIn("thr", (v) => { runState.threshold = +v; });
+  onIn("minLen", (v) => { runState.minLen = +v; });
+  onIn("wQ", (v) => { runState.w[0] = +v; }); onIn("wS", (v) => { runState.w[1] = +v; }); onIn("wH", (v) => { runState.w[2] = +v; });
+  $("haMeasure").addEventListener("change", (e) => { runState.haMeasure = e.target.value; setInputs(); syncRunOutputs(); scheduleRuns(); });
+  $("gate").addEventListener("change", (e) => { runState.gate = e.target.checked; scheduleRuns(); });
   $("flowScaled").addEventListener("change", (e) => { runState.flowScaled = e.target.checked; scheduleRuns(); });
   $("colorBy").addEventListener("change", (e) => { runState.colorBy = e.target.value; scheduleRuns(); });
-  syncRunOutputs(); buildWeights();
+  setInputs(); syncRunOutputs(); buildWeights();
 
   map.on("zoomend", () => {
     if (!overlay || !overlay.getElement()) return;

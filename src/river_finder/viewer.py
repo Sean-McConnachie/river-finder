@@ -32,7 +32,7 @@ LOG_MIN = math.log10(MIN_KM2)
 LOG_MAX = 4.0  # 10 000 km2, larger than any North Island catchment we will show
 STEP = (LOG_MAX - LOG_MIN) / 253.0
 
-TITLES = {"kaimai": "Kaimai Range", "tutamoe": "Tutamoe plateau"}
+TITLES = {"kaimai": "Kaimai Range", "tutamoe": "Tutamoe plateau", "karangahake": "Karangahake Gorge"}
 
 
 def _warp(src_path: Path, max_px: int, resampling: Resampling, dst_nodata):
@@ -111,6 +111,8 @@ def _segments(region: Region, min_area_km2: float = 1.0) -> dict | None:
         "zt": [round(float(v), 1) for v in g["z_top"]],
         "zb": [round(float(v), 1) for v in g["z_bot"]],
         "hard": [int(v) for v in g["bed_hard"]],
+        "mel": [round(float(v), 4) for v in g["melton"]],
+        "hw": [round(float(v), 3) for v in g["height_to_width"]],
         "r": [rix.get(v, -1) for v in g["river"]],
         "lab": [int(v) for v in g["label"]],
         "ho": [int(v) for v in g["holdout"]],
@@ -185,7 +187,8 @@ def build(regions: list[Region], out_dir: Path, max_px: int = 1800) -> tuple[Pat
 
         payload["model"] = {"coef": m["coef"], "holdout": m["holdout"], "lorocv": m["lorocv"],
                             "run_params": m["run_params"], "descriptions": m["feature_descriptions"],
-                            "default_weights": {k: v[1] for k, v in FEATURES.items()}}
+                            "default_weights": {k: v[1] for k, v in FEATURES.items()},
+                            "ha_defaults": m.get("ha_defaults", {})}
     data = json.dumps(payload, separators=(",", ":")).replace("</", "<\\/")
     page = tpl.replace("/*%%LEAFLET_CSS%%*/", css).replace("%%DATA%%", data)
     out_dir.mkdir(parents=True, exist_ok=True)

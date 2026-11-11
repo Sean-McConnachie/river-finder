@@ -3,7 +3,8 @@
 Finds unexplored whitewater in New Zealand from terrain, rainfall and geology.
 
 The approach: learn the "signature" of regions that already hold great creeks (Kaimai Range,
-Tutamoe/Waima plateau), then search for unpaddled reaches that match it.
+Karangahake Gorge, Tutamoe/Waima plateau), then score every reach on flow, gradient and
+height-to-area, and find runs that are not in the guides.
 
 - Plan: [`docs/PLAN.md`](docs/PLAN.md)
 - Data sources: [`docs/data-sources.md`](docs/data-sources.md)
@@ -14,7 +15,7 @@ Tutamoe/Waima plateau), then search for unpaddled reaches that match it.
 
 ```bash
 uv sync
-uv run river-finder run kaimai tutamoe   # ~3 min: fetch, route, validate, export, viewer
+uv run river-finder run kaimai karangahake tutamoe   # ~20 min: fetch, route, validate, reaches, score, export, viewer
 open data/viewer/viewer.html             # browser heat map
 ```
 

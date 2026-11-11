@@ -2,7 +2,16 @@ import numpy as np
 import pandas as pd
 
 from river_finder.reaches import _steepest, extract_links
-from river_finder.scoring import RunParams, assemble_runs, logistic_fit, passes, percentile_rank
+from river_finder.scoring import (
+    RunParams,
+    assemble_runs,
+    desirability,
+    logistic_fit,
+    pareto_layers,
+    passes,
+    percentile_rank,
+    trapezoid,
+)
 
 
 def test_extract_links_splits_at_confluence():
@@ -30,7 +39,7 @@ def test_steepest_window_finds_waterfall():
     assert _steepest(dist, z, 50.0) > 150
 
 
-def _chain(grads, mafs, length=250.0):
+def _chain(grads, mafs, length=250.0, melton=0.1):
     n = len(grads)
     z = np.cumsum([0] + [-g * length / 1000 for g in grads])[:-1] + 500
     return pd.DataFrame({
@@ -38,22 +47,43 @@ def _chain(grads, mafs, length=250.0):
         "length_m": length, "grad_s": grads, "gradient_m_per_km": grads, "maf_m3s": mafs,
         "z_top": z, "z_bot": z - np.array(grads) * length / 1000, "steepest_50m_m_per_km": grads,
         "area_km2": np.linspace(5, 10, n), "gorge_depth_m": 50.0, "bed_hard": 1, "river": "Test Creek",
+        "melton": melton, "height_to_width": 1.0,
     })
+
+
+P = dict(flow_scaled=False, min_length_km=0.5, ha_ramp=(0.0, 0.05), threshold=0.7)
+
+
+def test_trapezoid_band():
+    x = [0, 5, 12.5, 20, 50, 80, 115, 150, 200]
+    assert list(trapezoid(x, (5, 20, 80, 150))) == [0, 0, 0.5, 1, 1, 1, 0.5, 0, 0]
 
 
 def test_assemble_runs_chains_and_allows_one_gap():
     g = _chain([5, 30, 35, 10, 40, 30, 5, 5, 45, 5], [10] * 10)
-    runs = assemble_runs(g, RunParams(flow_scaled=False, min_length_km=0.5))
-    # segments 1-5 form one run (segment 3 is a one-segment gap); segment 8 alone is too short
+    runs = assemble_runs(g, RunParams(**P))
+    # 10 m/km scores (10-5)/15 = 0.33 on gradient -> weighted 0.78 >= 0.7 passes; 5 m/km fails the gate.
     assert len(runs) == 1
-    assert runs.iloc[0]["n_segments"] == 5
     assert list(np.flatnonzero(g["run_id"] == 0)) == [1, 2, 3, 4, 5]
+    assert runs.iloc[0]["pareto_layer"] == 1
+
+
+def test_threshold_and_gate():
+    g = _chain([30, 30, 30, 30], [10] * 4, melton=0.0)  # height-to-area at zero
+    assert not passes(g, RunParams(**P)).any()  # gate: every parameter must be > 0
+    assert passes(g, RunParams(**{**P, "gate": False, "threshold": 0.6})).all()  # 2/3 = 0.67
 
 
 def test_flow_scaling_lowers_the_bar_for_big_rivers():
-    g = _chain([15, 15, 15, 15, 15], [80, 80, 80, 80, 80])
-    assert not passes(g, RunParams(flow_scaled=False)).any()
-    assert passes(g, RunParams(flow_scaled=True)).all()  # 20 * (80/20)^-0.5 = 10 m/km
+    g = _chain([10, 10, 10, 10, 10], [80] * 5)
+    d0 = desirability(g, RunParams(**P))["d_gradient"].iloc[0]
+    d1 = desirability(g, RunParams(**{**P, "flow_scaled": True}))["d_gradient"].iloc[0]
+    assert d0 < d1 == 1.0  # 10 m/km * (80/20)^0.5 = 20 m/km effective
+
+
+def test_pareto_layers():
+    pts = np.array([[1, 1, 1], [2, 2, 2], [3, 1, 1], [1, 3, 1], [0, 0, 0]], dtype=float)
+    assert list(pareto_layers(pts)) == [2, 1, 1, 1, 3]
 
 
 def test_logistic_fit_separates_and_ranks():
