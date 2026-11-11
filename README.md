@@ -10,6 +10,17 @@ Tutamoe/Waima plateau), then search for unpaddled reaches that match it.
 - Flow-routing algorithms: [`docs/flow-routing-algorithms.md`](docs/flow-routing-algorithms.md)
 - Reference regions: [`regions/`](regions/)
 
+## Quick start
+
+```bash
+uv sync
+uv run river-finder run kaimai tutamoe   # ~3 min: fetch, route, validate, export, viewer
+open data/viewer/viewer.html             # browser heat map
+```
+
+Each region's GIS export is in `data/<region>/gis/`. Drag the `.tif` files and the `.gpkg` into
+QGIS; `area_km2.qml` styles the heat map automatically.
+
 ## Task tracking
 
 Work is tracked with [beads](https://github.com/gastownhall/beads) (`bd`):

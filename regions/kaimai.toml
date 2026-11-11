@@ -1,9 +1,11 @@
 # Reference region: Kaimai Range (Bay of Plenty / Waikato)
-# The bbox is approximate. Refine it once the 8 m DEM is loaded.
+# Bbox checked 2026-11-11 by tracing the REC2 network upstream from each river's outlet.
+#   Wairoa (mouth 176.093,-37.686, 464 km2): upstream lon 175.906..176.163, lat -38.019..-37.686
+# The box adds a ~2 km buffer, and extends west to 175.80 to include the Kaimai crest and western escarpment.
 name = "kaimai"
-description = "Kaimai Range plateau and eastern gorges draining to the Wairoa"
+description = "Kaimai Range / Mamaku plateau and the Wairoa catchment gorges"
 role = "reference"
-bbox_wgs84 = [175.80, -37.95, 176.10, -37.60]  # [min_lon, min_lat, max_lon, max_lat]
+bbox_wgs84 = [175.80, -38.04, 176.19, -37.66]  # [min_lon, min_lat, max_lon, max_lat]
 crs = "EPSG:2193"
 
 [dem]
@@ -13,6 +15,21 @@ fine = [
   "waikato/waikato_2021/dem_1m/2193",
 ]
 
-[known_runs]
-# Names to confirm with the user (see the beads question issue)
-rivers = ["Wairoa", "Tuakopai", "Mangakarengorengo"]
+# REC2 names (NZ_River_Names_REC2_V1). Chain: Tuakopae -> Mangakarengorengo -> Wairoa.
+[[known_runs]]
+river = "Wairoa River"
+status = "listed"            # in online guides
+outlet_wgs84 = [176.093, -37.686]
+rec2_cum_area_km2 = 464.1
+
+[[known_runs]]
+river = "Tuakopae Stream"    # Sean calls it the Tuakopai
+status = "listed"
+outlet_wgs84 = [175.984, -37.843]
+rec2_cum_area_km2 = 8.5
+
+[[known_runs]]
+river = "Mangakarengorengo River"
+status = "unlisted"          # the flood run; NOT in online guides -> hold-out test case
+outlet_wgs84 = [176.043, -37.806]
+rec2_cum_area_km2 = 108.4

@@ -1,9 +1,13 @@
 # Reference region: Tutamoe / Waima plateau (Northland, inland of Omapere, west of Kaikohe)
-# The bbox is approximate. Refine it once the 8 m DEM is loaded.
+# Bbox checked 2026-11-11 by tracing the REC2 network upstream from each river's outlet.
+#   Waima    (outlet 173.583,-35.422, 519 km2): upstream lon 173.547..173.923, lat -35.577..-35.371
+#   Waipoua  (outlet 173.479,-35.673, 112 km2): upstream lon 173.476..173.670, lat -35.694..-35.593
+#   Mangakahia (drains SE to the Northern Wairoa; 836 km2 at 174.052,-35.792): only the upper,
+#   plateau-fed part is a reference, so the box is cut at 173.95E.
 name = "tutamoe"
-description = "Tutamoe/Waima basalt plateau feeding the Waima, Waipoua and Mangakahia"
+description = "Tutamoe/Waima basalt plateau feeding the Waima, Waipoua and upper Mangakahia"
 role = "reference"
-bbox_wgs84 = [173.35, -35.80, 173.90, -35.35]  # [min_lon, min_lat, max_lon, max_lat]
+bbox_wgs84 = [173.45, -35.75, 173.95, -35.35]  # [min_lon, min_lat, max_lon, max_lat]
 crs = "EPSG:2193"
 
 [dem]
@@ -13,6 +17,20 @@ fine = [
   "northland/northland_2024/dem_1m/2193",
 ]
 
-[known_runs]
-# Names to confirm with the user (see the beads question issue)
-rivers = ["Waima", "Waipoua", "Mangakahia"]
+[[known_runs]]
+river = "Waima River"
+status = "listed"
+outlet_wgs84 = [173.583, -35.422]
+rec2_cum_area_km2 = 518.9
+
+[[known_runs]]
+river = "Waipoua River"      # assumed to be Sean's "Waipo"
+status = "listed"
+outlet_wgs84 = [173.479, -35.673]
+rec2_cum_area_km2 = 111.5
+
+[[known_runs]]
+river = "Mangakahia River"
+status = "listed"
+outlet_wgs84 = [174.052, -35.792]   # outside bbox; only the upper reaches are in the box
+rec2_cum_area_km2 = 836.4

@@ -82,7 +82,17 @@ geology, starting from two reference regions (Kaimai Range, Tutamoe/Waima platea
 
 ## Build & Test
 
-_No code yet. Planned: Python 3.12+ with uv (`uv sync`, `uv run pytest`, `uv run ruff check`)._
+```bash
+uv sync                                   # install (Python 3.12+)
+uv run pytest -q                          # unit tests (synthetic DEMs + pysheds cross-check)
+uv run ruff check src tests               # lint
+uv run river-finder run kaimai tutamoe    # fetch DEM + REC2, route, validate, GIS export, viewer
+```
+
+Outputs go to `data/<region>/` (gitignored): `area_km2.tif`, `validation_summary.json`, `gis/`
+(COG + .qml + GeoPackage). The browser viewer is `data/viewer/viewer.html`.
+Code: `src/river_finder/` (`routing.py` holds the graph algorithms: Priority-Flood, D8, flat
+resolution, Kahn accumulation).
 
 ## Conventions & Patterns
 

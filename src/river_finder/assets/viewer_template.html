@@ -1,0 +1,449 @@
+<title>River Finder</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Public+Sans:wght@400;500;600;700&display=swap">
+<style>
+/*%%LEAFLET_CSS%%*/
+</style>
+<style>
+/* Layout: one-screen map tool. Control panel on the left (stacks under the map on phones),
+   hillshade + catchment heat map filling the rest. */
+:root {
+  --bg: #f4f5f2;          /* panel ground, faint green-grey (bush and paper) */
+  --surface: #ffffff;
+  --fg: #1c201e;
+  --muted: #5a635e;
+  --line: #d9ded9;
+  --accent: #2a78d6;      /* UI accent = heat-map blue */
+  --unlisted: #eb6834;    /* runs missing from the guides */
+  --water: #dce5e8;
+  --hs-lo: #8c928d;       /* hillshade, shadow end */
+  --hs-hi: #f7f8f5;       /* hillshade, lit end */
+  --ramp-dir: 1;          /* 1 = light (small) -> dark (large); -1 reversed for dark theme */
+  --font-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --panel-w: 340px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #151716; --surface: #1d201f; --fg: #e6eae7; --muted: #9aa39e; --line: #2d3230;
+    --accent: #3987e5; --unlisted: #d95926; --water: #18202a;
+    --hs-lo: #0f1110; --hs-hi: #4b504d; --ramp-dir: -1; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #151716; --surface: #1d201f; --fg: #e6eae7; --muted: #9aa39e; --line: #2d3230;
+  --accent: #3987e5; --unlisted: #d95926; --water: #18202a;
+  --hs-lo: #0f1110; --hs-hi: #4b504d; --ramp-dir: -1; color-scheme: dark;
+}
+
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px; line-height: 1.45; }
+.app { display: grid; grid-template-columns: var(--panel-w) minmax(0, 1fr); height: 100%; }
+.panel {
+  overflow-y: auto; border-right: 1px solid var(--line);
+  padding-block: 18px 24px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: 16px;
+  display: flex; flex-direction: column; gap: 18px; min-width: 0;
+}
+.mapwrap { position: relative; min-width: 0; }
+#map { position: absolute; inset: 0; background: var(--water); }
+
+h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { margin: 0 0 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+p { margin: 0; }
+.sub { color: var(--muted); font-size: 13px; }
+.num { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.tab {
+  font: inherit; font-weight: 600; padding: 7px 12px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--fg);
+}
+.tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tab:focus-visible, input:focus-visible, .run:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.ctl { display: grid; gap: 4px; }
+.ctl-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ctl label { font-weight: 500; }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.checks { display: grid; gap: 6px; }
+.checks label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+
+.legend canvas { width: 100%; height: 12px; display: block; border-radius: 2px; }
+.ticks { position: relative; height: 18px; font-size: 11px; color: var(--muted); }
+.ticks span { position: absolute; top: 3px; transform: translateX(-50%); white-space: nowrap; }
+
+.runs { display: grid; gap: 6px; }
+.run {
+  display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 2px 10px; align-items: start;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface);
+  cursor: pointer; text-align: left; font: inherit; color: inherit; width: 100%;
+}
+.run:hover { border-color: var(--accent); }
+.dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 3px; background: var(--fg); box-shadow: 0 0 0 2px var(--surface); }
+.dot.unlisted { background: var(--unlisted); }
+.run-name { font-weight: 600; display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; }
+.run-meta { grid-column: 2; color: var(--muted); font-size: 12px; }
+.pill { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.pill.unlisted { border-color: var(--unlisted); color: var(--unlisted); }
+
+table.val { width: 100%; border-collapse: collapse; font-size: 12px; }
+table.val th, table.val td { padding: 4px 0; border-bottom: 1px solid var(--line); text-align: right; }
+table.val th:first-child, table.val td:first-child { text-align: left; }
+table.val th { font-weight: 600; color: var(--muted); }
+.note { font-size: 12px; color: var(--muted); }
+
+.readout {
+  position: absolute; z-index: 500; left: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  max-width: min(320px, calc(100% - 24px)); padding: 10px 12px; border-radius: 6px;
+  background: var(--surface); border: 1px solid var(--line); box-shadow: 0 2px 10px rgb(0 0 0 / 0.12);
+  display: grid; gap: 2px; font-size: 12px;
+}
+.readout .big { font-size: 18px; font-weight: 600; font-family: var(--font-data); }
+.warn { color: var(--unlisted); font-weight: 600; }
+
+/* Leaflet chrome in the page's tokens */
+.leaflet-container { background: var(--water); font-family: var(--font-body); }
+.leaflet-image-layer.pixelated { image-rendering: pixelated; }
+.leaflet-bar a, .leaflet-bar a:hover { background: var(--surface); color: var(--fg); border-bottom-color: var(--line); }
+.leaflet-control-attribution { background: var(--surface) !important; color: var(--muted); font-size: 10px; }
+.leaflet-control-attribution a { color: var(--accent); }
+.leaflet-control-scale-line { background: var(--surface); color: var(--fg); border-color: var(--fg); }
+.leaflet-tooltip { background: var(--surface); color: var(--fg); border: 1px solid var(--line); box-shadow: none; font-size: 12px; }
+.leaflet-tooltip.run-label { font-weight: 600; padding: 2px 6px; }
+.leaflet-tooltip.run-label.unlisted { color: var(--unlisted); border-color: var(--unlisted); }
+.leaflet-tooltip-left.run-label::before, .leaflet-tooltip-right.run-label::before { display: none; }
+
+@media (max-width: 760px) {
+  html, body { height: auto; }
+  .app { display: flex; flex-direction: column; height: auto; }
+  .mapwrap { order: 1; height: 62vh; min-height: 320px; }
+  .panel { order: 2; overflow: visible; border-right: 0; border-top: 1px solid var(--line);
+           padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+}
+@media (prefers-reduced-motion: reduce) { .leaflet-zoom-anim .leaflet-zoom-animated { transition: none !important; } }
+</style>
+
+<div class="app">
+  <aside class="panel" aria-label="Controls">
+    <header style="display:grid;gap:4px">
+      <h1>River Finder</h1>
+      <p class="sub">Upstream catchment area for every 8&nbsp;m cell, from the LINZ elevation model with D8 flow routing.</p>
+    </header>
+
+    <nav class="tabs" role="tablist" id="tabs" aria-label="Region"></nav>
+    <p class="sub" id="region-desc"></p>
+
+    <section class="ctl">
+      <div class="ctl-row"><label for="minArea">Smallest catchment shown</label><output id="minAreaOut" class="num"></output></div>
+      <input type="range" id="minArea" min="0" max="1000" value="400">
+      <div class="ctl-row" style="margin-top:8px"><label for="opacity">Heat map opacity</label><output id="opacityOut" class="num"></output></div>
+      <input type="range" id="opacity" min="0" max="100" value="90">
+    </section>
+
+    <section class="checks">
+      <label><input type="checkbox" id="showRec2"> NIWA REC2 river lines (order 3+)</label>
+      <label><input type="checkbox" id="showRuns" checked> Reference runs</label>
+      <label><input type="checkbox" id="dimTrunc" checked> Fade catchments cut off by the box edge</label>
+    </section>
+
+    <section class="legend" aria-label="Legend">
+      <h2>Catchment area, km² (log scale)</h2>
+      <canvas id="legend" width="600" height="24"></canvas>
+      <div class="ticks" id="ticks"></div>
+    </section>
+
+    <section>
+      <h2>Reference runs</h2>
+      <div class="runs" id="runs"></div>
+      <p class="note" style="margin-top:6px">Areas are measured on each river 500 m or more inland from the sea, where the markers sit: our model vs NIWA REC2.</p>
+    </section>
+
+    <section>
+      <h2>Agreement with NIWA REC2</h2>
+      <table class="val" id="val"></table>
+      <p class="note" style="margin-top:6px">Reaches over 5 km² whose whole catchment is inside the box. "Within 10%" uses a search radius of up to 256 m, because REC2 lines and our channels can sit apart on flat valley floors.</p>
+    </section>
+
+    <p class="note">Elevation: LINZ 8&nbsp;m DEM (CC BY 4.0). Rivers: NIWA REC2. Built by river-finder.</p>
+  </aside>
+
+  <main class="mapwrap">
+    <div id="map" role="application" aria-label="Catchment area map"></div>
+    <div class="readout" id="readout" aria-live="polite"><span class="sub">Click the map to read the catchment area at that point.</span></div>
+  </main>
+</div>
+
+<script type="application/json" id="rf-data">%%DATA%%</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+(() => {
+  "use strict";
+  const REGIONS = JSON.parse(document.getElementById("rf-data").textContent);
+  const $ = (id) => document.getElementById(id);
+  const MIN_LOG = Math.log10(0.05), MAX_LOG = 2.0;     // slider range: 0.05 .. 100 km²
+  // Sequential blue, small -> large catchment. The pale steps would vanish into the hillshade, so
+  // light mode runs 300 -> 700 and dark mode runs 450 -> 100 (large rivers brightest).
+  const RAMP_LIGHT = ["#6da7ec", "#5598e7", "#3987e5", "#2a78d6", "#256abf", "#1c5cab", "#184f95", "#104281", "#0d366b"];
+  const RAMP_DARK = ["#2a78d6", "#3987e5", "#5598e7", "#6da7ec", "#86b6ef", "#9ec5f4", "#b7d3f6", "#cde2fb"];
+
+  // ---------- helpers ----------
+  const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const fmtKm2 = (v) => v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v >= 1 ? v.toFixed(2) : v.toFixed(3);
+  const sliderToLog = (s) => MIN_LOG + (MAX_LOG - MIN_LOG) * (s / 1000);
+
+  function decodeGray(uri, w, h) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement("canvas"); c.width = w; c.height = h;
+        const ctx = c.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0);
+        const px = ctx.getImageData(0, 0, w, h).data, out = new Uint8Array(w * h);
+        for (let i = 0; i < out.length; i++) out[i] = px[i * 4];
+        resolve(out);
+      };
+      img.onerror = reject;
+      img.src = uri;
+    });
+  }
+
+  // NZTM2000 (EPSG:2193) from WGS84 lat/lon: transverse Mercator on GRS80, series per Snyder (1987).
+  function toNZTM(lat, lon) {
+    const a = 6378137, f = 1 / 298.257222101, k0 = 0.9996, lon0 = 173 * Math.PI / 180;
+    const e2 = f * (2 - f), ep2 = e2 / (1 - e2);
+    const phi = lat * Math.PI / 180, lam = lon * Math.PI / 180;
+    const N = a / Math.sqrt(1 - e2 * Math.sin(phi) ** 2), T = Math.tan(phi) ** 2;
+    const C = ep2 * Math.cos(phi) ** 2, A = (lam - lon0) * Math.cos(phi);
+    const M = a * ((1 - e2 / 4 - 3 * e2 ** 2 / 64 - 5 * e2 ** 3 / 256) * phi
+      - (3 * e2 / 8 + 3 * e2 ** 2 / 32 + 45 * e2 ** 3 / 1024) * Math.sin(2 * phi)
+      + (15 * e2 ** 2 / 256 + 45 * e2 ** 3 / 1024) * Math.sin(4 * phi)
+      - (35 * e2 ** 3 / 3072) * Math.sin(6 * phi));
+    const E = 1600000 + k0 * N * (A + (1 - T + C) * A ** 3 / 6 + (5 - 18 * T + T * T + 72 * C - 58 * ep2) * A ** 5 / 120);
+    const Nn = 10000000 + k0 * (M + N * Math.tan(phi) * (A * A / 2 + (5 - T + 9 * C + 4 * C * C) * A ** 4 / 24
+      + (61 - 58 * T + T * T + 600 * C - 330 * ep2) * A ** 6 / 720));
+    return [E, Nn];
+  }
+
+  // ---------- map ----------
+  const CanvasOverlay = L.ImageOverlay.extend({
+    _initImage: function () {
+      const el = this._image = this._url;
+      L.DomUtil.addClass(el, "leaflet-image-layer");
+      if (this._zoomAnimated) L.DomUtil.addClass(el, "leaflet-zoom-animated");
+      el.onselectstart = L.Util.falseFn;
+      el.onmousemove = L.Util.falseFn;
+    },
+  });
+  const map = L.map("map", { zoomSnap: 0.25, preferCanvas: true, attributionControl: true });
+  map.attributionControl.setPrefix(false).addAttribution("LINZ CC BY 4.0 · NIWA REC2");
+  L.control.scale({ imperial: false, position: "bottomright" }).addTo(map);
+
+  const state = { region: null, minLog: sliderToLog(+$("minArea").value), opacity: +$("opacity").value / 100,
+                  showRec2: $("showRec2").checked, showRuns: $("showRuns").checked, dimTrunc: $("dimTrunc").checked };
+  const cache = {};
+  let overlay = null, rec2Layer = null, runsLayer = null, clickMarker = null, frame = 0;
+
+  async function loadRegion(R) {
+    if (cache[R.id]) return cache[R.id];
+    const [hs, area, trunc] = await Promise.all([
+      decodeGray(R.hillshade, R.width, R.height), decodeGray(R.area, R.width, R.height), decodeGray(R.trunc, R.width, R.height)]);
+    const canvas = document.createElement("canvas"); canvas.width = R.width; canvas.height = R.height;
+    let maxCode = 0; for (let i = 0; i < area.length; i++) if (area[i] > maxCode) maxCode = area[i];
+    // Display copy with channels widened by size (1 px; 3 px above 10 km²; 5 px above 100 km²),
+    // so rivers stay visible when zoomed out. Clicks still read the unwidened grid.
+    const disp = area.slice(), dispTrunc = trunc.slice(), W = R.width, H = R.height;
+    const code = (km2) => Math.round((Math.log10(km2) - R.code.log_min) / R.code.step) + 2;
+    const c10 = code(10), c100 = code(100);
+    for (let i = 0; i < area.length; i++) {
+      const c = area[i]; if (c < c10) continue;
+      const rad = c >= c100 ? 2 : 1, r0 = (i / W) | 0, q0 = i - r0 * W;
+      for (let dr = -rad; dr <= rad; dr++) for (let dq = -rad; dq <= rad; dq++) {
+        const r = r0 + dr, q = q0 + dq; if (r < 0 || q < 0 || r >= H || q >= W) continue;
+        const j = r * W + q; if (area[j] !== 0 && c > disp[j]) { disp[j] = c; dispTrunc[j] = trunc[i]; }
+      }
+    }
+    cache[R.id] = { R, hs, area, trunc, disp, dispTrunc, canvas, ctx: canvas.getContext("2d"), maxLog: R.code.log_min + (maxCode - 2) * R.code.step };
+    return cache[R.id];
+  }
+
+  function rampColor(t, dir) {
+    const RAMP = dir < 0 ? RAMP_DARK : RAMP_LIGHT;
+    const x = Math.min(Math.max(t, 0), 1) * (RAMP.length - 1), i = Math.min(Math.floor(x), RAMP.length - 2), f = x - i;
+    const a = hex(RAMP[i]), b = hex(RAMP[i + 1]);
+    return [0, 1, 2].map((k) => a[k] + (b[k] - a[k]) * f);
+  }
+
+  function render() {
+    frame = 0;
+    const D = cache[state.region]; if (!D) return;
+    const { R, hs, disp: area, dispTrunc: trunc, ctx } = D;
+    const lo = hex(css("--hs-lo")), hi = hex(css("--hs-hi")), water = hex(css("--water"));
+    const dir = parseFloat(css("--ramp-dir")) || 1;
+    const minCode = Math.max(2, Math.ceil((state.minLog - R.code.log_min) / R.code.step) + 2);
+    const span = Math.max(D.maxLog - state.minLog, 0.5);
+    const lut = new Float32Array(256 * 4);
+    for (let c = minCode; c < 256; c++) {
+      const t = (R.code.log_min + (c - 2) * R.code.step - state.minLog) / span;
+      const [r, g, b] = rampColor(t, dir);
+      lut[c * 4] = r; lut[c * 4 + 1] = g; lut[c * 4 + 2] = b; lut[c * 4 + 3] = 0.6 + 0.4 * Math.min(t, 1);
+    }
+    const img = ctx.createImageData(R.width, R.height), px = img.data, op = state.opacity;
+    for (let i = 0, j = 0; i < area.length; i++, j += 4) {
+      const c = area[i];
+      if (c === 0) { px[j] = water[0]; px[j + 1] = water[1]; px[j + 2] = water[2]; px[j + 3] = 255; continue; }
+      const s = hs[i] / 255;
+      let r = lo[0] + (hi[0] - lo[0]) * s, g = lo[1] + (hi[1] - lo[1]) * s, b = lo[2] + (hi[2] - lo[2]) * s;
+      if (c >= minCode) {
+        let a = lut[c * 4 + 3] * op;
+        if (state.dimTrunc && trunc[i]) a *= 0.3;
+        r += (lut[c * 4] - r) * a; g += (lut[c * 4 + 1] - g) * a; b += (lut[c * 4 + 2] - b) * a;
+      }
+      px[j] = r; px[j + 1] = g; px[j + 2] = b; px[j + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    drawLegend(D);
+  }
+  const schedule = () => { if (!frame) frame = requestAnimationFrame(render); };
+
+  function drawLegend(D) {
+    const cv = $("legend"), ctx = cv.getContext("2d"), dir = parseFloat(css("--ramp-dir")) || 1;
+    for (let x = 0; x < cv.width; x++) {
+      const [r, g, b] = rampColor(x / (cv.width - 1), dir);
+      ctx.fillStyle = `rgb(${r | 0},${g | 0},${b | 0})`; ctx.fillRect(x, 0, 1, cv.height);
+    }
+    const ticks = $("ticks"); ticks.innerHTML = "";
+    const lo = state.minLog, hi = Math.max(D.maxLog, lo + 0.5);
+    const add = (v, frac, shift) => {
+      const s = document.createElement("span"); s.className = "num"; s.textContent = fmtKm2(v);
+      s.style.left = (frac * 100) + "%"; s.style.transform = `translateX(${shift}%)`; ticks.appendChild(s);
+    };
+    add(10 ** lo, 0, 0);                                    // ends: the actual range shown
+    [0.1, 1, 10, 100, 1000].forEach((v) => {               // round decades in between
+      const f = (Math.log10(v) - lo) / (hi - lo);
+      if (f > 0.15 && f < 0.85) add(v, f, -50);
+    });
+    add(10 ** hi, 1, -100);
+  }
+
+  function buildLayers(R) {
+    if (rec2Layer) map.removeLayer(rec2Layer);
+    if (runsLayer) map.removeLayer(runsLayer);
+    const muted = css("--muted");
+    rec2Layer = L.layerGroup(R.rec2.map((f) => L.polyline(f.c.map((l) => l.map(([x, y]) => [y, x])), {
+      color: muted, weight: 0.6 + 0.45 * (f.o - 3), opacity: 0.85, interactive: true,
+    }).bindTooltip(`${f.n || "Unnamed reach"} · REC2 ${fmtKm2(f.a)} km²`, { sticky: true })));
+    runsLayer = L.layerGroup(R.runs.map((r) => {
+      const unl = r.status === "unlisted";
+      return L.circleMarker([r.lat, r.lon], {
+        radius: 7, weight: 2, color: css("--surface"), fillColor: unl ? css("--unlisted") : css("--fg"), fillOpacity: 1,
+      }).bindTooltip(unl ? `${r.river} (unlisted)` : r.river, {
+        permanent: true, direction: "right", offset: [8, 0], className: "run-label" + (unl ? " unlisted" : ""),
+      });
+    }));
+    if (state.showRec2) rec2Layer.addTo(map);
+    if (state.showRuns) runsLayer.addTo(map);
+  }
+
+  function fillPanel(R) {
+    $("region-desc").textContent = `${R.description}. ${(R.stats.valid_cells / 1e6).toFixed(1)} million cells at ${R.stats.cellsize_m} m, routed in ${R.stats.routing_seconds} s. Map pixels are ${R.pixel_m} m.`;
+    const runs = $("runs"); runs.innerHTML = "";
+    R.runs.forEach((r) => {
+      const unl = r.status === "unlisted";
+      const b = document.createElement("button"); b.className = "run"; b.type = "button";
+      b.innerHTML = `<span class="dot${unl ? " unlisted" : ""}"></span>
+        <span class="run-name">${r.river}<span class="pill${unl ? " unlisted" : ""}">${unl ? "Unlisted" : "In guides"}</span></span>
+        <span class="run-meta num">${r.model_km2 != null ? fmtKm2(r.model_km2) : "?"} km² model · ${r.rec2_km2 != null ? fmtKm2(r.rec2_km2) : "?"} km² REC2</span>`;
+      b.addEventListener("click", () => map.flyTo([r.lat, r.lon], 14, { duration: 0.6 }));
+      runs.appendChild(b);
+    });
+    const v = R.validation, t = $("val");
+    if (!v) { t.innerHTML = "<tr><td>Not validated yet</td></tr>"; return; }
+    const row = (label, s) => s && s.n ? `<tr><td>${label}</td><td class="num">${s.n}</td><td class="num">${(s.median_abs_rel_err * 100).toFixed(1)}%</td><td class="num">${(s.within_10pct * 100).toFixed(0)}%</td></tr>` : "";
+    t.innerHTML = `<tr><th>Reaches</th><th>n</th><th>Median error</th><th>Within 10%</th></tr>`
+      + row(`Steep (≥${v.steep_threshold_m_per_km} m/km)`, v.tolerant.gt_5km2_steep)
+      + row("Low relief", v.tolerant.gt_5km2_low_relief)
+      + row("All", v.tolerant.gt_5km2);
+  }
+
+  async function selectRegion(id) {
+    const R = REGIONS.find((r) => r.id === id) || REGIONS[0];
+    state.region = R.id;
+    document.querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.id === R.id)));
+    if (location.hash.slice(1) !== R.id) history.replaceState(null, "", "#" + R.id);
+    const D = await loadRegion(R);
+    map.setMaxBounds(null);
+    map.fitBounds(R.bounds);   // set the view first: Leaflet only adds layers once the map has one
+    map.setMaxBounds(L.latLngBounds(R.bounds).pad(0.4));
+    if (overlay) map.removeLayer(overlay);
+    overlay = new CanvasOverlay(D.canvas, R.bounds, { interactive: false }).addTo(map);
+    if (clickMarker) { map.removeLayer(clickMarker); clickMarker = null; }
+    $("readout").innerHTML = '<span class="sub">Click the map to read the catchment area at that point.</span>';
+    buildLayers(R); fillPanel(R); render();
+  }
+
+  // ---------- controls ----------
+  const tabs = $("tabs");
+  REGIONS.forEach((R) => {
+    const b = document.createElement("button");
+    b.className = "tab"; b.type = "button"; b.setAttribute("role", "tab"); b.dataset.id = R.id; b.textContent = R.title;
+    b.addEventListener("click", () => selectRegion(R.id));
+    tabs.appendChild(b);
+  });
+  const syncOutputs = () => {
+    $("minAreaOut").textContent = fmtKm2(10 ** state.minLog) + " km²";
+    $("opacityOut").textContent = Math.round(state.opacity * 100) + "%";
+  };
+  $("minArea").addEventListener("input", (e) => { state.minLog = sliderToLog(+e.target.value); syncOutputs(); schedule(); });
+  $("opacity").addEventListener("input", (e) => { state.opacity = +e.target.value / 100; syncOutputs(); schedule(); });
+  $("dimTrunc").addEventListener("change", (e) => { state.dimTrunc = e.target.checked; schedule(); });
+  $("showRec2").addEventListener("change", (e) => { state.showRec2 = e.target.checked; e.target.checked ? rec2Layer.addTo(map) : map.removeLayer(rec2Layer); });
+  $("showRuns").addEventListener("change", (e) => { state.showRuns = e.target.checked; e.target.checked ? runsLayer.addTo(map) : map.removeLayer(runsLayer); });
+  syncOutputs();
+
+  map.on("zoomend", () => {
+    if (!overlay || !overlay.getElement()) return;
+    const R = cache[state.region].R, px = map.latLngToContainerPoint(R.bounds[1]).x - map.latLngToContainerPoint(R.bounds[0]).x;
+    overlay.getElement().classList.toggle("pixelated", px / R.width > 2);
+  });
+
+  map.on("click", (e) => {
+    const D = cache[state.region]; if (!D) return;
+    const R = D.R, p = L.CRS.EPSG3857.project(e.latlng), pix = (R.merc[2] - R.merc[0]) / R.width;
+    const col = Math.floor((p.x - R.merc[0]) / pix), row = Math.floor((R.merc[3] - p.y) / pix);
+    if (col < 0 || row < 0 || col >= R.width || row >= R.height) return;
+    let best = 0, cut = false;   // snap to the largest flow within one pixel, so clicks on thin channels land
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      const r = row + dr, c = col + dc;
+      if (r < 0 || c < 0 || r >= R.height || c >= R.width) continue;
+      const i = r * R.width + c;
+      if (D.area[i] > best) { best = D.area[i]; cut = D.trunc[i] > 0; }
+    }
+    const [E, N] = toNZTM(e.latlng.lat, e.latlng.lng);
+    let html;
+    if (best === 0) html = '<span class="sub">Sea or no elevation data here.</span>';
+    else {
+      const km2 = best >= 2 ? 10 ** (R.code.log_min + (best - 2) * R.code.step) : null;
+      html = `<span class="big">${km2 ? "≈ " + fmtKm2(km2) + " km²" : "< 0.02 km²"}</span><span class="sub">drains through this point</span>`;
+      if (cut) html += '<span class="warn">Catchment runs past the box edge, so this is a minimum.</span>';
+    }
+    html += `<span class="sub num">NZTM E ${Math.round(E).toLocaleString("en-NZ")} N ${Math.round(N).toLocaleString("en-NZ")}</span>`;
+    html += `<span class="sub num">${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}</span>`;
+    $("readout").innerHTML = html;
+    if (clickMarker) clickMarker.setLatLng(e.latlng);
+    else clickMarker = L.circleMarker(e.latlng, { radius: 5, weight: 2, color: css("--fg"), fillOpacity: 0 }).addTo(map);
+  });
+
+  // Re-colour when the theme changes (system setting or the viewer's explicit choice).
+  const rethemed = () => { if (state.region) { buildLayers(cache[state.region].R); schedule(); } };
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", rethemed);
+  new MutationObserver(rethemed).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  window.addEventListener("hashchange", () => { const id = location.hash.slice(1); if (id && id !== state.region) selectRegion(id); });
+
+  selectRegion(location.hash.slice(1) || REGIONS[0].id);
+})();
+</script>

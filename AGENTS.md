@@ -126,3 +126,17 @@ bd prime                # Refresh Beads context
 
 **Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/core-concepts/sync-concepts.md for details and anti-patterns.
 <!-- END BEADS CODEX SETUP -->
+
+## Build & Test
+
+```bash
+uv sync                                   # install (Python 3.12+)
+uv run pytest -q                          # unit tests (synthetic DEMs + pysheds cross-check)
+uv run ruff check src tests               # lint
+uv run river-finder run kaimai tutamoe    # fetch DEM + REC2, route, validate, GIS export, viewer
+```
+
+Outputs go to `data/<region>/` (gitignored): `area_km2.tif`, `validation_summary.json`, `gis/`
+(COG + .qml + GeoPackage). The browser viewer is `data/viewer/viewer.html`.
+Code: `src/river_finder/` (`routing.py` holds the graph algorithms: Priority-Flood, D8, flat
+resolution, Kahn accumulation).
