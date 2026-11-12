@@ -18,6 +18,7 @@
   --accent: #2a78d6;      /* UI accent = heat-map blue */
   --unlisted: #eb6834;    /* runs missing from the guides */
   --cand: #eb6834;        /* candidate runs (second sequential hue: orange) */
+  --cand-arrow: #3b1405;  /* flow arrows on orange runs */
   --score-lo: #f7d2bd;    /* score overlay, low end */
   --score-hi: #b5431a;    /* score overlay, high end */
   --ok: #0ca30c;          /* runnable, grade unknown (status good) */
@@ -35,7 +36,7 @@
   :root:not([data-theme="light"]) {
     --bg: #151716; --surface: #1d201f; --fg: #e6eae7; --muted: #9aa39e; --line: #2d3230;
     --accent: #3987e5; --unlisted: #d95926; --water: #18202a;
-    --cand: #f08a5d; --score-lo: #5a2a17; --score-hi: #ffb48c;
+    --cand: #f08a5d; --cand-arrow: #2a0e04; --score-lo: #5a2a17; --score-hi: #ffb48c;
     --ok: #0ca30c; --unk: #fab219; --no: #d03b3b;
     --hs-lo: #0f1110; --hs-hi: #4b504d; --ramp-dir: -1; color-scheme: dark;
   }
@@ -43,7 +44,7 @@
 :root[data-theme="dark"] {
   --bg: #151716; --surface: #1d201f; --fg: #e6eae7; --muted: #9aa39e; --line: #2d3230;
   --accent: #3987e5; --unlisted: #d95926; --water: #18202a;
-    --cand: #f08a5d; --score-lo: #5a2a17; --score-hi: #ffb48c;
+    --cand: #f08a5d; --cand-arrow: #2a0e04; --score-lo: #5a2a17; --score-hi: #ffb48c;
     --ok: #0ca30c; --unk: #fab219; --no: #d03b3b;
   --hs-lo: #0f1110; --hs-hi: #4b504d; --ramp-dir: -1; color-scheme: dark;
 }
@@ -420,6 +421,60 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
   // panning on a phone; wider hit tolerance for fingers.
   const canHover = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
   const vec = L.canvas({ padding: 0.8, tolerance: canHover ? 3 : 10 });
+
+  // ---------- flow-direction arrows ----------
+  // Small chevrons pointing downstream along run lines and REC2 lines. Paths are stored
+  // upstream -> downstream. Spacing is in screen pixels and they are redrawn after each pan or zoom;
+  // they appear from zoom 12, where the lines are long enough on screen to carry them.
+  const ARROW_MIN_ZOOM = 12;
+  const arrowSrc = { runs: [], rec2: [] };
+  const arrowLayer = L.layerGroup();
+  function setArrowSource(kind, items) {
+    arrowSrc[kind] = items.map((it) => ({ ...it, bounds: L.latLngBounds(it.ll) }));
+    scheduleArrows();
+  }
+  function drawArrows() {
+    arrowLayer.clearLayers();
+    if (map.getZoom() < ARROW_MIN_ZOOM) return;
+    const view = map.getBounds().pad(0.25);
+    const out = [];
+    for (const kind of ["rec2", "runs"]) {
+      if (kind === "rec2" && !state.showRec2) continue;
+      for (const src of arrowSrc[kind]) {
+        if (!view.intersects(src.bounds)) continue;
+        const P = src.ll.map((ll) => map.latLngToLayerPoint(ll));
+        const cum = [0];
+        for (let i = 1; i < P.length; i++) cum.push(cum[i - 1] + P[i].distanceTo(P[i - 1]));
+        const total = cum[cum.length - 1];
+        if (total < src.spacing * 0.6) continue;
+        const at = (sArc) => {   // point at arc length sArc along the path
+          let lo = 0, hi = cum.length - 1;
+          while (hi - lo > 1) { const m = (lo + hi) >> 1; if (cum[m] <= sArc) lo = m; else hi = m; }
+          const seg = cum[hi] - cum[lo] || 1, t = Math.min(Math.max((sArc - cum[lo]) / seg, 0), 1);
+          return L.point(P[lo].x + (P[hi].x - P[lo].x) * t, P[lo].y + (P[hi].y - P[lo].y) * t);
+        };
+        const n = Math.max(1, Math.floor(total / src.spacing));
+        const start = (total - (n - 1) * src.spacing) / 2;
+        for (let k = 0; k < n; k++) {
+          const sArc = start + k * src.spacing;
+          const a = at(sArc - 12), b = at(sArc + 12);   // direction over ~24 px ignores the D8 staircase
+          const dx = b.x - a.x, dy = b.y - a.y, L2 = Math.hypot(dx, dy); if (L2 < 1e-6) continue;
+          const ux = dx / L2, uy = dy / L2, c = at(sArc), h = src.size;
+          // solid arrowhead: tip ahead of the point, base behind it, a little wider than the line
+          const tip = L.point(c.x + ux * h * 1.3, c.y + uy * h * 1.3);
+          const w1 = L.point(c.x - ux * h * 0.9 + uy * h, c.y - uy * h * 0.9 - ux * h);
+          const w2 = L.point(c.x - ux * h * 0.9 - uy * h, c.y - uy * h * 0.9 + ux * h);
+          out.push(L.polygon([tip, w1, w2].map((p) => map.layerPointToLatLng(p)), {
+            renderer: vec, stroke: false, fill: true, fillColor: src.color, fillOpacity: 1, interactive: false, smoothFactor: 0 }));
+        }
+      }
+    }
+    out.forEach((l) => arrowLayer.addLayer(l));
+    // keep arrows drawn above the lines they sit on
+    arrowLayer.remove(); arrowLayer.addTo(map);
+  }
+  const scheduleArrows = (() => { let t = 0; return () => { clearTimeout(t); t = setTimeout(drawArrows, 80); }; })();
+  map.on("zoomend moveend", scheduleArrows);
   map.attributionControl.setPrefix(false).addAttribution("LINZ CC BY 4.0 · NIWA REC2");
   L.control.scale({ imperial: false, position: "bottomright" }).addTo(map);
 
@@ -525,6 +580,8 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
         permanent: true, direction: "right", offset: [8, 0], className: "run-label" + (unl ? " unlisted" : ""),
       });
     }));
+    setArrowSource("rec2", R.rec2.flatMap((f) => f.c.map((line) => ({
+      ll: line.map(([x, y]) => [y, x]), color: muted, size: 3.5, spacing: 120 }))));
     if (state.showRec2) rec2Layer.addTo(map);
     if (state.showRuns) runsLayer.addTo(map);
   }
@@ -648,7 +705,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     return runState.colorBy === "pareto" ? c.sort((a, b) => a.layer - b.layer || b.ws - a.ws) : c.sort((a, b) => b.score - a.score);
   }
 
-  // One continuous line per run: join its reach pieces end to end, then one Chaikin pass to soften
+  // One continuous line per run: join its reach pieces end to end, then two Chaikin passes to soften
   // the 5 m D8 staircase. Drawing the pieces separately left beads and gaps at every join.
   function runPath(S, r) {
     const pts = [];
@@ -658,12 +715,16 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
       pts.push(p);
     }));
     if (pts.length < 3) return pts.map(([x, y]) => [y, x]);
-    const sm = [pts[0]];
-    for (let i = 0; i < pts.length - 1; i++) {
-      const a = pts[i], b = pts[i + 1];
-      sm.push([0.75 * a[0] + 0.25 * b[0], 0.75 * a[1] + 0.25 * b[1]], [0.25 * a[0] + 0.75 * b[0], 0.25 * a[1] + 0.75 * b[1]]);
+    let sm = pts;
+    for (let pass = 0; pass < 2; pass++) {
+      const nx = [sm[0]];
+      for (let i = 0; i < sm.length - 1; i++) {
+        const a = sm[i], b = sm[i + 1];
+        nx.push([0.75 * a[0] + 0.25 * b[0], 0.75 * a[1] + 0.25 * b[1]], [0.25 * a[0] + 0.75 * b[0], 0.25 * a[1] + 0.75 * b[1]]);
+      }
+      nx.push(sm[sm.length - 1]);
+      sm = nx;
     }
-    sm.push(pts[pts.length - 1]);
     return sm.map(([x, y]) => [y, x]);
   }
 
@@ -755,6 +816,8 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
       runLines.push(ln);
     });
     runLayer = L.layerGroup(runLines).addTo(map);
+    const candArrow = css("--cand-arrow");
+    setArrowSource("runs", runs.map((r) => ({ ll: runPath(S, r), color: r.status === "listed" ? surf : candArrow, size: r.status === "listed" ? 4.4 : 3.6, spacing: 90 })));
     drawScatter(S, runs);
 
     const cands = sortCands(runs);
@@ -851,7 +914,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
   $("minArea").addEventListener("input", (e) => { state.minLog = sliderToLog(+e.target.value); syncOutputs(); schedule(); });
   $("opacity").addEventListener("input", (e) => { state.opacity = +e.target.value / 100; syncOutputs(); schedule(); });
   $("dimTrunc").addEventListener("change", (e) => { state.dimTrunc = e.target.checked; schedule(); });
-  $("showRec2").addEventListener("change", (e) => { state.showRec2 = e.target.checked; e.target.checked ? rec2Layer.addTo(map) : map.removeLayer(rec2Layer); });
+  $("showRec2").addEventListener("change", (e) => { state.showRec2 = e.target.checked; e.target.checked ? rec2Layer.addTo(map) : map.removeLayer(rec2Layer); scheduleArrows(); });
   $("showRuns").addEventListener("change", (e) => { state.showRuns = e.target.checked; e.target.checked ? runsLayer.addTo(map) : map.removeLayer(runsLayer); });
   syncOutputs();
 

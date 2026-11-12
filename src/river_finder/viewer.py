@@ -65,7 +65,10 @@ def encode_area(area_km2: np.ndarray) -> np.ndarray:
 
 
 def _rec2_features(path: Path, min_order: int) -> list[dict]:
+    """REC2 lines for the viewer, each oriented upstream -> downstream (so the viewer can draw
+    flow arrows): the end nearest REC2's recorded downstream node comes last."""
     fc = json.loads(path.read_text())
+    to_ll = Transformer.from_crs("EPSG:2193", "EPSG:4326", always_xy=True)
     out = []
     for f in fc["features"]:
         p = f["properties"]
@@ -73,6 +76,14 @@ def _rec2_features(path: Path, min_order: int) -> list[dict]:
             continue
         g = f["geometry"]
         lines = [g["coordinates"]] if g["type"] == "LineString" else g["coordinates"]
+        if p.get("downcoordX") is not None:
+            dx, dy = to_ll.transform(p["downcoordX"], p["downcoordY"])
+            k = math.cos(math.radians(dy))
+
+            def d2(pt, dx=dx, dy=dy, k=k):
+                return ((pt[0] - dx) * k) ** 2 + (pt[1] - dy) ** 2
+
+            lines = [ln if d2(ln[-1]) <= d2(ln[0]) else ln[::-1] for ln in lines]
         out.append({
             "n": p.get("name") or "", "o": p["StreamOrde"], "a": round(p["cum_area_km2"], 2),
             "c": [[[round(x, 5), round(y, 5)] for x, y in line] for line in lines],
