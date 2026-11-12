@@ -48,6 +48,7 @@
   --hs-lo: #0f1110; --hs-hi: #4b504d; --ramp-dir: -1; color-scheme: dark;
 }
 
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px; line-height: 1.45; }
 .app { display: grid; grid-template-columns: var(--panel-w) minmax(0, 1fr); height: 100%; }
@@ -113,6 +114,9 @@ table.val th { font-weight: 600; color: var(--muted); }
   display: grid; gap: 2px; font-size: 12px;
 }
 .readout .big { font-size: 18px; font-weight: 600; font-family: var(--font-data); }
+.readout { padding-right: 34px; }
+.ro-close { position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; border: 0; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; border-radius: 4px; }
+.ro-zoom { justify-self: start; margin-top: 6px; font: inherit; font-weight: 600; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); cursor: pointer; }
 .warn { color: var(--unlisted); font-weight: 600; }
 
 /* Leaflet chrome in the page's tokens */
@@ -177,9 +181,27 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
 @media (max-width: 760px) {
   html, body { height: auto; }
   .app { display: flex; flex-direction: column; height: auto; }
-  .mapwrap { order: 1; height: 62vh; min-height: 320px; }
+  .mapwrap { order: 1; height: 70vh; height: 70svh; min-height: 340px; }
   .panel { order: 2; overflow: visible; border-right: 0; border-top: 1px solid var(--line);
-           padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+           padding-right: max(16px, env(safe-area-inset-right, 0px)); gap: 16px; }
+  .tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .tab { white-space: nowrap; flex: 0 0 auto; }
+  .pair { grid-template-columns: 1fr; gap: 4px; }
+  input[type="range"] { height: 30px; }
+  .param-h .w input { width: 96px; }
+  .readout { left: 8px; right: 8px; max-width: none; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); padding: 8px 34px 8px 10px; }
+  .readout .big { font-size: 16px; }
+  .leaflet-control-scale { display: none; }
+  .viewtabs { top: 8px; right: 8px; }
+  .viewtabs button { padding: 6px 10px; font-size: 12px; }
+  .sep { position: fixed; inset: 0; z-index: 2000; gap: 8px;
+         padding: calc(52px + env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px))
+                  calc(16px + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); }
+  .sep-ctl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .sep-ctl .ctl { min-width: 0; }
+  #sepPlot { height: 58vh; height: 58svh; min-height: 300px; }
+  body.sep-open { overflow: hidden; }
+  body.sep-open .viewtabs { position: fixed; z-index: 2100; top: calc(8px + env(safe-area-inset-top, 0px)); right: max(8px, env(safe-area-inset-right, 0px)); }
 }
 @media (prefers-reduced-motion: reduce) { .leaflet-zoom-anim .leaflet-zoom-animated { transition: none !important; } }
 </style>
@@ -267,6 +289,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     </section>
 
     <section class="checks">
+      <label><input type="checkbox" id="showScores"> Colour every reach by its score</label>
       <label><input type="checkbox" id="showRec2"> NIWA REC2 river lines (order 3+)</label>
       <label><input type="checkbox" id="showRuns" checked> Reference rivers</label>
       <label><input type="checkbox" id="dimTrunc" checked> Fade catchments cut off by the box edge</label>
@@ -325,7 +348,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
       </div>
     </section>
 
-    <div class="readout" id="readout" aria-live="polite"><span class="sub">Click the map to read the catchment area at that point. Hover a run for its numbers.</span></div>
+    <div class="readout" id="readout" aria-live="polite"><span class="sub">Tap the map for the catchment area there, or a run for its numbers.</span></div>
   </main>
 </div>
 
@@ -392,7 +415,11 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
       el.onmousemove = L.Util.falseFn;
     },
   });
-  const map = L.map("map", { zoomSnap: 0.25, preferCanvas: true, attributionControl: true });
+  const map = L.map("map", { zoomSnap: 0.25, preferCanvas: true, attributionControl: true, maxZoom: 16 });
+  // One canvas for all vector lines, drawn well beyond the viewport so lines don't pop in while
+  // panning on a phone; wider hit tolerance for fingers.
+  const canHover = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  const vec = L.canvas({ padding: 0.8, tolerance: canHover ? 3 : 10 });
   map.attributionControl.setPrefix(false).addAttribution("LINZ CC BY 4.0 · NIWA REC2");
   L.control.scale({ imperial: false, position: "bottomright" }).addTo(map);
 
@@ -511,7 +538,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     g: [(RP.gradient_band || [5, 20, 80, 150])[1], (RP.gradient_band || [5, 20, 80, 150])[2]],
     haMeasure: RP.ha_measure || "melton", haHi: {}, w: (RP.weights || [1, 1, 1]).slice(),
     threshold: RP.threshold ?? 0.7, gate: RP.gate ?? true, flowScaled: RP.flow_scaled ?? true,
-    minLen: RP.min_length_km ?? 1, maxGap: RP.max_gap_segments ?? 1, colorBy: "pareto",
+    minLen: RP.min_length_km ?? 1, maxGap: RP.max_gap_segments ?? 1, colorBy: "pareto", showScores: canHover,
     weights: Object.assign({}, MODEL ? MODEL.default_weights : {}),
   };
   Object.keys(HAD).forEach((k) => { runState.haHi[k] = HAD[k][1]; });
@@ -621,6 +648,40 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     return runState.colorBy === "pareto" ? c.sort((a, b) => a.layer - b.layer || b.ws - a.ws) : c.sort((a, b) => b.score - a.score);
   }
 
+  // One continuous line per run: join its reach pieces end to end, then one Chaikin pass to soften
+  // the 5 m D8 staircase. Drawing the pieces separately left beads and gaps at every join.
+  function runPath(S, r) {
+    const pts = [];
+    r.members.forEach((m) => S.c[m].forEach((p, k) => {
+      const q = pts[pts.length - 1];
+      if (k === 0 && q && q[0] === p[0] && q[1] === p[1]) return;
+      pts.push(p);
+    }));
+    if (pts.length < 3) return pts.map(([x, y]) => [y, x]);
+    const sm = [pts[0]];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      sm.push([0.75 * a[0] + 0.25 * b[0], 0.75 * a[1] + 0.25 * b[1]], [0.25 * a[0] + 0.75 * b[0], 0.25 * a[1] + 0.75 * b[1]]);
+    }
+    sm.push(pts[pts.length - 1]);
+    return sm.map(([x, y]) => [y, x]);
+  }
+
+  function runSummary(r) {
+    return `<b>${r.river || "Unnamed creek"}</b> · ${r.status === "listed" ? "in guides" : r.status === "heldout" ? "held-out reference" : "not in guides"}${r.layer === 1 ? " · Pareto frontier" : ""}<br>`
+      + `<span class="num">${r.len.toFixed(1)} km · ${r.grad.toFixed(0)} m/km · drop ${r.drop.toFixed(0)} m · steepest 50 m ${r.s50.toFixed(0)} m/km<br>`
+      + `${fmtKm2(r.aBot)} km² · flood ${r.maf.toFixed(0)} m³/s · height-to-area ${r.ha.toFixed(3)} · score ${r.score.toFixed(0)}</span>`;
+  }
+
+  function showRun(S, r) {
+    const ro = $("readout");
+    ro.hidden = false;
+    ro.innerHTML = `<button type="button" class="ro-close" aria-label="Close">×</button><span>${runSummary(r)}</span>`
+      + `<button type="button" class="ro-zoom">Zoom to run</button>`;
+    ro.querySelector(".ro-zoom").addEventListener("click", () => flyToRun(S, r));
+    ro.querySelector(".ro-close").addEventListener("click", () => { ro.hidden = true; });
+  }
+
   function flyToRun(S, r) {
     const bounds = L.latLngBounds(r.members.flatMap((m) => S.c[m].map(([x, y]) => [y, x])));
     map.flyToBounds(bounds.pad(0.6), { duration: 0.6, maxZoom: 15 });
@@ -675,21 +736,23 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     if (runLayer) map.removeLayer(runLayer);
     const toLL = (line) => line.map(([x, y]) => [y, x]);
     const segLines = [], cut = runState.colorBy === "pareto" || runState.colorBy === "wsum" ? 100 * runState.threshold * 0.85 : 70;
-    for (let i = 0; i < S.c.length; i++) {
-      if (scores[i] < cut || S.a[i] < 1) continue;
-      const t = (scores[i] - cut) / Math.max(100 - cut, 1);
-      segLines.push(L.polyline(toLL(S.c[i]), { color: scoreColor(t), weight: 1.5 + 2 * t, opacity: 0.55 + 0.45 * t, interactive: false }));
+    if (runState.showScores) {
+      for (let i = 0; i < S.c.length; i++) {
+        if (scores[i] < cut || S.a[i] < 1) continue;
+        const t = (scores[i] - cut) / Math.max(100 - cut, 1);
+        segLines.push(L.polyline(toLL(S.c[i]), { renderer: vec, color: scoreColor(t), weight: 1.5 + 2 * t, opacity: 0.55 + 0.45 * t, interactive: false, smoothFactor: 1.5 }));
+      }
     }
     segLayer = L.layerGroup(segLines).addTo(map);
     const runLines = [], ink = css("--fg"), cand = css("--cand"), surf = css("--surface");
     runs.forEach((r) => {
-      const coords = r.members.map((m) => toLL(S.c[m]));
+      const coords = runPath(S, r);
       const col = r.status === "listed" ? ink : cand;
-      const tip = `<b>${r.river || "Unnamed creek"}</b> · ${r.status === "listed" ? "in guides" : r.status === "heldout" ? "held-out reference" : "not in guides"}${r.layer === 1 ? " · Pareto frontier" : ""}<br>`
-        + `<span class="num">${r.len.toFixed(1)} km · ${r.grad.toFixed(0)} m/km · drop ${r.drop.toFixed(0)} m · steepest 50 m ${r.s50.toFixed(0)} m/km<br>`
-        + `${fmtKm2(r.aBot)} km² · flood ${r.maf.toFixed(0)} m³/s · height-to-area ${r.ha.toFixed(3)} · score ${r.score.toFixed(0)}</span>`;
-      runLines.push(L.polyline(coords, { color: surf, weight: r.layer === 1 ? 9 : 8, opacity: 0.9, interactive: false }));
-      runLines.push(L.polyline(coords, { color: col, weight: r.layer === 1 ? 5.5 : 4.5, opacity: 1 }).bindTooltip(tip, { sticky: true }));
+      runLines.push(L.polyline(coords, { renderer: vec, color: surf, weight: r.layer === 1 ? 9 : 8, opacity: 0.9, interactive: false, smoothFactor: 1.5, lineJoin: "round" }));
+      const ln = L.polyline(coords, { renderer: vec, color: col, weight: r.layer === 1 ? 5.5 : 4.5, opacity: 1, smoothFactor: 1.5, lineJoin: "round" });
+      if (canHover) ln.bindTooltip(runSummary(r), { sticky: true });
+      ln.on("click", (e) => { L.DomEvent.stopPropagation(e); showRun(S, r); });
+      runLines.push(ln);
     });
     runLayer = L.layerGroup(runLines).addTo(map);
     drawScatter(S, runs);
@@ -718,7 +781,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
       ? `<span class="big">${hoName}: #${idx + 1} of ${cands.length}</span><span class="note">Not in any guide, and never used for training. ${hr.layer === 1 ? "It is on the Pareto frontier." : `It sits in Pareto layer ${hr.layer}: other runs beat it on flow, gradient and height-to-area at once.`} Try ranking by the model trained on the known runs to compare.</span>`
       : `<span class="big">${hoName}: not found</span><span class="note">No run on it passes these settings. Its gorge averages about 15–22 m/km at a mean annual flood near 70 m³/s; keep "big rivers count at lower gradients" on, or lower the gradient band.</span>`;
   }
-  const scheduleRuns = (() => { let t = 0; return () => { clearTimeout(t); t = setTimeout(() => { updateRuns(); if (sepState.open) drawSeparation(); }, 60); }; })();
+  const scheduleRuns = (() => { let t = 0; return () => { clearTimeout(t); t = setTimeout(() => { updateRuns(); if (sepState.open) drawSeparation(); }, canHover ? 60 : 180); }; })();
 
   function buildWeights() {
     if (!MODEL) return;
@@ -769,7 +832,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     if (overlay) map.removeLayer(overlay);
     overlay = new CanvasOverlay(D.canvas, R.bounds, { interactive: false }).addTo(map);
     if (clickMarker) { map.removeLayer(clickMarker); clickMarker = null; }
-    $("readout").innerHTML = '<span class="sub">Click the map to read the catchment area at that point. Hover a run for its numbers.</span>';
+    $("readout").innerHTML = '<span class="sub">Tap the map for the catchment area there, or a run for its numbers.</span>';
     buildLayers(R); fillPanel(R); render(); updateRuns();
   }
 
@@ -822,6 +885,8 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
   $("gate").addEventListener("change", (e) => { runState.gate = e.target.checked; scheduleRuns(); });
   $("flowScaled").addEventListener("change", (e) => { runState.flowScaled = e.target.checked; scheduleRuns(); });
   $("colorBy").addEventListener("change", (e) => { runState.colorBy = e.target.value; scheduleRuns(); });
+  $("showScores").checked = runState.showScores;
+  $("showScores").addEventListener("change", (e) => { runState.showScores = e.target.checked; scheduleRuns(); });
   setInputs(); syncRunOutputs(); buildWeights();
 
   map.on("zoomend", () => {
@@ -852,7 +917,9 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     }
     html += `<span class="sub num">NZTM E ${Math.round(E).toLocaleString("en-NZ")} N ${Math.round(N).toLocaleString("en-NZ")}</span>`;
     html += `<span class="sub num">${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}</span>`;
-    $("readout").innerHTML = html;
+    $("readout").hidden = false;
+    $("readout").innerHTML = '<button type="button" class="ro-close" aria-label="Close">×</button>' + html;
+    $("readout").querySelector(".ro-close").addEventListener("click", (ev) => { ev.stopPropagation(); $("readout").hidden = true; });
     if (clickMarker) clickMarker.setLatLng(e.latlng);
     else clickMarker = L.circleMarker(e.latlng, { radius: 5, weight: 2, color: css("--fg"), fillOpacity: 0 }).addTo(map);
   });
@@ -961,7 +1028,8 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
       gridcolor: line, zerolinecolor: line, linecolor: line, tickfont: { color: muted, size: 10 }, backgroundcolor: surf, showbackground: true });
     const layout = { paper_bgcolor: surf, plot_bgcolor: surf, font: { family: "Public Sans, system-ui, sans-serif", color: fg },
       margin: { l: 0, r: 0, t: 10, b: 0 }, legend: { orientation: "h", y: 1.02, x: 0, font: { size: 11, color: fg } },
-      scene: { xaxis: axis(0), yaxis: axis(1), zaxis: axis(2), camera: { eye: { x: 1.6, y: -1.6, z: 0.9 } } }, uirevision: ax.join("|") };
+      scene: { xaxis: axis(0), yaxis: axis(1), zaxis: axis(2),
+               camera: { eye: window.innerWidth < 600 ? { x: 2.1, y: -2.1, z: 1.2 } : { x: 1.6, y: -1.6, z: 0.9 } } }, uirevision: ax.join("|") };
     plot.innerHTML = "";
     await Plotly.react(plot, traces, layout, { displaylogo: false, responsive: true, modeBarButtonsToRemove: ["toImage"] });
     plot.removeAllListeners && plot.removeAllListeners("plotly_click");
@@ -995,6 +1063,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
   function setView(sep) {
     sepState.open = sep;
     $("sep").hidden = !sep;
+    document.body.classList.toggle("sep-open", sep);
     $("viewMap").setAttribute("aria-pressed", String(!sep));
     $("viewSep").setAttribute("aria-pressed", String(sep));
     if (sep) drawSeparation(); else map.invalidateSize();
@@ -1009,6 +1078,9 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
   $("sepScope").addEventListener("change", (e) => { sepState.scope = e.target.value; drawSeparation(); });
   $("viewMap").addEventListener("click", () => setView(false));
   $("viewSep").addEventListener("click", () => setView(true));
+
+  // On touch screens, the first-use hint gets out of the way once the map is moved.
+  if (!canHover) map.once("movestart", () => { const ro = $("readout"); if (!ro.querySelector(".ro-close")) ro.hidden = true; });
 
   // Re-colour when the theme changes (system setting or the viewer's explicit choice).
   const rethemed = () => { if (state.region) { buildLayers(cache[state.region].R); schedule(); updateRuns(); if (sepState.open) drawSeparation(); } };
