@@ -301,6 +301,17 @@ def build_segments(region: Region, min_area_km2: float = 0.5, seg_len_m: float =
     hand = np.full(rec.size, np.inf)
     hand[ok_t] = ff[ok_t] - ff[tgt[ok_t]]
     cnt = floor_width_counts(tgt, seg_of_cell, hand, floor_hand_m, len(seg_rows))
+    # Local catchments: for each cell, the segment it first drains into (-1 if none). A segment's
+    # whole catchment is the union of the local catchments of every segment upstream of it.
+    local = np.full(rec.size, -1, dtype=np.int32)
+    local[ok_t] = seg_of_cell[tgt[ok_t]]
+    with rasterio.open(d / "area_km2.tif") as ds:
+        prof = ds.profile.copy()
+    prof.update(dtype="int32", nodata=-1, compress="deflate", predictor=2, tiled=True, blockxsize=512, blockysize=512)
+    with rasterio.open(d / "local_catchment.tif", "w", **prof) as dst:
+        dst.write(local.reshape(shape2), 1)
+        dst.update_tags(description="seg_id of the reach segment each cell first drains into (-1 none)")
+    del local
     for k, row in enumerate(seg_rows):
         width = max(cnt[k] * cs * cs / max(row["length_m"], cs), cs)
         row["valley_width_m"] = round(width, 1)

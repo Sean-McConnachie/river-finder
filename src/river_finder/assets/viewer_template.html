@@ -23,6 +23,7 @@
   --score-hi: #b5431a;    /* score overlay, high end */
   --ok: #0ca30c;          /* runnable, grade unknown (status good) */
   --unk: #fab219;         /* unknown (status warning) */
+  --catch: #0b9a2c;       /* selected catchment: green, distinct from the blue heat map and orange runs */
   --no: #d03b3b;          /* not runnable (status critical) */
   --water: #dce5e8;
   --hs-lo: #8c928d;       /* hillshade, shadow end */
@@ -37,7 +38,7 @@
     --bg: #151716; --surface: #1d201f; --fg: #e6eae7; --muted: #9aa39e; --line: #2d3230;
     --accent: #3987e5; --unlisted: #d95926; --water: #18202a;
     --cand: #f08a5d; --cand-arrow: #2a0e04; --score-lo: #5a2a17; --score-hi: #ffb48c;
-    --ok: #0ca30c; --unk: #fab219; --no: #d03b3b;
+    --ok: #0ca30c; --unk: #fab219; --no: #d03b3b; --catch: #3ddc66;
     --hs-lo: #0f1110; --hs-hi: #4b504d; --ramp-dir: -1; color-scheme: dark;
   }
 }
@@ -45,7 +46,7 @@
   --bg: #151716; --surface: #1d201f; --fg: #e6eae7; --muted: #9aa39e; --line: #2d3230;
   --accent: #3987e5; --unlisted: #d95926; --water: #18202a;
     --cand: #f08a5d; --cand-arrow: #2a0e04; --score-lo: #5a2a17; --score-hi: #ffb48c;
-    --ok: #0ca30c; --unk: #fab219; --no: #d03b3b;
+    --ok: #0ca30c; --unk: #fab219; --no: #d03b3b; --catch: #3ddc66;
   --hs-lo: #0f1110; --hs-hi: #4b504d; --ramp-dir: -1; color-scheme: dark;
 }
 
@@ -117,6 +118,7 @@ table.val th { font-weight: 600; color: var(--muted); }
 .readout .big { font-size: 18px; font-weight: 600; font-family: var(--font-data); }
 .readout { padding-right: 34px; }
 .ro-close { position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; border: 0; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; border-radius: 4px; }
+.ro-btns { display: flex; gap: 6px; flex-wrap: wrap; }
 .ro-zoom { justify-self: start; margin-top: 6px; font: inherit; font-weight: 600; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); cursor: pointer; }
 .warn { color: var(--unlisted); font-weight: 600; }
 
@@ -420,7 +422,10 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
   // One canvas for all vector lines, drawn well beyond the viewport so lines don't pop in while
   // panning on a phone; wider hit tolerance for fingers.
   const canHover = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
-  const vec = L.canvas({ padding: 0.8, tolerance: canHover ? 3 : 10 });
+  // Panes: heat map (overlayPane, 400) < selected catchment (420) < all vector lines (450).
+  map.createPane("catchPane").style.zIndex = 420;
+  map.createPane("vecPane").style.zIndex = 450;
+  const vec = L.canvas({ pane: "vecPane", padding: 0.8, tolerance: canHover ? 3 : 10 });
 
   // ---------- flow-direction arrows ----------
   // Small chevrons pointing downstream along run lines and REC2 lines. Paths are stored
@@ -570,12 +575,12 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     if (runsLayer) map.removeLayer(runsLayer);
     const muted = css("--muted");
     rec2Layer = L.layerGroup(R.rec2.map((f) => L.polyline(f.c.map((l) => l.map(([x, y]) => [y, x])), {
-      color: muted, weight: 0.6 + 0.45 * (f.o - 3), opacity: 0.85, interactive: true,
+      renderer: vec, color: muted, weight: 0.6 + 0.45 * (f.o - 3), opacity: 0.85, interactive: true,
     }).bindTooltip(`${f.n || "Unnamed reach"} · REC2 ${fmtKm2(f.a)} km²`, { sticky: true })));
     runsLayer = L.layerGroup(R.runs.map((r) => {
       const unl = r.status === "unlisted";
       return L.circleMarker([r.lat, r.lon], {
-        radius: 7, weight: 2, color: css("--surface"), fillColor: unl ? css("--unlisted") : css("--fg"), fillOpacity: 1,
+        renderer: vec, radius: 7, weight: 2, color: css("--surface"), fillColor: unl ? css("--unlisted") : css("--fg"), fillOpacity: 1,
       }).bindTooltip(unl ? `${r.river} (unlisted)` : r.river, {
         permanent: true, direction: "right", offset: [8, 0], className: "run-label" + (unl ? " unlisted" : ""),
       });
@@ -734,12 +739,85 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
       + `${fmtKm2(r.aBot)} km² · flood ${r.maf.toFixed(0)} m³/s · height-to-area ${r.ha.toFixed(3)} · score ${r.score.toFixed(0)}</span>`;
   }
 
+  // ---------- selected catchment ----------
+  // R.catch is a PNG on the heat-map grid whose RGB value is (viewer segment index + 1) of the reach
+  // each pixel first drains into. A segment's catchment = every pixel whose segment lies upstream.
+  let catchOverlay = null, catchSel = null;
+
+  async function catchLabels(R) {
+    const C = await loadRegion(R);
+    if (C.catchLab || !R.catch) return C.catchLab || null;
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = R.catch; });
+    const c = document.createElement("canvas"); c.width = R.width; c.height = R.height;
+    const ctx = c.getContext("2d", { willReadFrequently: true }); ctx.drawImage(img, 0, 0);
+    const px = ctx.getImageData(0, 0, R.width, R.height).data, lab = new Uint32Array(R.width * R.height);
+    for (let i = 0; i < lab.length; i++) lab[i] = (px[4 * i] << 16) | (px[4 * i + 1] << 8) | px[4 * i + 2];
+    C.catchLab = lab;
+    C.catchCanvas = document.createElement("canvas"); C.catchCanvas.width = R.width; C.catchCanvas.height = R.height;
+    return lab;
+  }
+
+  function upstreamMask(S, seg) {
+    if (!S._ups) {
+      S._ups = S.d.map(() => []);
+      S.d.forEach((dn, i) => { if (dn >= 0) S._ups[dn].push(i); });
+    }
+    const mask = new Uint8Array(S.d.length), stack = [seg];
+    mask[seg] = 1;
+    while (stack.length) { const v = stack.pop(); for (const u of S._ups[v]) if (!mask[u]) { mask[u] = 1; stack.push(u); } }
+    return mask;
+  }
+
+  async function showCatchment(R, seg, label, fly = true) {
+    const S = R.segments, lab = await catchLabels(R);
+    if (!S || !lab || seg < 0) return;
+    const C = cache[R.id], W = R.width, H = R.height, mask = upstreamMask(S, seg);
+    const [cr, cg, cb] = hex(css("--catch"));
+    const ctx = C.catchCanvas.getContext("2d"), img = ctx.createImageData(W, H), px = img.data;
+    const inC = (i) => { const v = lab[i]; return v > 0 && mask[v - 1] === 1; };
+    let r0 = H, r1 = -1, c0 = W, c1 = -1, n = 0;
+    for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+      const i = r * W + c; if (!inC(i)) continue;
+      n++; if (r < r0) r0 = r; if (r > r1) r1 = r; if (c < c0) c0 = c; if (c > c1) c1 = c;
+      const edge = c === 0 || r === 0 || c === W - 1 || r === H - 1 || !inC(i - 1) || !inC(i + 1) || !inC(i - W) || !inC(i + W);
+      px[4 * i] = cr; px[4 * i + 1] = cg; px[4 * i + 2] = cb; px[4 * i + 3] = edge ? 255 : 82;
+    }
+    ctx.putImageData(img, 0, 0);
+    if (catchOverlay) map.removeLayer(catchOverlay);
+    catchOverlay = new CanvasOverlay(C.catchCanvas, R.bounds, { interactive: false, pane: "catchPane" }).addTo(map);
+    catchSel = { R, seg, label };
+    if (n && fly) {
+      const pix = (R.merc[2] - R.merc[0]) / W;
+      const ll = (c, r) => L.CRS.EPSG3857.unproject(L.point(R.merc[0] + c * pix, R.merc[3] - r * pix));
+      map.flyToBounds(L.latLngBounds(ll(c0, r1 + 1), ll(c1 + 1, r0)).pad(0.15), { duration: 0.6 });
+    }
+    const ro = $("readout"); ro.hidden = false;
+    ro.innerHTML = `<button type="button" class="ro-close" aria-label="Close">×</button>`
+      + `<span class="big"><span class="swatch" style="background:var(--catch);height:12px;width:12px;border-radius:2px"></span>${fmtKm2(S.a[seg])} km²</span>`
+      + `<span class="sub">Catchment of ${label}${n ? "" : " (too small to show at this scale)"}</span>`
+      + `<button type="button" class="ro-zoom ro-hide">Hide catchment</button>`;
+    ro.querySelector(".ro-hide").addEventListener("click", (ev) => { ev.stopPropagation(); hideCatchment(); ro.hidden = true; });
+    ro.querySelector(".ro-close").addEventListener("click", (ev) => { ev.stopPropagation(); ro.hidden = true; });
+  }
+
+  function hideCatchment() {
+    if (catchOverlay) map.removeLayer(catchOverlay);
+    catchOverlay = null; catchSel = null;
+  }
+
   function showRun(S, r) {
     const ro = $("readout");
     ro.hidden = false;
     ro.innerHTML = `<button type="button" class="ro-close" aria-label="Close">×</button><span>${runSummary(r)}</span>`
-      + `<button type="button" class="ro-zoom">Zoom to run</button>`;
+      + `<span class="ro-btns"><button type="button" class="ro-zoom">Zoom to run</button>`
+      + `${cache[state.region].R.catch ? '<button type="button" class="ro-zoom ro-catch">Show catchment</button>' : ""}</span>`;
     ro.querySelector(".ro-zoom").addEventListener("click", () => flyToRun(S, r));
+    const cb = ro.querySelector(".ro-catch");
+    if (cb) cb.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      showCatchment(cache[state.region].R, r.members[r.members.length - 1], `${r.river || "this unnamed creek"} at the bottom of the run`);
+    });
     ro.querySelector(".ro-close").addEventListener("click", () => { ro.hidden = true; });
   }
 
@@ -894,6 +972,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     map.setMaxBounds(L.latLngBounds(R.bounds).pad(0.4));
     if (overlay) map.removeLayer(overlay);
     overlay = new CanvasOverlay(D.canvas, R.bounds, { interactive: false }).addTo(map);
+    hideCatchment();
     if (clickMarker) { map.removeLayer(clickMarker); clickMarker = null; }
     $("readout").innerHTML = '<span class="sub">Tap the map for the catchment area there, or a run for its numbers.</span>';
     buildLayers(R); fillPanel(R); render(); updateRuns();
@@ -963,12 +1042,12 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     const R = D.R, p = L.CRS.EPSG3857.project(e.latlng), pix = (R.merc[2] - R.merc[0]) / R.width;
     const col = Math.floor((p.x - R.merc[0]) / pix), row = Math.floor((R.merc[3] - p.y) / pix);
     if (col < 0 || row < 0 || col >= R.width || row >= R.height) return;
-    let best = 0, cut = false;   // snap to the largest flow within one pixel, so clicks on thin channels land
+    let best = 0, cut = false, bestI = -1;   // snap to the largest flow within one pixel, so clicks on thin channels land
     for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
       const r = row + dr, c = col + dc;
       if (r < 0 || c < 0 || r >= R.height || c >= R.width) continue;
       const i = r * R.width + c;
-      if (D.area[i] > best) { best = D.area[i]; cut = D.trunc[i] > 0; }
+      if (D.area[i] > best) { best = D.area[i]; cut = D.trunc[i] > 0; bestI = i; }
     }
     const [E, N] = toNZTM(e.latlng.lat, e.latlng.lng);
     let html;
@@ -980,8 +1059,16 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     }
     html += `<span class="sub num">NZTM E ${Math.round(E).toLocaleString("en-NZ")} N ${Math.round(N).toLocaleString("en-NZ")}</span>`;
     html += `<span class="sub num">${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}</span>`;
+    if (best > 0 && R.catch) html += '<button type="button" class="ro-zoom ro-catch">Show catchment of this stream</button>';
     $("readout").hidden = false;
     $("readout").innerHTML = '<button type="button" class="ro-close" aria-label="Close">×</button>' + html;
+    const cbtn = $("readout").querySelector(".ro-catch");
+    if (cbtn) cbtn.addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      const lab = await catchLabels(R), v = lab ? lab[bestI] : 0;
+      if (v > 0) showCatchment(R, v - 1, R.segments.r[v - 1] >= 0 ? R.segments.rivers[R.segments.r[v - 1]] : "this stream");
+      else { cbtn.disabled = true; cbtn.textContent = "No mapped stream here"; }
+    });
     $("readout").querySelector(".ro-close").addEventListener("click", (ev) => { ev.stopPropagation(); $("readout").hidden = true; });
     if (clickMarker) clickMarker.setLatLng(e.latlng);
     else clickMarker = L.circleMarker(e.latlng, { radius: 5, weight: 2, color: css("--fg"), fillOpacity: 0 }).addTo(map);
@@ -1146,7 +1233,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
   if (!canHover) map.once("movestart", () => { const ro = $("readout"); if (!ro.querySelector(".ro-close")) ro.hidden = true; });
 
   // Re-colour when the theme changes (system setting or the viewer's explicit choice).
-  const rethemed = () => { if (state.region) { buildLayers(cache[state.region].R); schedule(); updateRuns(); if (sepState.open) drawSeparation(); } };
+  const rethemed = () => { if (state.region) { buildLayers(cache[state.region].R); schedule(); updateRuns(); if (sepState.open) drawSeparation(); if (catchSel) showCatchment(catchSel.R, catchSel.seg, catchSel.label, false); } };
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", rethemed);
   new MutationObserver(rethemed).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   window.addEventListener("hashchange", () => { const id = location.hash.slice(1); if (id && id !== state.region) selectRegion(id); });

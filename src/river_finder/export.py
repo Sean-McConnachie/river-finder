@@ -51,7 +51,7 @@ def export_region(region: Region) -> Path:
     d = region.data_dir()
     out = d / "gis"
     out.mkdir(exist_ok=True)
-    for name in ("area_km2", "hillshade", "truncated", "fill_depth_m", "dem_8m", "dem_5m"):
+    for name in ("area_km2", "hillshade", "truncated", "fill_depth_m", "local_catchment", "dem_8m", "dem_5m"):
         src = d / f"{name}.tif"
         if src.exists():
             rasterio.shutil.copy(src, out / f"{name}.tif", driver="COG", compress="DEFLATE")
@@ -84,6 +84,7 @@ def export_region(region: Region) -> Path:
         "hillshade.tif     hillshade from the DEM\n"
         "truncated.tif     1 = the cell's catchment reaches the edge of the processed box\n"
         "fill_depth_m.tif  depth of depression filling (m)\n"
+        "local_catchment.tif  seg_id of the reach segment each cell first drains into (-1 none)\n"
         "dem_8m.tif        LINZ 8 m contour DEM mosaic\n"
         "dem_5m.tif        LINZ LiDAR at 5 m (gaps from the 8 m DEM), used for routing when present\n"
         f"{region.name}.gpkg  layers: rec2_reaches (NIWA REC2), reference_runs, reach_segments (about 250 m\n"

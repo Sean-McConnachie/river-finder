@@ -145,6 +145,37 @@ def _segments(region: Region, min_area_km2: float = 1.0) -> dict | None:
     }
 
 
+def _catchment_labels(region: Region, shape: tuple[int, int], max_px: int, min_area_km2: float = 1.0) -> str | None:
+    """RGB-encoded PNG (value = viewer segment index + 1, 0 = none) on the heat-map grid: for each
+    pixel, the viewer segment its ground first drains into. Segments too small for the viewer are
+    folded into the first viewer segment downstream of them."""
+    import geopandas as gpd
+
+    d = region.data_dir()
+    if not (d / "local_catchment.tif").exists() or not (d / "segments_scored.gpkg").exists():
+        return None
+    g = gpd.read_file(d / "segments_scored.gpkg", columns=["seg_id", "down_seg", "area_km2"], ignore_geometry=True)
+    n = len(g)
+    down = g["down_seg"].to_numpy()
+    keep = (g["area_km2"] >= min_area_km2).to_numpy()
+    view = np.full(n, -1, dtype=np.int64)
+    view[np.flatnonzero(keep)] = np.arange(int(keep.sum()))
+    for i in range(n):  # fold small segments into the first kept segment downstream
+        if view[i] >= 0:
+            continue
+        chain, cur = [], i
+        while cur >= 0 and view[cur] < 0 and len(chain) < 10000:
+            chain.append(cur)
+            cur = down[cur]
+        tgt = view[cur] if cur >= 0 else -1
+        view[chain] = tgt
+    lab, _ = _warp(d / "local_catchment.tif", max_px, Resampling.nearest, -1)
+    lab = lab[: shape[0], : shape[1]].astype(np.int64)
+    v = np.where(lab >= 0, view[np.clip(lab, 0, n - 1)] + 1, 0)
+    rgb = np.stack([(v >> 16) & 255, (v >> 8) & 255, v & 255], axis=-1).astype(np.uint8)
+    return _data_uri(Image.fromarray(rgb, "RGB"), "PNG")
+
+
 def region_payload(region: Region, max_px: int = 1800, rec2_min_order: int = 3) -> dict:
     d = region.data_dir()
     area, tr = _warp(d / "area_km2.tif", max_px, Resampling.max, np.nan)
@@ -193,6 +224,7 @@ def region_payload(region: Region, max_px: int = 1800, rec2_min_order: int = 3) 
         "stats": stats,
         "validation": validation,
         "segments": _segments(region),
+        "catch": _catchment_labels(region, (h, w), max_px),
     }
 
 
