@@ -31,6 +31,7 @@ class Section:
     upstream_km: float | None = None
     source: str = ""
     bbox: tuple | None = None  # WGS84 box limiting the name-only rule (national frames)
+    coords: str = "sourced"    # put-in/take-out provenance: sourced | inferred | unstated | none
     extra: dict = field(default_factory=dict)
 
 
@@ -54,9 +55,11 @@ def load_sections(path: Path | None = None) -> list[Section]:
         return []
     out = []
     for d in tomllib.loads(path.read_text()).get("section", []):
-        known = {f for f in Section.__dataclass_fields__ if f not in ("extra", "bbox")}
+        known = {f for f in Section.__dataclass_fields__ if f not in ("extra", "bbox", "coords")}
         kw = {k: (tuple(v) if isinstance(v, list) else v) for k, v in d.items() if k in known}
-        out.append(Section(**kw, extra={k: v for k, v in d.items() if k not in known}))
+        s = Section(**kw, extra={k: v for k, v in d.items() if k not in known})
+        s.coords = "sourced" if (s.put_in or s.take_out or s.outlet) else "none"
+        out.append(s)
     return out
 
 

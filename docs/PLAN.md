@@ -342,6 +342,70 @@ serves no raw binary) and four images (≤ 4000 px, the iOS canvas limit). Run s
 regional zoom. `nz viewer --page-only` re-renders only the page after a template change.
 The three 5 m reference areas stay available in the same drop-down.
 
+## Model versions and the guide research (2026-11-13)
+
+`labels/guide_research.json`: 339 sections of grade 2 and up compiled from the NZ RiverGuide API
+(269), packraftingtrips.nz (62) and four other sources. Licence CC BY-SA 3.0 NZ (RiverGuide content;
+attribution in the file's `metadata`). 274 put-ins are published, but 301 take-outs were inferred
+(from directions or geography), so provenance matters.
+
+**Import** (`research.py`): tolerant of layout; `[lat, lon]` points; per-point provenance from
+`inferred_put_in_coords` / `inferred_take_out_coords`. Guide region comes from the put-in point
+(the research's "Manawatū-Whanganui" spans our Wanganui and Manawatu filters).
+
+**Placing sections on reaches** (`models.map_section`), in order:
+put-in to take-out down the flow path (236); put-in walked downstream to the reach nearest the
+take-out when the two snapped to different branches (31); put-in + stated length (24); the river's
+steep reaches near the points (47, mostly sections with no take-out); 11 unmapped (points only
+rounded to 0.1°). Snapping prefers a reach with the same (normalised) name within 3 km.
+
+**Rivers, not reaches.** Sections are grouped into rivers (same normalised name in the same guide
+region, or any shared reach), so a river with several sections, or listed both in
+`known_runs.toml` and the research, is either all train or all test.
+Split `models/splits/guides-v1.json`: 144 train / 49 test rivers, stratified by guide region x
+grade band, seed 20261113, the Mangakarengorengo forced into test. Splits and cards are frozen.
+
+**Models** (`models/*.json`, one card each, never overwritten):
+
+| id | trained on | notes |
+|---|---|---|
+| baseline-flow | nothing | flood size (MAF) only: the yardstick |
+| v1 | 6 reference rivers | checkpoint of the first national run; reproduces its scores within 0.09 percentile points |
+| v2 | 144 guide rivers, all coordinates | 9,418 positive reaches |
+| v2-published | same rivers, published coordinates only | inferred take-outs -> put-in + stated length; 6,289 positives |
+
+Unlabelled reaches are negatives (positive-unlabelled); known reaches a variant cannot place are
+left out of training, never used as negatives.
+
+**Results on the 49 held-out guide rivers** (`models/evaluations.json`; background = 594k reaches of
+2 km2 or more not on any known section):
+
+| model | AUC | size-matched AUC | top-10% recall | AUC, published-coordinate test sections |
+|---|---|---|---|---|
+| baseline-flow | 0.917 | 0.548 | 81% | 0.929 |
+| v1 | 0.530 | 0.477 | 17% | 0.520 |
+| v2 | 0.931 | 0.695 | 81% | 0.949 (size-matched 0.733) |
+| v2-published | 0.925 | 0.670 | 78% | 0.945 (size-matched 0.705) |
+
+Readings: (1) v1's 99th-percentile reference hold-out did not carry over: on guide rivers nationally it
+is at chance. Six rivers in three small areas taught it their local signature (hard rock, plateau
+headwaters), not whitewater. (2) Flood size alone gets AUC 0.92 against all reaches of 2 km2 or
+more, so plain AUC flatters every model; the **size-matched AUC** (each test reach ranked only
+against background reaches in the same flood-size decile) is the number to watch: v2 lifts it from
+0.55 to 0.70. (3) Inferred coordinates help slightly (v2 > v2-published on both test views): more,
+noisier labels beat fewer, cleaner ones here. (4) All metrics are lower bounds (unknown runs sit in
+the background); precision cannot be measured without labelled not-runnable reaches.
+
+**Viewer.** Model picker (URL hash `#<region>/<model>`), per-model score files
+`<region>_m_<model>.txt` (base64: uint16 national percentile x 100, then uint8 flags: bits 0-1
+trained on / test river, bit 2 on a guide section) so adding a model needs no region rebuild:
+`river-finder models viewer` writes them for every card and re-renders the page. Top runs carry
+Training river / Test river / Prediction and In guides pills that follow the selected model; the
+Models tab shows every model on each test set, per-river and per-region tables and coefficients.
+
+Workflow for a new model: `models train --name v3 --split guides-v1 [--variant sourced]`, then
+`models evaluate`, then `models viewer`, then publish the new `*_m_v3.txt` files and the page.
+
 ## Open questions
 
 See the beads issue labelled `question`. Answers get recorded with `bd remember`.

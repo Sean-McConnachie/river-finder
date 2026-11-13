@@ -90,6 +90,47 @@ def _nz(args):
         log(f"viewer -> {build(args.out, page_only=args.page_only)}")
 
 
+def _models(args):
+    from . import models as M
+
+    t0 = time.time()
+
+    def log(m):
+        print(f"[{(time.time() - t0) / 60:6.1f} min] {m}", flush=True)
+
+    if args.step == "import":
+        from .research import load_research, summary
+
+        print(json.dumps(summary(load_research(args.labels)), indent=1, ensure_ascii=False))
+        return
+    table = M.national_table(rebuild=args.step == "table", log=log)
+    if args.step == "table":
+        log(f"table: {len(table)} reaches")
+    elif args.step == "checkpoint":
+        card = M.checkpoint_v1(table)
+        log(f"checkpoint -> {M.save_card(card)}: {json.dumps(card['checkpoint_check'])}")
+    elif args.step == "baseline":
+        log(f"baseline -> {M.save_card(M.baseline_card(table))}")
+    elif args.step == "split":
+        mapped = M.map_sections(table, M.all_sections(args.labels))
+        sp = M.make_split(mapped, args.name or "guides-v1", seed=args.seed, test_frac=args.test_frac)
+        log(f"split -> {M.save_split(sp)}: {len(sp['train'])} train rivers, {len(sp['test'])} test rivers")
+    elif args.step == "train":
+        if not args.name:
+            raise SystemExit("models train needs --name (the new model id, e.g. v2)")
+        mapped = M.map_sections(table, M.all_sections(args.labels))
+        card = M.train(table, mapped, M.load_split(args.split), args.name, args.title or args.name,
+                       args.description or "", variant=args.variant)
+        log(f"train -> {M.save_card(card)}: {card['labels']['positives']} positive reaches")
+    elif args.step == "evaluate":
+        M.evaluate_all(table, M.map_sections(table, M.all_sections(args.labels)), log=log)
+    elif args.step == "viewer":
+        from .viewer_nz import build
+
+        M.write_viewer_scores(args.out, table, log=log)
+        log(f"viewer page -> {build(args.out, page_only=True)}")
+
+
 STEPS = {"fetch": _fetch, "route": _route, "validate": _validate, "reaches": _reaches, "export": _export}
 
 
@@ -104,6 +145,20 @@ def main(argv: list[str] | None = None) -> None:
     pn.add_argument("tiles", nargs="*", help="tile ids such as x11y16 (default: every land tile)")
     pn.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz")
     pn.add_argument("--page-only", action="store_true", help="viewer: re-render only the page, keep the region files")
+    pm = sub.add_parser("models", help="model registry: table | checkpoint | baseline | import | split | "
+                                       "train | evaluate | viewer (see src/river_finder/models.py)")
+    pm.add_argument("step", choices=["table", "checkpoint", "baseline", "import", "split", "train", "evaluate",
+                                         "viewer"])
+    pm.add_argument("--labels", type=Path, default=None, help="research JSON (default labels/guide_research.json)")
+    pm.add_argument("--name", help="split name (split) or new model id (train)")
+    pm.add_argument("--split", default="guides-v1", help="train: split to use")
+    pm.add_argument("--variant", choices=["all", "sourced"], default="all",
+                    help="train: 'sourced' drops sections whose coordinates were inferred")
+    pm.add_argument("--title")
+    pm.add_argument("--description")
+    pm.add_argument("--seed", type=int, default=20261113)
+    pm.add_argument("--test-frac", type=float, default=0.25)
+    pm.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz")
     pv = sub.add_parser("viewer", help="build the browser viewer for the given regions")
     pv.add_argument("regions", nargs="*")
     pv.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer")
@@ -111,6 +166,9 @@ def main(argv: list[str] | None = None) -> None:
     args = ap.parse_args(argv)
     if args.cmd == "nz":
         _nz(args)
+        return
+    if args.cmd == "models":
+        _models(args)
         return
     regions = [load_region(n) for n in (args.regions or list_regions())]
 

@@ -337,7 +337,11 @@ def write_page(out_dir: Path, index: list[dict]) -> Path:
                  "default_weights": {k: v[1] for k, v in FEATURES.items()}, "ha_defaults": m.get("ha_defaults", {})}
     tpl = resources.files("river_finder").joinpath("assets/viewer_template.html").read_text()
     css = resources.files("river_finder").joinpath("assets/leaflet-1.9.4.css").read_text()
-    data = json.dumps({"regions": index, "model": model}, separators=(",", ":")).replace("</", "<\\/")
+    from .models import list_cards, viewer_models
+
+    registry = viewer_models() if list_cards() else None
+    data = json.dumps({"regions": index, "model": model, "registry": registry},
+                      separators=(",", ":"), ensure_ascii=False).replace("</", "<\\/")
     page = tpl.replace("/*%%LEAFLET_CSS%%*/", css).replace("%%DATA%%", data)
     (out_dir / "index_fragment.html").write_text(page)  # for a claude.ai artifact (it adds the skeleton)
     (out_dir / "index.html").write_text(

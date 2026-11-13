@@ -150,6 +150,28 @@ select { font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid 
 .cand .sc { font-family: var(--font-data); font-weight: 500; }
 .cand .meta { grid-column: 2 / 4; font-size: 12px; color: var(--muted); font-family: var(--font-data); }
 .pill.cand-pill { border-color: var(--cand); color: var(--cand); }
+.pill.role-train { background: var(--line); border-color: var(--line); color: var(--fg); }
+.pill.role-test { border-color: var(--accent); color: var(--accent); }
+.pill.role-pred { border-color: var(--cand); color: var(--cand); }
+.pill.guide { border-color: var(--fg); color: var(--fg); }
+.modelbox select { width: 100%; }
+.perf { grid-template-rows: none; gap: 16px; }
+.perf h2 { margin-top: 4px; }
+.perf .explain { display: grid; gap: 6px; font-size: 13px; line-height: 1.45; max-width: 75ch; }
+.perf .explain p { margin: 0; }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 4px 10px; }
+.tablewrap table.val { min-width: 520px; }
+.tablewrap table.val th, .tablewrap table.val td { padding: 5px 6px; white-space: nowrap; }
+.tablewrap table.val td.wrap { white-space: normal; min-width: 140px; }
+table.val tr.sel td { font-weight: 600; }
+table.val tr.sel td:first-child { box-shadow: inset 3px 0 0 var(--accent); padding-left: 8px; }
+.cbar { display: inline-grid; grid-template-columns: 48px 48px; width: 96px; height: 10px; vertical-align: middle; margin-left: 6px; }
+.cbar i { display: block; height: 10px; }
+.cbar .neg { justify-self: end; background: var(--cand); border-radius: 3px 0 0 3px; }
+.cbar .pos { background: var(--accent); border-radius: 0 3px 3px 0; }
+.cbar .mid { grid-column: 1 / 3; }
+.perf-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 900px) { .perf-grid { grid-template-columns: 1fr; } }
 .test { padding: 10px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); display: grid; gap: 4px; }
 .test .big { font-size: 16px; font-weight: 600; }
 details summary { cursor: pointer; font-weight: 600; }
@@ -219,6 +241,10 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     <nav class="tabs" role="tablist" id="tabs" aria-label="Region"></nav>
     <div class="ctl" id="regionPick" hidden><label for="regionSel">Region</label><select id="regionSel"></select></div>
     <p class="sub" id="region-desc"></p>
+    <div class="ctl modelbox" id="modelBox" hidden>
+      <label for="modelSel">Model</label><select id="modelSel"></select>
+      <p class="note" id="modelDesc"></p>
+    </div>
 
     <section class="ctl" aria-label="Run finder">
       <h2>Runnability: flow, gradient, height-to-area</h2>
@@ -255,7 +281,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
         <select id="colorBy">
           <option value="pareto">Pareto frontier, then weighted score</option>
           <option value="wsum">Weighted score</option>
-          <option value="reg">Model trained on the known runs</option>
+          <option value="reg">Selected model (see Model above)</option>
           <option value="sig">Similarity to the known runs</option>
           <option value="comp">Your feature weights (all features)</option>
         </select></div>
@@ -269,12 +295,14 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     </section>
 
     <section aria-label="Held-out test">
-      <h2>Held-out test</h2>
+      <h2>Test rivers in this region</h2>
       <div class="test" id="holdout"></div>
     </section>
 
-    <section aria-label="Candidates">
-      <h2>Top runs not in the guides</h2>
+    <section aria-label="Top runs">
+      <h2>Top runs</h2>
+      <label class="checks" style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><input type="checkbox" id="hideListed"> Only runs not in the guides</label>
+      <p class="note" style="margin-bottom:6px"><span class="pill role-train">Training river</span> the selected model was fitted on it. <span class="pill role-test">Test river</span> held out from that model: a real check. <span class="pill role-pred">Prediction</span> the model never saw a label here. <span class="pill guide">In guides</span> a guide lists this river.</p>
       <div class="cands" id="cands"></div>
     </section>
 
@@ -317,7 +345,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
       <p class="note" style="margin-top:6px">Reaches over 5 km² whose whole catchment is inside the box. "Within 10%" uses a search radius of up to 256 m, because REC2 lines and our channels can sit apart on flat valley floors.</p>
     </section>
 
-    <p class="note">Elevation: LINZ LiDAR DEM (CC BY 4.0). Rivers and flood statistics: NIWA. Geology: GNS Science 1:250k. Built by river-finder. Candidates are leads from terrain data only: check access, land ownership, hazards and local knowledge before going anywhere.</p>
+    <p class="note">Elevation: LINZ LiDAR DEM (CC BY 4.0). Rivers and flood statistics: NIWA. Geology: GNS Science 1:250k. Known sections: adapted from the NZ RiverGuide (Whitewater NZ; WWNZ and Graham Charles, NZ Whitewater), CC BY-SA 3.0 NZ, with summaries of packraftingtrips.nz and other sources (see <span class="num">labels/guide_research.json</span>). Built by river-finder. Candidates are leads from terrain data only: check access, land ownership, hazards and local knowledge before going anywhere.</p>
   </aside>
 
   <main class="mapwrap">
@@ -325,7 +353,9 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     <div class="viewtabs" role="group" aria-label="View">
       <button type="button" id="viewMap" aria-pressed="true">Map</button>
       <button type="button" id="viewSep" aria-pressed="false">3D separation</button>
+      <button type="button" id="viewPerf" aria-pressed="false">Models</button>
     </div>
+    <section class="sep perf" id="perf" hidden aria-label="Model performance"></section>
     <section class="sep" id="sep" hidden aria-label="3D separation viewer">
       <div class="sep-ctl">
         <div class="ctl"><label for="axX">X axis</label><select id="axX"></select></div>
@@ -342,7 +372,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
         <div>
           <h2>Colour key</h2>
           <div class="legend-list" id="sepLegend"></div>
-          <p class="note" style="margin-top:8px">Labels come from <span class="num">labels/known_runs.toml</span> in the repo. Most extents are approximate (whole steep river) until real put-ins and take-outs are added. Drag to rotate, scroll to zoom, click a point to see it on the map.</p>
+          <p class="note" style="margin-top:8px">Labels come from <span class="num">labels/known_runs.toml</span> and the guide research (<span class="num">labels/guide_research.json</span>) in the repo. Most extents are approximate (whole steep river) until real put-ins and take-outs are added. Drag to rotate, scroll to zoom, click a point to see it on the map.</p>
         </div>
         <div>
           <h2>How well each axis separates runnable from unknown</h2>
@@ -363,6 +393,9 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
   "use strict";
   const DATA = JSON.parse(document.getElementById("rf-data").textContent);
   const REGIONS = DATA.regions, MODEL = DATA.model;
+  const REG = DATA.registry || null, MODELS = REG ? REG.models : [];
+  const modelById = (id) => MODELS.find((m) => m.id === id);
+  const parseHash = () => { const [r, m] = decodeURIComponent(location.hash.slice(1)).split("/"); return { region: r || "", model: m || "" }; };
   const $ = (id) => document.getElementById(id);
   const MIN_LOG = Math.log10(0.05), MAX_LOG = 2.0;     // slider range: 0.05 .. 100 km²
   // Sequential blue, small -> large catchment. The pale steps would vanish into the hillshade, so
@@ -537,6 +570,32 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     R.loaded = true;
   }
 
+  // Per-model scores: <region>_m_<model>.txt = base64 of uint16 percentile x 100, then uint8 flags
+  // (bits 0-1: 1 trained on, 2 test river; bit 2: on a guide-listed section), in viewer reach order.
+  async function applyModel(R) {
+    const S = R.segments; if (!S || !state.model) return;
+    if (!S._packedReg) S._packedReg = S.reg;
+    R.mscore = R.mscore || {};
+    let M = R.mscore[state.model];
+    if (!M) {
+      try {
+        const res = await fetch(`${R.id}_m_${state.model}.txt`);
+        if (!res.ok) throw new Error(res.status);
+        const txt = atob((await res.text()).trim()), n = S.g.length, buf = new ArrayBuffer(txt.length), b = new Uint8Array(buf);
+        for (let i = 0; i < txt.length; i++) b[i] = txt.charCodeAt(i);
+        const q = new Uint16Array(buf, 0, n), fl = new Uint8Array(buf, 2 * n, n);
+        M = { reg: Array.from(q, (v) => v / 100), role: Array.from(fl) };
+      } catch (e) { M = { reg: S._packedReg, role: null }; }
+      R.mscore[state.model] = M;
+    }
+    S.reg = M.reg; S.role = M.role;
+  }
+
+  function setHash() {
+    const h = "#" + state.region + (state.model && MODELS.length ? "/" + state.model : "");
+    if (location.hash !== h) history.replaceState(null, "", h);
+  }
+
   async function loadRegion(R) {
     if (cache[R.id]) return cache[R.id];
     await fetchRegion(R);
@@ -650,7 +709,8 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     g: [(RP.gradient_band || [5, 20, 80, 150])[1], (RP.gradient_band || [5, 20, 80, 150])[2]],
     haMeasure: RP.ha_measure || "melton", haHi: {}, w: (RP.weights || [1, 1, 1]).slice(),
     threshold: RP.threshold ?? 0.7, gate: RP.gate ?? true, flowScaled: RP.flow_scaled ?? true,
-    minLen: RP.min_length_km ?? 1, maxGap: RP.max_gap_segments ?? 1, colorBy: "pareto", showScores: canHover,
+    minLen: RP.min_length_km ?? 1, maxGap: RP.max_gap_segments ?? 1, colorBy: MODELS.length ? "reg" : "pareto", showScores: canHover,
+    hideListed: false,
     weights: Object.assign({}, MODEL ? MODEL.default_weights : {}),
   };
   Object.keys(HAD).forEach((k) => { runState.haHi[k] = HAD[k][1]; });
@@ -730,11 +790,13 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
       const len = members.reduce((t, m) => t + S.len[m], 0) / 1000;
       if (len < runState.minLen) continue;
       const rid = runs.length; members.forEach((m) => { runId[m] = rid; });
-      const counts = {}; let ho = false, score = 0, s50 = 0, eg = 0, wsc = 0;
+      const counts = {}; let ho = false, score = 0, s50 = 0, eg = 0, wsc = 0, role = 0, guide = false;
       const has = [];
       members.forEach((m) => {
         if (S.r[m] >= 0) counts[S.r[m]] = (counts[S.r[m]] || 0) + 1;
         ho = ho || S.ho[m] === 1; score = Math.max(score, scores[m]); s50 = Math.max(s50, S.s50[m]);
+        const rv = segRole(S, m); if (rv === 1) role = 1; else if (rv === 2 && role !== 1) role = 2;
+        guide = guide || (S.role ? (S.role[m] & 4) > 0 : false);
         eg += D.effG[m] * S.len[m]; wsc += D.ws[m] * S.len[m]; has.push(D.ha[m]);
       });
       has.sort((a, b) => a - b);
@@ -743,7 +805,8 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
       const first = members[0], last = members[members.length - 1], drop = S.zt[first] - S.zb[last];
       runs.push({ rid, members, len, drop, grad: drop / (len * 1000) * 1000, effG: eg / (len * 1000), s50,
                   aTop: S.a[first], aBot: S.a[last], maf: S.maf[last], ha: has[has.length >> 1], ws: wsc / (len * 1000),
-                  river, score, status: listed.has(river) ? "listed" : ho ? "heldout" : "candidate" });
+                  river, score, role, guide: guide || listed.has(river),
+                  status: listed.has(river) || guide ? "listed" : role === 2 ? "heldout" : "candidate" });
     }
     const layers = paretoLayers(runs.map((r) => [Math.log10(Math.max(r.maf, 1e-3)), r.effG, r.ha]));
     runs.forEach((r, i) => { r.layer = layers[i]; if (runState.colorBy === "pareto" || runState.colorBy === "wsum") r.score = 100 * r.ws; });
@@ -755,8 +818,14 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     return `rgb(${[0, 1, 2].map((k) => Math.round(a[k] + (b[k] - a[k]) * Math.min(Math.max(t, 0), 1))).join(",")})`;
   }
 
+  // 0 = no label, 1 = the selected model trained on it, 2 = held out from it (its test set).
+  // Without per-model files (single-file viewer) fall back to the packed v1 labels.
+  function segRole(S, m) { return S.role ? S.role[m] & 3 : S.lab[m] === 1 ? 1 : S.ho[m] === 1 ? 2 : 0; }
+  const ROLE_PILL = ['<span class="pill role-pred">Prediction</span>', '<span class="pill role-train">Training river</span>', '<span class="pill role-test">Test river</span>'];
+  const ROLE_TEXT = ["prediction (no label seen)", "training river", "test river (held out)"];
+
   function sortCands(runs) {
-    const c = runs.filter((r) => r.status !== "listed");
+    const c = runState.hideListed ? runs.filter((r) => r.status !== "listed") : runs.slice();
     return runState.colorBy === "pareto" ? c.sort((a, b) => a.layer - b.layer || b.ws - a.ws) : c.sort((a, b) => b.score - a.score);
   }
 
@@ -784,7 +853,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
   }
 
   function runSummary(r) {
-    return `<b>${r.river || "Unnamed creek"}</b> · ${r.status === "listed" ? "in guides" : r.status === "heldout" ? "held-out reference" : "not in guides"}${r.layer === 1 ? " · Pareto frontier" : ""}<br>`
+    return `<b>${r.river || "Unnamed creek"}</b> · ${r.guide ? "in guides" : "not in guides"} · ${ROLE_TEXT[r.role]}${r.layer === 1 ? " · Pareto frontier" : ""}<br>`
       + `<span class="num">${r.len.toFixed(1)} km · ${r.grad.toFixed(0)} m/km · drop ${r.drop.toFixed(0)} m · steepest 50 m ${r.s50.toFixed(0)} m/km<br>`
       + `${fmtKm2(r.aBot)} km² · flood ${r.maf.toFixed(0)} m³/s · height-to-area ${r.ha.toFixed(3)} · score ${r.score.toFixed(0)}</span>`;
   }
@@ -961,11 +1030,12 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
 
     const cands = sortCands(runs);
     const nFront = runs.filter((r) => r.layer === 1).length;
-    $("runCount").innerHTML = `<b>${runs.length}</b> runs: <b>${cands.length}</b> not in the guides, <b>${runs.length - cands.length}</b> on rivers in the guides, <b>${nFront}</b> on the Pareto frontier.`;
+    const nGuide = runs.filter((r) => r.status === "listed").length;
+    $("runCount").innerHTML = `<b>${runs.length}</b> runs: <b>${runs.length - nGuide}</b> not in the guides, <b>${nGuide}</b> on rivers in the guides, <b>${nFront}</b> on the Pareto frontier.`;
     const box = $("cands"); box.innerHTML = "";
     cands.slice(0, 12).forEach((r, k) => {
       const b = document.createElement("button"); b.type = "button"; b.className = "cand";
-      const pill = r.status === "heldout" ? '<span class="pill unlisted">Held out</span>' : '<span class="pill cand-pill">Not in guides</span>';
+      const pill = ROLE_PILL[r.role] + (r.guide ? ' <span class="pill guide">In guides</span>' : "");
       const front = r.layer === 1 ? ' <span class="pill">Frontier</span>' : "";
       b.innerHTML = `<span class="rank">#${k + 1}</span><span class="nm">${r.river || "Unnamed creek"} ${pill}${front}</span><span class="sc">${r.score.toFixed(0)}</span>`
         + `<span class="meta">${r.len.toFixed(1)} km · ${r.grad.toFixed(0)} m/km · flood ${r.maf.toFixed(0)} m³/s · h/a ${r.ha.toFixed(3)}</span>`;
@@ -975,6 +1045,16 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     if (!cands.length) box.innerHTML = '<p class="note">No runs match these settings.</p>';
 
     const ho = $("holdout");
+    if (S.role) {
+      const tests = cands.map((r, k) => [r, k]).filter(([r]) => r.role === 2);
+      const m = modelById(state.model);
+      if (!tests.length) { ho.innerHTML = `<p class="note">No run on a ${m ? m.title.split(":")[0] : "model"} test river passes these settings here. ${m && m.test_rivers.length ? `${m.test_rivers.length} rivers are held out nationally; the Models page has all of them.` : "This model has no test rivers."}</p>`; return; }
+      ho.innerHTML = `<span class="note">Rivers held out from ${m ? m.title.split(":")[0] : "the model"}'s training, and where their best run ranks in the list below (${cands.length} runs):</span>`
+        + tests.filter(([r], i, a) => a.findIndex(([q]) => q.river === r.river) === i).slice(0, 8)
+          .map(([r, k]) => `<span><b>#${k + 1}</b> ${r.river || "Unnamed creek"} <span class="note num">score ${r.score.toFixed(0)}</span></span>`).join("")
+        + (runState.colorBy === "reg" ? "" : '<span class="note">Rank by "Selected model" to see the model\'s own ranking.</span>');
+      return;
+    }
     const hoName = (C.R.runs.find((r) => r.status !== "listed") || {}).river;
     if (!hoName) { ho.innerHTML = '<p class="note">This region has no held-out river. The Mangakarengorengo test lives in the Kaimai Range.</p>'; return; }
     const idx = cands.findIndex((r) => r.status === "heldout");
@@ -1027,10 +1107,10 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     state.region = R.id;
     document.querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.id === R.id)));
     $("regionSel").value = R.id;
-    if (location.hash.slice(1) !== R.id) history.replaceState(null, "", "#" + R.id);
+    setHash();
     if (!cache[R.id]) $("region-desc").textContent = `Loading ${R.title}…`;
     let D;
-    try { D = await loadRegion(R); } catch (e) { $("region-desc").textContent = e.message; return; }
+    try { D = await loadRegion(R); await applyModel(R); } catch (e) { $("region-desc").textContent = e.message; return; }
     if (state.region !== R.id) return;   // another region was picked while this one loaded
     map.setMaxBounds(null);
     map.fitBounds(R.bounds);   // set the view first: Leaflet only adds layers once the map has one
@@ -1190,7 +1270,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
       for (let i = 0; i < S.g.length; i++) {
         if (S.a[i] < 2) continue;
         const v = {}; Object.keys(AXES).forEach((k) => { v[k] = AXES[k].seg(S, i); });
-        pts.push({ v, sta: S.sta[i], gr: S.gr[i], held: S.lho[i] === 1, river: S.r[i] >= 0 ? S.rivers[S.r[i]] : "", region: R.title,
+        pts.push({ v, sta: S.sta[i] || (S.role && (S.role[i] & 4) ? 1 : 0), gr: S.gr[i], held: S.role ? (S.role[i] & 3) === 2 : S.lho[i] === 1, river: S.r[i] >= 0 ? S.rivers[S.r[i]] : "", region: R.title,
                    R, members: [i], len: S.len[i] / 1000 });
       }
       return pts;
@@ -1201,7 +1281,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
       r.agg = agg; r.grad = r.members.reduce((t, m) => t + S.g[m] * S.len[m], 0) / (r.len * 1000);
       const v = {}; Object.keys(AXES).forEach((k) => { v[k] = AXES[k].run(r); });
       let sta = 0, gr = null, held = false;
-      r.members.forEach((m) => { sta = Math.max(sta, S.sta[m]); if (S.gr[m] != null) gr = Math.max(gr ?? 0, S.gr[m]); held = held || S.lho[m] === 1; });
+      r.members.forEach((m) => { sta = Math.max(sta, S.sta[m] || (S.role && (S.role[m] & 4) ? 1 : 0)); if (S.gr[m] != null) gr = Math.max(gr ?? 0, S.gr[m]); held = held || (S.role ? (S.role[m] & 3) === 2 : S.lho[m] === 1); });
       pts.push({ v, sta, gr, held, river: r.river, region: R.title, R, members: r.members, len: r.len });
     });
     return pts;
@@ -1224,6 +1304,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     const plot = $("sepPlot");
     try { await loadPlotly(); } catch (e) { plot.innerHTML = `<p class="note" style="padding:16px">${e.message} Check the connection and reopen this view.</p>`; return; }
     const regions = sepState.scope === "all" ? REGIONS.filter((R) => cache[R.id]) : REGIONS.filter((R) => R.id === state.region);
+    await Promise.all(regions.map(applyModel));
     const pts = (await Promise.all(regions.map(regionPoints))).flat();
     const dark = (parseFloat(css("--ramp-dir")) || 1) < 0, ramp = dark ? GRADE_DARK : GRADE_LIGHT;
     const fg = css("--fg"), muted = css("--muted"), line = css("--line"), surf = css("--surface");
@@ -1275,7 +1356,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
       + `<div>Runnable with a known grade:<div class="gradebar" style="background:linear-gradient(90deg,${ramp.join(",")})"></div><div class="gradeticks"><span>II</span><span>III</span><span>IV</span><span>V</span><span>VI</span></div></div>`
       + `<div><span class="sw" style="background:var(--unk)"></span>Unknown: not yet known whether it can be paddled (${nUnk})</div>`
       + `<div><span class="sw" style="background:var(--no)"></span>Not runnable${nNo ? ` (${nNo})` : ": none labelled yet"}</div>`
-      + `<div><span class="sw" style="background:transparent;border:2px solid var(--fg);border-radius:2px;transform:rotate(45deg)"></span>Diamond: held out from training (Mangakarengorengo)</div>`;
+      + `<div><span class="sw" style="background:transparent;border:2px solid var(--fg);border-radius:2px;transform:rotate(45deg)"></span>Diamond: a test river for the selected model (held out from its training)</div>`;
     const rows = ax.map((k) => {
       const pos = pts.filter((p) => p.sta === 1).map((p) => p.v[k]), neg = pts.filter((p) => p.sta === 0).map((p) => p.v[k]);
       const a = auc(pos, neg);
@@ -1285,13 +1366,78 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
       + `<tr><td colspan="4" class="note">${nRun} runnable and ${nUnk} unknown points.</td></tr>`;
   }
 
+  // ---------- Models page: how each model does on held-out rivers ----------
+  let perfOpen = false;
+  const perfState = { split: null, coords: "any" };
+  const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const fmtP = (v, d = 0) => (v == null || !isFinite(v) ? "–" : (100 * v).toFixed(d) + "%");
+  const fmtN = (v, d = 1) => (v == null || !isFinite(v) ? "–" : (+v).toFixed(d));
+
+  function drawPerf() {
+    if (!perfOpen || !REG) return;
+    const E = REG.evaluations ? REG.evaluations.evaluations : [], splits = REG.evaluations ? REG.evaluations.splits : [];
+    if (!perfState.split) perfState.split = (splits.find((x) => x.name !== "reference") || splits[0] || {}).name;
+    const sp = splits.find((x) => x.name === perfState.split) || {};
+    const ev = (mid) => E.find((e) => e.model === mid && e.split === perfState.split && e.coords === perfState.coords);
+    const cur = modelById(state.model) || MODELS[MODELS.length - 1], ce = ev(cur.id) || {};
+    const order = MODELS.slice().reverse();
+    const splitOpts = splits.map((x) => `<option value="${esc(x.name)}"${x.name === perfState.split ? " selected" : ""}>${x.name === "reference" ? "Reference: the Mangakarengorengo only" : `Guide research: ${x.test.length} held-out rivers (${esc(x.name)})`}</option>`).join("");
+    const summary = order.map((m) => {
+      const e = ev(m.id) || {};
+      return `<tr class="${m.id === cur.id ? "sel" : ""}"><td class="wrap">${esc(m.title)}</td><td class="num">${e.test_rivers ?? "–"}${e.excluded_trained && e.excluded_trained.length ? ` <span class="note">(−${e.excluded_trained.length})</span>` : ""}</td>`
+        + `<td class="num">${fmtN(e.auc, 2)}</td><td class="num">${fmtN(e.auc_size_matched, 2)}</td><td class="num">${fmtP(e.recall_top10)}</td><td class="num">${fmtN(e.median_pct, 0)}</td></tr>`;
+    }).join("");
+    const rivers = (ce.rivers || []).map((r) => `<tr><td class="wrap">${esc(r.river)}</td><td>${esc(r.region)}</td><td>${esc(r.grade ?? "")}</td><td class="num">${r.reaches}</td>`
+      + `<td class="num">${fmtN(r.median_pct, 0)}</td><td class="num">${fmtN(r.median_pct_size_matched, 0)}</td><td class="num">${fmtN(r.best_pct, 0)}</td><td class="num">${fmtP(r.share_top10)}</td><td class="wrap note">${esc(r.coords)} · ${esc(r.extent)}</td></tr>`).join("");
+    const regs = (ce.regions || []).map((r) => `<tr><td>${esc(r.region)}</td><td class="num">${r.rivers}</td><td class="num">${r.reaches}</td><td class="num">${fmtN(r.median_pct, 0)}</td><td class="num">${fmtP(r.recall_top10)}</td><td class="num">${fmtN(r.auc_within_region, 2)}</td></tr>`).join("");
+    const feats = Object.keys(cur.coef);
+    const cmax = Math.max(...order.flatMap((m) => feats.map((f) => Math.abs(m.coef[f] || 0))), 1e-9);
+    const bar = (v) => { const w = Math.round(48 * Math.min(Math.abs(v) / cmax, 1)); return `<span class="cbar" aria-hidden="true">${v < 0 ? `<i class="neg" style="width:${w}px"></i><i></i>` : `<i></i><i class="pos" style="width:${w}px"></i>`}</span>`; };
+    const coefRows = feats.map((f) => `<tr><td class="wrap">${esc((REG.descriptions || {})[f] || f)}</td>${order.filter((m) => m.kind !== "baseline").map((m) => `<td class="num${m.id === cur.id ? " selc" : ""}">${fmtN(m.coef[f], 2)}${bar(m.coef[f] || 0)}</td>`).join("")}</tr>`).join("");
+    const trainList = cur.train_rivers.length ? cur.train_rivers.map((k) => esc(k.split(" | ")[0])).join(", ") : "none (not trained)";
+    const testList = cur.test_rivers.length ? cur.test_rivers.map((k) => esc(k.split(" | ")[0])).join(", ") : "none";
+    $("perf").innerHTML = `
+      <div class="explain">
+        <h2>How well do the models find known runs they were not trained on?</h2>
+        <p>Every model ranks all ${ce.background_reaches ? ce.background_reaches.toLocaleString("en-NZ") : ""} reaches of 2&nbsp;km² or more in NZ that are not on any known run (the <i>background</i>). A good model puts the reaches of <b>held-out guide rivers</b> near the top. Whole rivers were held out, never single reaches, and the split was fixed with a seed and saved in the repo (<span class="num">models/splits/</span>), so no model saw its test rivers.</p>
+        <p><b>AUC</b> is the chance that a random test reach scores above a random background reach: 0.5 is guessing, 1.0 is perfect. Guide runs sit on bigger rivers than most small creeks, so flood size alone already scores well (see the baseline). <b>Size-matched AUC</b> compares each test reach only with background reaches of similar flood size, so it shows what the terrain adds beyond "it is a big river". <b>Top-10% recall</b> is the share of test reaches the model puts in its top 10%. <b>Median percentile</b> is where the typical test reach lands (100 = top).</p>
+        <p>The background still holds runs nobody has listed, so all of these are lower bounds, and true precision cannot be measured: an unlisted reach scoring high may be a run nobody has written up. <b>Published coordinates only</b> re-scores the test rivers using only points the guides publish (inferred take-outs are replaced by the put-in plus the stated length).</p>
+      </div>
+      <div class="sep-ctl">
+        <div class="ctl"><label for="perfSplit">Test set</label><select id="perfSplit">${splitOpts}</select></div>
+        <div class="ctl"><label for="perfCoords">Test sections</label><select id="perfCoords"><option value="any"${perfState.coords === "any" ? " selected" : ""}>All coordinates, inferred included</option><option value="sourced"${perfState.coords === "sourced" ? " selected" : ""}>Published coordinates only</option></select></div>
+        <div class="ctl"><label for="perfModel">Model shown in detail</label><select id="perfModel">${order.map((m) => `<option value="${esc(m.id)}"${m.id === cur.id ? " selected" : ""}>${esc(m.title)}</option>`).join("")}</select></div>
+      </div>
+      <div><h2>All models on this test set</h2>
+        <div class="tablewrap"><table class="val"><tr><th>Model</th><th>Test rivers</th><th>AUC</th><th>Size-matched AUC</th><th>Top-10% recall</th><th>Median percentile</th></tr>${summary}</table></div>
+        <p class="note" style="margin-top:6px">(−n): test rivers left out for that model because it was trained on them (v1 trained on reference rivers that the guide research lists again). ${sp.strata ? `Split: ${esc(sp.strata)}, seed ${esc(sp.seed ?? "fixed")}.` : ""}</p></div>
+      <div class="explain"><h2>${esc(cur.title)}</h2><p>${esc(cur.description)}</p>
+        <p class="note">Trained on ${cur.train_rivers.length} rivers${cur.positives ? ` (${cur.positives.toLocaleString("en-NZ")} positive reaches)` : ""}; ${cur.test_rivers.length} held out.${cur.checkpoint_check ? ` Checkpoint check: reproduces the first national run's scores within ${cur.checkpoint_check.max_abs_pct_diff} percentile points.` : ""}</p>
+        <details><summary>Training rivers</summary><p class="note">${trainList}</p></details>
+        <details><summary>Test rivers</summary><p class="note">${testList}</p></details></div>
+      <div><h2>Each test river (${esc(cur.title.split(":")[0])})</h2>
+        ${rivers ? `<div class="tablewrap"><table class="val"><tr><th>River</th><th>Region</th><th>Grade</th><th>Reaches</th><th>Median pct</th><th>Size-matched</th><th>Best pct</th><th>In top 10%</th><th>Coordinates · extent</th></tr>${rivers}</table></div>` : '<p class="note">No test rivers for this model on this test set.</p>'}
+        <p class="note" style="margin-top:6px">Percentiles are among the background reaches (100 = top). Size-matched ranks only against reaches of similar flood size.</p></div>
+      <div class="perf-grid">
+        <div><h2>By region</h2>${regs ? `<div class="tablewrap"><table class="val"><tr><th>Region</th><th>Rivers</th><th>Reaches</th><th>Median pct</th><th>Top-10% recall</th><th>AUC in region</th></tr>${regs}</table></div>` : '<p class="note">–</p>'}
+          <p class="note" style="margin-top:6px">AUC in region ranks test reaches against that region's background only.</p></div>
+        <div><h2>Coefficients</h2><div class="tablewrap"><table class="val"><tr><th>Feature (standardised)</th>${order.filter((m) => m.kind !== "baseline").map((m) => `<th>${esc(m.id)}</th>`).join("")}</tr>${coefRows}</table></div>
+          <p class="note" style="margin-top:6px">Weights on standardised features: blue bars raise the score, orange bars lower it. Features are correlated (gradient, k_sn and stream power move together), so read signs of single weights with care; compare models side by side.</p></div>
+      </div>`;
+    $("perfSplit").addEventListener("change", (e) => { perfState.split = e.target.value; drawPerf(); });
+    $("perfCoords").addEventListener("change", (e) => { perfState.coords = e.target.value; drawPerf(); });
+    $("perfModel").addEventListener("change", (e) => setModel(e.target.value));
+  }
+
   function setView(sep) {
-    sepState.open = sep;
-    $("sep").hidden = !sep;
-    document.body.classList.toggle("sep-open", sep);
-    $("viewMap").setAttribute("aria-pressed", String(!sep));
-    $("viewSep").setAttribute("aria-pressed", String(sep));
-    if (sep) drawSeparation(); else map.invalidateSize();
+    const v = sep === true ? "sep" : sep || "map";
+    sepState.open = v === "sep"; perfOpen = v === "perf";
+    $("sep").hidden = v !== "sep"; $("perf").hidden = v !== "perf";
+    document.body.classList.toggle("sep-open", v !== "map");
+    $("viewMap").setAttribute("aria-pressed", String(v === "map"));
+    $("viewSep").setAttribute("aria-pressed", String(v === "sep"));
+    $("viewPerf").setAttribute("aria-pressed", String(v === "perf"));
+    if (v === "sep") drawSeparation(); else if (v === "perf") drawPerf(); else map.invalidateSize();
   }
   ["axX", "axY", "axZ"].forEach((id, k) => {
     const el = $(id);
@@ -1303,6 +1449,9 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
   $("sepScope").addEventListener("change", (e) => { sepState.scope = e.target.value; drawSeparation(); });
   $("viewMap").addEventListener("click", () => setView(false));
   $("viewSep").addEventListener("click", () => setView(true));
+  $("viewPerf").addEventListener("click", () => setView("perf"));
+  if (!MODELS.length) $("viewPerf").hidden = true;
+  $("hideListed").addEventListener("change", (e) => { runState.hideListed = e.target.checked; scheduleRuns(); });
 
   // On touch screens, the first-use hint gets out of the way once the map is moved.
   if (!canHover) map.once("movestart", () => { const ro = $("readout"); if (!ro.querySelector(".ro-close")) ro.hidden = true; });
@@ -1311,8 +1460,36 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
   const rethemed = () => { if (state.region) { buildLayers(cache[state.region].R); schedule(); updateRuns(); if (sepState.open) drawSeparation(); if (catchSel) showCatchment(catchSel.R, catchSel.seg, catchSel.label, false); } };
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", rethemed);
   new MutationObserver(rethemed).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-  window.addEventListener("hashchange", () => { const id = location.hash.slice(1); if (id && id !== state.region) selectRegion(id); });
+  window.addEventListener("hashchange", () => {
+    const h = parseHash();
+    const newModel = h.model && h.model !== state.model && modelById(h.model);
+    if (h.region && h.region !== state.region) {
+      if (newModel) { state.model = h.model; $("modelSel").value = h.model; $("modelDesc").textContent = modelById(h.model).description; }
+      selectRegion(h.region);
+    } else if (newModel) setModel(h.model);
+  });
 
-  selectRegion(location.hash.slice(1) || REGIONS[0].id);
+  // ---------- model picker ----------
+  function setModel(id) {
+    state.model = id; $("modelSel").value = id;
+    const m = modelById(id);
+    $("modelDesc").textContent = m ? m.description : "";
+    setHash();
+    if (runState.colorBy !== "reg") { runState.colorBy = "reg"; $("colorBy").value = "reg"; }
+    const R = REGIONS.find((r) => r.id === state.region);
+    if (R && R.segments) applyModel(R).then(() => { updateRuns(); if (sepState.open) drawSeparation(); if (perfOpen) drawPerf(); });
+    else if (perfOpen) drawPerf();
+  }
+  if (MODELS.length) {
+    $("modelBox").hidden = false;
+    MODELS.slice().reverse().forEach((m) => { const o = document.createElement("option"); o.value = m.id; o.textContent = m.title; $("modelSel").appendChild(o); });
+    const h = parseHash();
+    state.model = modelById(h.model) ? h.model : REG.default;
+    $("modelSel").value = state.model; $("modelDesc").textContent = modelById(state.model).description;
+    $("modelSel").addEventListener("change", (e) => setModel(e.target.value));
+  }
+  $("colorBy").value = runState.colorBy;
+
+  selectRegion(parseHash().region || REGIONS[0].id);
 })();
 </script>

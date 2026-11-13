@@ -1,0 +1,112 @@
+{
+ "name": "reference",
+ "seed": null,
+ "test_frac": null,
+ "created": "2026-11-13",
+ "strata": "fixed: the Mangakarengorengo was always the test",
+ "train": [
+  "Mangakahia River | tutamoe",
+  "Ohinemuri River | karangahake",
+  "Tuakopae Stream | kaimai",
+  "Waima River | tutamoe",
+  "Waipoua River | tutamoe",
+  "Wairoa River | kaimai"
+ ],
+ "test": [
+  "Mangakarengorengo River | kaimai"
+ ],
+ "sections": [
+  {
+   "region": "kaimai",
+   "river": "Wairoa River",
+   "status": "runnable",
+   "source": "regions/kaimai.toml",
+   "bbox": [
+    175.8,
+    -38.04,
+    176.19,
+    -37.66
+   ],
+   "coords": "none"
+  },
+  {
+   "region": "kaimai",
+   "river": "Tuakopae Stream",
+   "status": "runnable",
+   "source": "regions/kaimai.toml",
+   "bbox": [
+    175.8,
+    -38.04,
+    176.19,
+    -37.66
+   ],
+   "coords": "none"
+  },
+  {
+   "region": "kaimai",
+   "river": "Mangakarengorengo River",
+   "status": "runnable",
+   "held_out": true,
+   "source": "regions/kaimai.toml",
+   "bbox": [
+    175.8,
+    -38.04,
+    176.19,
+    -37.66
+   ],
+   "coords": "none"
+  },
+  {
+   "region": "karangahake",
+   "river": "Ohinemuri River",
+   "status": "runnable",
+   "source": "regions/karangahake.toml",
+   "bbox": [
+    175.68,
+    -37.58,
+    175.95,
+    -37.3
+   ],
+   "coords": "none"
+  },
+  {
+   "region": "tutamoe",
+   "river": "Waima River",
+   "status": "runnable",
+   "source": "regions/tutamoe.toml",
+   "bbox": [
+    173.45,
+    -35.75,
+    173.95,
+    -35.35
+   ],
+   "coords": "none"
+  },
+  {
+   "region": "tutamoe",
+   "river": "Waipoua River",
+   "status": "runnable",
+   "source": "regions/tutamoe.toml",
+   "bbox": [
+    173.45,
+    -35.75,
+    173.95,
+    -35.35
+   ],
+   "coords": "none"
+  },
+  {
+   "region": "tutamoe",
+   "river": "Mangakahia River",
+   "status": "runnable",
+   "source": "regions/tutamoe.toml",
+   "bbox": [
+    173.45,
+    -35.75,
+    173.95,
+    -35.35
+   ],
+   "coords": "none"
+  }
+ ]
+}
