@@ -25,6 +25,13 @@ HARD_ROCKGROUPS = {"basalt", "andesite", "dacite", "rhyolite", "ignimbrite", "gr
                    "diorite", "gabbro", "schist", "gneiss", "volcanic breccia", "lava"}
 
 
+def hard_rock(p: dict) -> int:
+    """1 when a GNS geology unit is resistant rock (volcanic, plutonic, metamorphic, greywacke, ...)."""
+    return int((p.get("rockgroup") or "").strip().lower() in HARD_ROCKGROUPS
+               or (p.get("rockclass") or "").strip().lower() in {"volcanic", "volcanic rock", "plutonic", "metamorphic"}
+               or "ignimbrite" in (p.get("lithology") or "").lower())
+
+
 def _query_all(url: str, params: dict) -> list[dict]:
     feats, off = [], 0
     while True:
@@ -51,12 +58,7 @@ def _envelope(bbox_wgs84) -> dict:
 def fetch_geology(bbox_wgs84, out_dir: Path) -> Path:
     feats = _query_all(GEOLOGY, dict(_envelope(bbox_wgs84), outFields=GEOLOGY_FIELDS))
     for f in feats:
-        p = f["properties"]
-        p["hard_rock"] = int(
-            (p.get("rockgroup") or "").strip().lower() in HARD_ROCKGROUPS
-            or (p.get("rockclass") or "").strip().lower() in {"volcanic", "volcanic rock", "plutonic", "metamorphic"}
-            or "ignimbrite" in (p.get("lithology") or "").lower()
-        )
+        f["properties"]["hard_rock"] = hard_rock(f["properties"])
     path = out_dir / "geology_nztm.geojson"
     path.write_text(json.dumps({"type": "FeatureCollection", "features": feats,
                                 "crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:EPSG::2193"}}}))

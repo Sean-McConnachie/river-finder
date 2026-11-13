@@ -86,8 +86,16 @@ def _heap_pop(hk, hs, hv, size):
     return top, size
 
 
+def priority_flood(z, valid, border_seed=None):
+    """See ``_priority_flood``. ``border_seed`` (2-D bool) limits which grid-border cells act as
+    outlets; by default every border cell does. Cells next to nodata (the sea) always do."""
+    if border_seed is None:
+        border_seed = np.ones(z.shape, dtype=np.bool_)
+    return _priority_flood(z, valid, np.ascontiguousarray(border_seed, dtype=np.bool_))
+
+
 @njit(cache=True)
-def priority_flood(z, valid):
+def _priority_flood(z, valid, border_seed):
     """Fill depressions and assign a drainage receiver to every valid cell.
 
     Parameters
@@ -107,6 +115,7 @@ def priority_flood(z, valid):
     n = nr * nc
     zf = z.ravel()
     vf = valid.ravel()
+    bseed = border_seed.ravel()
     filled = zf.astype(np.float64).copy()
     rec = np.full(n, -1, dtype=np.int64)
     closed = np.zeros(n, dtype=np.uint8)
@@ -130,11 +139,14 @@ def priority_flood(z, valid):
         nvalid += 1
         r = i // nc
         c = i - r * nc
-        seed = r == 0 or c == 0 or r == nr - 1 or c == nc - 1
+        seed = (r == 0 or c == 0 or r == nr - 1 or c == nc - 1) and bseed[i]
         if not seed:
             for k in range(8):
-                j = (r + DR[k]) * nc + (c + DC[k])
-                if not vf[j]:
+                rr = r + DR[k]
+                cc = c + DC[k]
+                if rr < 0 or cc < 0 or rr >= nr or cc >= nc:
+                    continue
+                if not vf[rr * nc + cc]:
                     seed = True
                     break
         if seed:
@@ -455,14 +467,15 @@ def edge_mask(shape: tuple[int, int]) -> np.ndarray:
     return m
 
 
-def route(dem: np.ndarray, valid: np.ndarray, cellsize: float, weight: np.ndarray | None = None):
+def route(dem: np.ndarray, valid: np.ndarray, cellsize: float, weight: np.ndarray | None = None,
+          border_seed: np.ndarray | None = None):
     """Run the full pipeline. Returns dict with filled, rec, area_m2, truncated (2-D where sensible).
 
     ``weight`` defaults to cell area in m^2; pass e.g. cell area x rainfall for a flow proxy.
     """
     dem = np.ascontiguousarray(dem, dtype=np.float64)
     valid = np.ascontiguousarray(valid, dtype=np.bool_)
-    filled, pf_rec, order = priority_flood(dem, valid)
+    filled, pf_rec, order = priority_flood(dem, valid, border_seed)
     rec = d8_receivers(filled, valid, pf_rec, float(cellsize))
     rec = resolve_flats(filled, valid, rec, pf_rec)
     if weight is None:

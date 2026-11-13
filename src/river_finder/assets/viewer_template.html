@@ -213,10 +213,11 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
   <aside class="panel" aria-label="Controls">
     <header style="display:grid;gap:4px">
       <h1>River Finder</h1>
-      <p class="sub">River sections from LINZ LiDAR at 5&nbsp;m, scored on flow, gradient and height-to-area. Orange lines are runs that are not in the guides; thicker ones are on the Pareto frontier.</p>
+      <p class="sub">River sections from LINZ elevation data (8&nbsp;m nationally, 5&nbsp;m LiDAR in the reference areas), scored on flow, gradient and height-to-area. Orange lines are runs that are not in the guides; thicker ones are on the Pareto frontier.</p>
     </header>
 
     <nav class="tabs" role="tablist" id="tabs" aria-label="Region"></nav>
+    <div class="ctl" id="regionPick" hidden><label for="regionSel">Region</label><select id="regionSel"></select></div>
     <p class="sub" id="region-desc"></p>
 
     <section class="ctl" aria-label="Run finder">
@@ -334,7 +335,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
           <option value="runs">Runs (current run-finder settings)</option>
           <option value="reaches">Every reach over 2 km²</option></select></div>
         <div class="ctl"><label for="sepScope">Regions</label><select id="sepScope">
-          <option value="all">All regions</option><option value="one">This region only</option></select></div>
+          <option value="all">All loaded regions</option><option value="one">This region only</option></select></div>
       </div>
       <div id="sepPlot" role="img" aria-label="3D scatter of the selected parameters"><p class="note" style="padding:16px">Loading the 3D plot…</p></div>
       <div class="sep-foot">
@@ -488,8 +489,55 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
   const cache = {};
   let overlay = null, rec2Layer = null, runsLayer = null, clickMarker = null, frame = 0;
 
+  // Multi-file build: a region entry may only hold {id, title, group, src, bounds}. Its data
+  // (and packed segments) are fetched the first time it is opened.
+  function decodeSegments(buf, H, info) {
+    const n = H.n, S = Object.assign({}, info);
+    H.fields.forEach((f) => {
+      const out = new Array(n);
+      if (f.kind === "i32") { const a = new Int32Array(buf, f.off, n); for (let i = 0; i < n; i++) out[i] = a[i]; }
+      else if (f.kind === "u8") { const a = new Uint8Array(buf, f.off, n); for (let i = 0; i < n; i++) out[i] = a[i]; }
+      else {
+        const a = new Uint16Array(buf, f.off, n);
+        for (let i = 0; i < n; i++) {
+          const q = a[i];
+          out[i] = f.kind === "u16log" ? 10 ** (q * f.scale + f.add)
+            : f.kind === "u16null" ? (q === 0 ? null : (q - 1) * f.scale + f.add) : q * f.scale + f.add;
+        }
+      }
+      S[f.k] = out;
+    });
+    const nf = H.z.nf, z = new Int8Array(buf, H.z.off, n * nf);
+    S.z = new Array(n);
+    for (let i = 0; i < n; i++) { const row = new Array(nf); for (let k = 0; k < nf; k++) row[k] = z[i * nf + k] * H.z.scale; S.z[i] = row; }
+    const C = H.coords, cnt = new Uint16Array(buf, C.count, n), first = new Int32Array(buf, C.first, 2 * n),
+      del = new Int16Array(buf, C.delta, 2 * C.ndelta), sc = C.scale;
+    S.c = new Array(n);
+    for (let i = 0, p = 0; i < n; i++) {
+      let x = first[2 * i], y = first[2 * i + 1];
+      const pts = [[x * sc, y * sc]];
+      for (let k = 1; k < cnt[i]; k++, p++) { x += del[2 * p]; y += del[2 * p + 1]; pts.push([x * sc, y * sc]); }
+      S.c[i] = pts;
+    }
+    return S;
+  }
+
+  async function fetchRegion(R) {
+    if (!R.src || R.loaded) return;
+    const res = await fetch(R.src);
+    if (!res.ok) throw new Error(`Could not load ${R.title} (${res.status}).`);
+    Object.assign(R, await res.json());
+    if (R.segBin) {
+      const b = await fetch(R.segBin);
+      if (!b.ok) throw new Error(`Could not load the ${R.title} reaches (${b.status}).`);
+      R.segments = decodeSegments(await b.arrayBuffer(), R.segHead, R.segInfo);
+    }
+    R.loaded = true;
+  }
+
   async function loadRegion(R) {
     if (cache[R.id]) return cache[R.id];
+    await fetchRegion(R);
     const [hs, area, trunc] = await Promise.all([
       decodeGray(R.hillshade, R.width, R.height), decodeGray(R.area, R.width, R.height), decodeGray(R.trunc, R.width, R.height)]);
     const canvas = document.createElement("canvas"); canvas.width = R.width; canvas.height = R.height;
@@ -965,8 +1013,12 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     const R = REGIONS.find((r) => r.id === id) || REGIONS[0];
     state.region = R.id;
     document.querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.id === R.id)));
+    $("regionSel").value = R.id;
     if (location.hash.slice(1) !== R.id) history.replaceState(null, "", "#" + R.id);
-    const D = await loadRegion(R);
+    if (!cache[R.id]) $("region-desc").textContent = `Loading ${R.title}…`;
+    let D;
+    try { D = await loadRegion(R); } catch (e) { $("region-desc").textContent = e.message; return; }
+    if (state.region !== R.id) return;   // another region was picked while this one loaded
     map.setMaxBounds(null);
     map.fitBounds(R.bounds);   // set the view first: Leaflet only adds layers once the map has one
     map.setMaxBounds(L.latLngBounds(R.bounds).pad(0.4));
@@ -979,8 +1031,18 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
   }
 
   // ---------- controls ----------
-  const tabs = $("tabs");
-  REGIONS.forEach((R) => {
+  // Few regions: tabs. Many (the national build): a grouped drop-down.
+  const tabs = $("tabs"), sel = $("regionSel");
+  if (REGIONS.length > 4) {
+    tabs.hidden = true; $("regionPick").hidden = false;
+    const groups = {};
+    REGIONS.forEach((R) => {
+      const gname = R.group || "Regions";
+      if (!groups[gname]) { groups[gname] = document.createElement("optgroup"); groups[gname].label = gname; sel.appendChild(groups[gname]); }
+      const o = document.createElement("option"); o.value = R.id; o.textContent = R.title; groups[gname].appendChild(o);
+    });
+    sel.addEventListener("change", () => selectRegion(sel.value));
+  } else REGIONS.forEach((R) => {
     const b = document.createElement("button");
     b.className = "tab"; b.type = "button"; b.setAttribute("role", "tab"); b.dataset.id = R.id; b.textContent = R.title;
     b.addEventListener("click", () => selectRegion(R.id));
@@ -1148,7 +1210,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     if (!sepState.open) return;
     const plot = $("sepPlot");
     try { await loadPlotly(); } catch (e) { plot.innerHTML = `<p class="note" style="padding:16px">${e.message} Check the connection and reopen this view.</p>`; return; }
-    const regions = sepState.scope === "all" ? REGIONS : REGIONS.filter((R) => R.id === state.region);
+    const regions = sepState.scope === "all" ? REGIONS.filter((R) => cache[R.id]) : REGIONS.filter((R) => R.id === state.region);
     const pts = (await Promise.all(regions.map(regionPoints))).flat();
     const dark = (parseFloat(css("--ramp-dir")) || 1) < 0, ramp = dark ? GRADE_DARK : GRADE_LIGHT;
     const fg = css("--fg"), muted = css("--muted"), line = css("--line"), surf = css("--surface");

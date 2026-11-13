@@ -31,9 +31,13 @@ class Region:
     lidar: str | None = None
     routing_res: float = 8.0
     known_runs: list[KnownRun] = field(default_factory=list)
+    nztm_box: tuple[float, float, float, float] | None = None  # explicit NZTM box (national tiles)
+    root: Path | None = None  # data directory override
 
     def bbox_nztm(self, res: float = 8.0) -> tuple[float, float, float, float]:
         """Bbox in NZTM, expanded outward to whole multiples of ``res``."""
+        if self.nztm_box is not None:
+            return self.nztm_box
         t = Transformer.from_crs("EPSG:4326", NZTM, always_xy=True)
         x0, y0, x1, y1 = t.transform_bounds(*self.bbox_wgs84, densify_pts=21)
         return (
@@ -44,7 +48,7 @@ class Region:
         )
 
     def data_dir(self, root: Path | None = None) -> Path:
-        d = (root or REPO_ROOT / "data") / self.name
+        d = self.root if self.root is not None and root is None else (root or REPO_ROOT / "data") / self.name
         d.mkdir(parents=True, exist_ok=True)
         return d
 

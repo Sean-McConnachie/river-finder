@@ -123,7 +123,10 @@ def feature_matrix(g: pd.DataFrame, names: list[str] | None = None) -> tuple[np.
 
 
 def label(g: pd.DataFrame, region, label_min_area_km2: float = 2.0, label_min_gradient: float = 10.0):
-    """Return (y, holdout) arrays: y=1 known run, 0 other; holdout=True for unlisted reference rivers."""
+    """Return (y, holdout) arrays: y=1 known run, 0 other; holdout=True for unlisted reference rivers.
+    A ``region`` with a ``labels(g)`` method (the national labeller) supplies its own."""
+    if hasattr(region, "labels"):
+        return region.labels(g, label_min_area_km2, label_min_gradient)
     listed = {r.river for r in region.known_runs if r.status == "listed"}
     unlisted = {r.river for r in region.known_runs if r.status != "listed"}
     on_listed = g["river"].isin(listed).to_numpy()

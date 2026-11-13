@@ -65,6 +65,29 @@ def _export(region, args):
     print(f"[{region.name}] GIS export -> {export_region(region)}")
 
 
+def _nz(args):
+    from . import national, nz
+
+    t0 = time.time()
+
+    def log(m):
+        print(f"[{(time.time() - t0) / 60:6.1f} min] {m}", flush=True)
+
+    tiles = [nz.Tile.parse(t) for t in args.tiles] or None
+    if args.step == "fetch":
+        national.fetch_all(log)
+    elif args.step == "tiles":
+        nz.run_tiles(tiles, log=log)
+    elif args.step == "score":
+        from .nzscore import score_national
+
+        score_national(tiles, log=log)
+    else:
+        from .viewer_nz import build
+
+        log(f"viewer -> {build(args.out)}")
+
+
 STEPS = {"fetch": _fetch, "route": _route, "validate": _validate, "reaches": _reaches, "export": _export}
 
 
@@ -74,11 +97,18 @@ def main(argv: list[str] | None = None) -> None:
     for name in [*STEPS, "score", "run"]:
         p = sub.add_parser(name, help="all steps + score + viewer" if name == "run" else f"{name} step")
         p.add_argument("regions", nargs="*", help=f"region names (default: all of {list_regions()})")
+    pn = sub.add_parser("nz", help="national run: fetch | tiles | score | viewer (see docs/PLAN.md)")
+    pn.add_argument("step", choices=["fetch", "tiles", "score", "viewer"])
+    pn.add_argument("tiles", nargs="*", help="tile ids such as x11y16 (default: every land tile)")
+    pn.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz")
     pv = sub.add_parser("viewer", help="build the browser viewer for the given regions")
     pv.add_argument("regions", nargs="*")
     pv.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer")
     pv.add_argument("--max-px", type=int, default=1800)
     args = ap.parse_args(argv)
+    if args.cmd == "nz":
+        _nz(args)
+        return
     regions = [load_region(n) for n in (args.regions or list_regions())]
 
     if args.cmd == "viewer":

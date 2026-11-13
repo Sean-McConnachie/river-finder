@@ -91,7 +91,7 @@ def _rec2_features(path: Path, min_order: int) -> list[dict]:
     return out
 
 
-def _segments(region: Region, min_area_km2: float = 1.0) -> dict | None:
+def _segments(region: Region, min_area_km2: float = 1.0, sections=None) -> dict | None:
     """Columnar segment table for the run finder and score overlays (WGS84, simplified)."""
     import geopandas as gpd
 
@@ -101,7 +101,7 @@ def _segments(region: Region, min_area_km2: float = 1.0) -> dict | None:
     from .labels import segment_labels
 
     g = gpd.read_file(path)
-    status, grade, held, _, secs = segment_labels(g, region.name)
+    status, grade, held, _, secs = segment_labels(g, region.name, sections)
     g["lab_status"], g["lab_grade"], g["lab_held"] = status, grade, held
     g = g[g["area_km2"] >= min_area_km2].copy()
     idx = {int(s): i for i, s in enumerate(g["seg_id"])}

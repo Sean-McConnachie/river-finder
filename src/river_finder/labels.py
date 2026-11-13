@@ -30,6 +30,7 @@ class Section:
     outlet: tuple | None = None
     upstream_km: float | None = None
     source: str = ""
+    bbox: tuple | None = None  # WGS84 box limiting the name-only rule (national frames)
     extra: dict = field(default_factory=dict)
 
 
@@ -53,7 +54,7 @@ def load_sections(path: Path | None = None) -> list[Section]:
         return []
     out = []
     for d in tomllib.loads(path.read_text()).get("section", []):
-        known = {f for f in Section.__dataclass_fields__ if f != "extra"}
+        known = {f for f in Section.__dataclass_fields__ if f not in ("extra", "bbox")}
         kw = {k: (tuple(v) if isinstance(v, list) else v) for k, v in d.items() if k in known}
         out.append(Section(**kw, extra={k: v for k, v in d.items() if k not in known}))
     return out
@@ -95,8 +96,14 @@ def section_segments(g: pd.DataFrame, s: Section) -> list[int]:
             cur = up[cur]
         return out
     grad = g["grad_s"] if "grad_s" in g else g["gradient_m_per_km"]
-    m = (g["river"] == s.river) & (grad >= 10.0) & (g["area_km2"] >= 2.0)
-    return list(np.flatnonzero(m.to_numpy()))
+    m = ((g["river"] == s.river) & (grad >= 10.0) & (g["area_km2"] >= 2.0)).to_numpy()
+    if s.bbox is not None and m.any():
+        mid = g.geometry.interpolate(0.5, normalized=True)
+        lon, lat = Transformer.from_crs("EPSG:2193", "EPSG:4326", always_xy=True).transform(
+            mid.x.to_numpy(), mid.y.to_numpy())
+        x0, y0, x1, y1 = s.bbox
+        m &= (lon >= x0) & (lon <= x1) & (lat >= y0) & (lat <= y1)
+    return list(np.flatnonzero(m))
 
 
 def segment_labels(g: pd.DataFrame, region: str, sections: list[Section] | None = None):
