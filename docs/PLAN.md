@@ -316,6 +316,26 @@ mouth) and *Manawatu* (the rest). Auckland is kept although the guide has no sec
 matched by name only inside their reference box (names such as Wairoa recur). Runs, Pareto layers
 and candidates are made per region: `data/nz/regions/<slug>/`, plus `data/nz/candidates.csv`.
 
+**First full run (2026-11-13).** 115 tiles in 219 minutes, peak memory ~12 GB, 1.4 GB of tile
+outputs kept. 1,104,794 reach segments, 22,638 runs. Scoring takes 3 minutes.
+
+| region | segments | runs | | region | segments | runs |
+|---|---:|---:|---|---|---:|---:|
+| Northland | 47,615 | 1,037 | | Wellington | 34,060 | 1,050 |
+| Auckland | 16,255 | 263 | | Tasman | 38,848 | 1,384 |
+| Waikato | 108,292 | 1,339 | | Marlborough | 38,100 | 1,083 |
+| Bay of Plenty | 53,610 | 1,016 | | West Coast | 90,178 | 3,206 |
+| Gisborne | 32,793 | 1,499 | | Canterbury | 201,646 | 2,889 |
+| Hawke's Bay | 60,842 | 1,347 | | Otago | 132,069 | 1,701 |
+| Taranaki | 33,487 | 680 | | Southland | 119,632 | 2,112 |
+| Wanganui | 63,019 | 1,197 | | | | |
+| Manawatu | 34,348 | 835 | | | | |
+
+Hold-out Mangakarengorengo: best reach 99.9th percentile nationally, median 88th, half its
+reaches in the top 10%. Leave-one-river-out medians 94-99.7. The national top candidates include
+well-known runs that are not yet labels (Whakapapa, Tongariro, Karangarua, Tutoko, Manganui), which
+is a good sign the reference signature transfers; rf-zmy.7 turns the guide research into labels.
+
 **Viewer.** `data/viewer_nz/`: `index.html` holds only an index; picking a region fetches its
 JSON, packed binary segments (~85 bytes each) and four images (≤ 4000 px, the iOS canvas limit).
 The three 5 m reference areas stay available in the same drop-down.
