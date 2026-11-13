@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import shutil
 import time
 from dataclasses import dataclass
@@ -435,3 +436,105 @@ def merge_segments(tiles: list[Tile] | None = None, stitch_m: float = 24.0) -> g
                 down[i] = gid[best]
         g["down_gid"] = down
     return g
+
+
+# --- GIS export -----------------------------------------------------------------------------------
+def _vrt(paths: list[Path], out: Path, band_type: str, nodata, resampling: str = "nearest") -> None:
+    """A GDAL VRT mosaic of same-resolution NZTM tiles (QGIS opens it like one raster)."""
+    infos = []
+    for p in paths:
+        with rasterio.open(p) as ds:
+            infos.append((p, ds.bounds, ds.width, ds.height, ds.res[0]))
+    res = infos[0][4]
+    x0 = min(i[1].left for i in infos)
+    y1 = max(i[1].top for i in infos)
+    x1 = max(i[1].right for i in infos)
+    y0 = min(i[1].bottom for i in infos)
+    W, H = round((x1 - x0) / res), round((y1 - y0) / res)
+    srs = rasterio.crs.CRS.from_epsg(2193).to_wkt().replace("&", "&amp;").replace('"', "&quot;")
+    src = []
+    for p, b, w, h, _ in infos:
+        xo, yo = round((b.left - x0) / res), round((y1 - b.top) / res)
+        src.append(f"""    <SimpleSource resampling="{resampling}">
+      <SourceFilename relativeToVRT="1">{os.path.relpath(p, out.parent)}</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="{w}" ySize="{h}" />
+      <DstRect xOff="{xo}" yOff="{yo}" xSize="{w}" ySize="{h}" />
+    </SimpleSource>""")
+    out.write_text(f"""<VRTDataset rasterXSize="{W}" rasterYSize="{H}">
+  <SRS>{srs}</SRS>
+  <GeoTransform>{x0}, {res}, 0, {y1}, 0, {-res}</GeoTransform>
+  <VRTRasterBand dataType="{band_type}" band="1">
+    <NoDataValue>{nodata}</NoDataValue>
+{chr(10).join(src)}
+  </VRTRasterBand>
+</VRTDataset>
+""")
+
+
+def _area_code_qml() -> str:
+    from .export import RAMP, STOPS
+
+    lo, hi = math.log10(0.05), math.log10(30000.0)
+    items = []
+    for v, c in zip(STOPS, RAMP, strict=True):
+        code = 2 + (math.log10(v) - lo) / (hi - lo) * 253
+        items.append(f'<item alpha="230" value="{code:.1f}" label="{v} km²" color="{c}"/>')
+    return f"""<!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>
+<qgis version="3.34.0" styleCategories="AllStyleCategories">
+  <pipe>
+    <rasterrenderer type="singlebandpseudocolor" band="1" opacity="1" alphaBand="-1">
+      <rastershader>
+        <colorrampshader colorRampType="INTERPOLATED" classificationMode="1" clip="1">
+          <item alpha="0" value="1" label="&lt; 0.05 km²" color="#cde2fb"/>
+          {chr(10).join(items)}
+        </colorrampshader>
+      </rastershader>
+    </rasterrenderer>
+  </pipe>
+</qgis>
+"""
+
+
+def export_gis(log=print) -> Path:
+    """``data/nz/gis/``: GeoPackage (segments >= 1 km2, runs, region filters) and VRT mosaics."""
+    from .national import region_filters
+
+    out = nz_dir() / "gis"
+    out.mkdir(exist_ok=True)
+    gpkg = out / "river_finder_nz.gpkg"
+    gpkg.unlink(missing_ok=True)
+    region_filters().to_file(gpkg, layer="guide_regions", driver="GPKG")
+    runs = []
+    for d in sorted((nz_dir() / "regions").glob("*/")):
+        if (d / "segments_scored.gpkg").exists():
+            g = gpd.read_file(d / "segments_scored.gpkg")
+            g = g[g["area_km2"] >= 1.0]
+            g.to_file(gpkg, layer="reach_segments", driver="GPKG", mode="a" if gpkg.exists() else "w")
+        if (d / "runs.geojson").exists():
+            runs.append(gpd.read_file(d / "runs.geojson").to_crs(2193))
+    if runs:
+        pd.concat(runs, ignore_index=True).pipe(gpd.GeoDataFrame, crs="EPSG:2193").to_file(gpkg, layer="runs",
+                                                                                          driver="GPKG")
+    root = nz_dir() / "tiles"
+    for name, typ, nodata, rs in (("area_code", "Byte", 0, "nearest"), ("hillshade_24m", "Byte", 0, "average"),
+                                  ("truncated_core", "Byte", 255, "nearest"),
+                                  ("local_catchment_core", "Int64", -1, "nearest")):
+        paths = sorted(root.glob(f"*/{name}.tif"))
+        if paths:
+            _vrt(paths, out / f"{name}.vrt", typ, nodata, rs)
+    (out / "area_code.qml").write_text(_area_code_qml())
+    (out / "README.txt").write_text(
+        "river-finder national GIS export. NZTM2000 (EPSG:2193). Open the .vrt files in QGIS; they\n"
+        "read the per-tile GeoTIFFs in ../tiles/ (keep the folder layout).\n\n"
+        "area_code.vrt        8 m catchment area as a code: 0 sea, 1 < 0.05 km2, 2..255 = log10(km2)\n"
+        "                     from 0.05 to 30 000 km2 (area = 10 ** (log10(0.05) + (code - 2) * 0.022839));\n"
+        "                     styled by area_code.qml\n"
+        "hillshade_24m.vrt    hillshade\n"
+        "truncated_core.vrt   1 = catchment reaches a tile edge without a REC2 inflow\n"
+        "local_catchment_core.vrt  global id (gid) of the reach segment each cell first drains into\n"
+        "river_finder_nz.gpkg layers: guide_regions, reach_segments (>= 1 km2, all features and\n"
+        "                     scores, gid / region), runs (default run-finder settings)\n"
+        "../candidates.csv    candidate runs not on known rivers, all regions\n")
+    log(f"GIS export -> {out}")
+    return out

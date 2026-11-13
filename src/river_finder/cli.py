@@ -78,6 +78,8 @@ def _nz(args):
         national.fetch_all(log)
     elif args.step == "tiles":
         nz.run_tiles(tiles, log=log)
+    elif args.step == "export":
+        nz.export_gis(log)
     elif args.step == "score":
         from .nzscore import score_national
 
@@ -97,8 +99,8 @@ def main(argv: list[str] | None = None) -> None:
     for name in [*STEPS, "score", "run"]:
         p = sub.add_parser(name, help="all steps + score + viewer" if name == "run" else f"{name} step")
         p.add_argument("regions", nargs="*", help=f"region names (default: all of {list_regions()})")
-    pn = sub.add_parser("nz", help="national run: fetch | tiles | score | viewer (see docs/PLAN.md)")
-    pn.add_argument("step", choices=["fetch", "tiles", "score", "viewer"])
+    pn = sub.add_parser("nz", help="national run: fetch | tiles | score | export | viewer (see docs/PLAN.md)")
+    pn.add_argument("step", choices=["fetch", "tiles", "score", "viewer", "export"])
     pn.add_argument("tiles", nargs="*", help="tile ids such as x11y16 (default: every land tile)")
     pn.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz")
     pv = sub.add_parser("viewer", help="build the browser viewer for the given regions")
