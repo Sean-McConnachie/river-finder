@@ -337,7 +337,9 @@ well-known runs that are not yet labels (Whakapapa, Tongariro, Karangarua, Tutok
 is a good sign the reference signature transfers; rf-zmy.7 turns the guide research into labels.
 
 **Viewer.** `data/viewer_nz/`: `index.html` holds only an index; picking a region fetches its
-JSON, packed binary segments (~85 bytes each) and four images (≤ 4000 px, the iOS canvas limit).
+JSON, packed binary segments (~85 bytes each, shipped as base64 text because the artifact host
+serves no raw binary) and four images (≤ 4000 px, the iOS canvas limit). Run strokes thin out at
+regional zoom. `nz viewer --page-only` re-renders only the page after a template change.
 The three 5 m reference areas stay available in the same drop-down.
 
 ## Open questions

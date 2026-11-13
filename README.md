@@ -25,7 +25,8 @@ Whole country (8 m national scan, about 4 hours, 12 GB of memory):
 uv run river-finder nz fetch     # national rivers, floods, geology, boundaries -> data/nz/
 uv run river-finder nz tiles     # 115 tiles of 64 km: route, reach segments
 uv run river-finder nz score     # pooled model; runs and candidates per river-guide region
-uv run river-finder nz viewer    # data/viewer_nz/index.html (serve the folder over HTTP)
+uv run river-finder nz export    # data/nz/gis/: GeoPackage (runs, reaches, regions) + VRT rasters for QGIS
+uv run river-finder nz viewer    # data/viewer_nz/index.html (serve the folder over HTTP; ~30 min)
 ```
 
 Each region's GIS export is in `data/<region>/gis/`. Drag the `.tif` files and the `.gpkg` into

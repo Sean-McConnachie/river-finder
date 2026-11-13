@@ -87,7 +87,7 @@ def _nz(args):
     else:
         from .viewer_nz import build
 
-        log(f"viewer -> {build(args.out)}")
+        log(f"viewer -> {build(args.out, page_only=args.page_only)}")
 
 
 STEPS = {"fetch": _fetch, "route": _route, "validate": _validate, "reaches": _reaches, "export": _export}
@@ -103,6 +103,7 @@ def main(argv: list[str] | None = None) -> None:
     pn.add_argument("step", choices=["fetch", "tiles", "score", "viewer", "export"])
     pn.add_argument("tiles", nargs="*", help="tile ids such as x11y16 (default: every land tile)")
     pn.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz")
+    pn.add_argument("--page-only", action="store_true", help="viewer: re-render only the page, keep the region files")
     pv = sub.add_parser("viewer", help="build the browser viewer for the given regions")
     pv.add_argument("regions", nargs="*")
     pv.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer")

@@ -527,10 +527,12 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     const res = await fetch(R.src);
     if (!res.ok) throw new Error(`Could not load ${R.title} (${res.status}).`);
     Object.assign(R, await res.json());
-    if (R.segBin) {
-      const b = await fetch(R.segBin);
+    if (R.segB64) {
+      const b = await fetch(R.segB64);
       if (!b.ok) throw new Error(`Could not load the ${R.title} reaches (${b.status}).`);
-      R.segments = decodeSegments(await b.arrayBuffer(), R.segHead, R.segInfo);
+      const txt = atob((await b.text()).trim()), bytes = new Uint8Array(txt.length);
+      for (let i = 0; i < txt.length; i++) bytes[i] = txt.charCodeAt(i);
+      R.segments = decodeSegments(bytes.buffer, R.segHead, R.segInfo);
     }
     R.loaded = true;
   }
@@ -912,6 +914,14 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     });
   }
 
+  // Run strokes shrink at regional zoom, so a few thousand runs do not hide the map.
+  function runWeightScale() { const z = map.getZoom(); return z >= 13 ? 1 : z >= 11 ? 0.7 : z >= 9 ? 0.45 : 0.3; }
+  map.on("zoomend", () => {
+    if (!runLayer) return;
+    const k = runWeightScale();
+    runLayer.eachLayer((l) => { if (l._rw) l.setStyle({ weight: l._rw * k }); });
+  });
+
   function updateRuns() {
     const C = cache[state.region]; if (!C) return;
     const S = C.R.segments; if (!S) return;
@@ -935,8 +945,11 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     runs.forEach((r) => {
       const coords = runPath(S, r);
       const col = r.status === "listed" ? ink : cand;
-      runLines.push(L.polyline(coords, { renderer: vec, color: surf, weight: r.layer === 1 ? 9 : 8, opacity: 0.9, interactive: false, smoothFactor: 1.5, lineJoin: "round" }));
-      const ln = L.polyline(coords, { renderer: vec, color: col, weight: r.layer === 1 ? 5.5 : 4.5, opacity: 1, smoothFactor: 1.5, lineJoin: "round" });
+      const k = runWeightScale(), front = r.layer === 1;
+      const halo = L.polyline(coords, { renderer: vec, color: surf, weight: (front ? 9 : 8) * k, opacity: 0.9, interactive: false, smoothFactor: 1.5, lineJoin: "round" });
+      halo._rw = front ? 9 : 8; runLines.push(halo);
+      const ln = L.polyline(coords, { renderer: vec, color: col, weight: (front ? 5.5 : 4.5) * k, opacity: 1, smoothFactor: 1.5, lineJoin: "round" });
+      ln._rw = front ? 5.5 : 4.5;
       if (canHover) ln.bindTooltip(runSummary(r), { sticky: true });
       ln.on("click", (e) => { L.DomEvent.stopPropagation(e); showRun(S, r); });
       runLines.push(ln);

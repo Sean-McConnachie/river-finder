@@ -3,7 +3,8 @@
 The page itself (``index.html``) only holds a small index. Choosing a region fetches:
 
 - ``<slug>.json``: region metadata, REC2 main rivers, reference markers, segment header;
-- ``<slug>_seg.bin``: the reach segments, packed (see ``pack_segments``), decoded in the browser
+- ``<slug>_seg.txt``: the reach segments, packed (see ``pack_segments``) and base64-encoded (the
+  artifact host serves no raw binary), decoded in the browser
   into the same columnar object the single-file viewer embeds;
 - ``<slug>_hs.jpg``, ``<slug>_area.png``, ``<slug>_trunc.png``, ``<slug>_catch.png``: hillshade,
   area code, truncation mask and local-catchment labels on one Web-Mercator grid.
@@ -14,6 +15,7 @@ single-file payload (images as data URIs).
 
 from __future__ import annotations
 
+import base64
 import io
 import json
 import math
@@ -241,7 +243,7 @@ def region_files(name: str, out_dir: Path, max_px: int = 4000, min_area_km2: flo
     _png(trunc, "L", out_dir / f"{sl}_trunc.png")
     _png(rgb, "RGB", out_dir / f"{sl}_catch.png")
     blob, head = pack_segments(S)
-    (out_dir / f"{sl}_seg.bin").write_bytes(blob)
+    (out_dir / f"{sl}_seg.txt").write_text(base64.b64encode(blob).decode("ascii"))
 
     to_ll = Transformer.from_crs("EPSG:3857", "EPSG:4326", always_xy=True)
     lon0, lat0 = to_ll.transform(merc[0], merc[1])
@@ -261,7 +263,7 @@ def region_files(name: str, out_dir: Path, max_px: int = 4000, min_area_km2: flo
         "stats": {"valid_cells": sum(s["valid_cells"] for s in stats), "cellsize_m": 8.0,
                   "routing_seconds": round(sum(s["routing_seconds"] for s in stats))},
         "validation": None,
-        "segBin": f"{sl}_seg.bin", "segHead": head,
+        "segB64": f"{sl}_seg.txt", "segHead": head,
         "segInfo": {k: S[k] for k in ("rivers", "listed", "features", "sections")},
     }
     (out_dir / f"{sl}.json").write_text(json.dumps(meta, separators=(",", ":")))
@@ -299,8 +301,13 @@ def _rec2_lines(bounds, min_order: int = 4) -> list[dict]:
     return out
 
 
-def build(out_dir: Path, regions: list[str] | None = None, refs: list[str] | None = None, max_px: int = 4000):
+def build(out_dir: Path, regions: list[str] | None = None, refs: list[str] | None = None, max_px: int = 4000,
+          page_only: bool = False):
+    """Write every region's files and the page. ``page_only`` re-renders just the page from the
+    saved region index (after a template change; the region files take half an hour)."""
     out_dir.mkdir(parents=True, exist_ok=True)
+    if page_only:
+        return write_page(out_dir, json.loads((out_dir / "regions_index.json").read_text()))
     index = []
     for name in regions or FILTER_ORDER:
         if (region_dir(name) / "segments_scored.gpkg").exists():
@@ -314,6 +321,11 @@ def build(out_dir: Path, regions: list[str] | None = None, refs: list[str] | Non
         (out_dir / f"{rid}.json").write_text(json.dumps(p, separators=(",", ":")))
         index.append({"id": rid, "title": p["title"], "group": "Reference areas (5 m LiDAR)", "src": f"{rid}.json",
                       "bounds": p["bounds"], "segments": len(p["segments"]["g"]) if p["segments"] else 0})
+    (out_dir / "regions_index.json").write_text(json.dumps(index))
+    return write_page(out_dir, index)
+
+
+def write_page(out_dir: Path, index: list[dict]) -> Path:
     model = None
     mp = nz_dir() / "model.json"
     if mp.exists():
