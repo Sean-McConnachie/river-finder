@@ -90,7 +90,12 @@ uv run ruff check src tests               # lint
 uv run river-finder run kaimai karangahake tutamoe  # fetch (8 m + 5 m LiDAR, REC2, geology, floods), route,
                                           # validate, reaches, export, pooled score, viewer (~15 min)
 uv run river-finder score kaimai karangahake tutamoe  # re-score only (regression is pooled across the regions given)
+uv run river-finder nz fetch|tiles|score|viewer   # national 8 m scan in 64 km tiles (data/nz/, ~4 h)
 ```
+
+National tiles peak at ~12 GB: never run another heavy job (reference viewer build, 5 m
+rasters) while `nz tiles` runs, or the OOM killer takes the tile run. It resumes where it
+stopped.
 
 Outputs go to `data/<region>/` (gitignored): `area_km2.tif`, `validation_summary.json`, `gis/`
 (COG + .qml + GeoPackage). The browser viewer is `data/viewer/viewer.html`.

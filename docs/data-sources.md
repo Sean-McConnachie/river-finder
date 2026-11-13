@@ -4,6 +4,19 @@ All checked in November 2026. NIWA and GNS Science merged into **Earth Sciences 
 on 1 July 2025, so some NIWA/GNS URLs may move. Licences are mostly CC-BY-4.0; check each one
 before redistributing derived products.
 
+## 0. National layers in use (Nov 2026)
+
+`river-finder nz fetch` writes these to `data/nz/` (EPSG:2193):
+
+| Layer | Service |
+|---|---|
+| REC2 reaches + names | NIWA `REC2_Layers/FeatureServer/0`, `NZ_River_Names_REC2_V1` |
+| Floods (rain-driven) | NIWA `NZ_Flood_Statistics_Henderson_Collins_V2_REC1_Layer_WFL1` (MAF, Q10, Q100) and `..._HIRDSV3_REC1_Layer_WFL3` (rational-method floods from HIRDS v3 rainfall intensities) |
+| Geology | GNS `NZL_GNS_250K_Geology_2023/.../FeatureServer/55` |
+| Regional councils 2022 (generalised) | NIWA mirror `Regional_Council_Boundaries__gen_/FeatureServer/2` |
+| Large catchments | NIWA `NZ_Large_Catchments/FeatureServer/0` (90 basins) |
+| River-guide region names | riverguide.co.nz GraphQL `guides{region}`: West Coast, Tasman, Canterbury, Waikato, Otago, Bay of Plenty, Hawke's Bay, Southland, Wellington, Wanganui, Taranaki, Manawatu, Marlborough, Northland, Gisborne |
+
 ## 1. Terrain (elevation)
 
 LINZ publishes all national and regional elevation data as Cloud-Optimised GeoTIFFs (COGs) in a

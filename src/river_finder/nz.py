@@ -350,8 +350,11 @@ def process_tile(tile: Tile, layers: Layers, log=print, keep_full: bool = False)
     layers.write_tile_inputs(tile)
     st = route_tile(tile, layers.rec2)
     t2 = time.time()
-    if st["valid_cells"] == 0:
-        (d / "tile.json").write_text(json.dumps(dict(st, done=True, segments=0)))
+    if st["valid_cells"] == 0 or st["max_area_km2"] < 1.0:  # sea, or islets with no streams
+        for f in d.iterdir():
+            if f.name != "routing_stats.json":
+                f.unlink()
+        (d / "tile.json").write_text(json.dumps(dict(st, done=True, segments=0, core=list(tile.core))))
         return st
     run_reaches(reg)
     t3 = time.time()

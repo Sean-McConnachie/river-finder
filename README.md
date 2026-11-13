@@ -19,6 +19,15 @@ uv run river-finder run kaimai karangahake tutamoe   # ~20 min: fetch, route, va
 open data/viewer/viewer.html             # browser heat map
 ```
 
+Whole country (8 m national scan, about 4 hours, 12 GB of memory):
+
+```bash
+uv run river-finder nz fetch     # national rivers, floods, geology, boundaries -> data/nz/
+uv run river-finder nz tiles     # 115 tiles of 64 km: route, reach segments
+uv run river-finder nz score     # pooled model; runs and candidates per river-guide region
+uv run river-finder nz viewer    # data/viewer_nz/index.html (serve the folder over HTTP)
+```
+
 Each region's GIS export is in `data/<region>/gis/`. Drag the `.tif` files and the `.gpkg` into
 QGIS; `area_km2.qml` styles the heat map automatically.
 

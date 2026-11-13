@@ -93,9 +93,8 @@ LINZ DEM (COG/STAC) ──► clip/mosaic/reproject (EPSG:2193)
 Rule: compute catchment area at coarse resolution and gradient at fine resolution.
 Accumulation is robust to coarse resolution. Waterfalls are not.
 
-**North Island scale.** The North Island at 8 m is about 1.8 billion cells, too many for one
-in-memory grid. Plan: split by coastal-outlet basins, which drain independently, or use tiled
-Priority-Flood (Barnes 2016). Beads issue under phase 6.
+**National scale.** See *National scan* below: 64 km tiles at 8 m, with REC2 supplying the
+flow that enters each tile from outside.
 
 ## Phases (tracked in beads — `bd ready`, `bd list`)
 
@@ -270,6 +269,56 @@ runnable median 73 vs unknown 14 m³/s), gradient not at all (48%), and height-t
 *inversely* (14%: known runs have lower relief/√area). The labelled runs are mostly big rivers,
 so this mostly measures size. We need more labels, especially small creeks and no-go reaches,
 before these numbers mean much.
+
+## National scan (2026-11-13)
+
+`river-finder nz fetch|tiles|score|viewer`. Code: `national.py`, `nz.py`, `nzscore.py`,
+`viewer_nz.py`.
+
+**Data (`data/nz/`, ~0.7 GB).** All from public ArcGIS FeatureServers, fetched by object id in
+parallel (about 15 minutes):
+
+| file | contents |
+|---|---|
+| `rec2.gpkg` | 593,517 REC2 reaches with topology, CUM_AREA, CATAREA and names |
+| `flood.gpkg` | 580,293 REC1 reaches: Henderson & Collins MAF/Q10/Q100 plus the HIRDS v3 rational-method floods (rainfall-intensity based) |
+| `geology.gpkg` | 55,211 GNS 250K units with the `hard_rock` flag |
+| `councils.gpkg`, `large_catchments.gpkg` | 2022 regional council boundaries; 90 named large basins |
+
+The MfE annual-rainfall grid is still unreachable (bot protection / API key), so rainfall enters
+through the two flood models, which are both driven by rainfall.
+
+**Tiles.** NZ is cut into 64 km × 64 km tiles in NZTM (115 hold REC2 rivers). Each tile is
+routed on the 8 m DEM with a 3 km halo, and only the core is kept. Two fixes make tile edges
+behave:
+
+- *Inflows*: where a REC2 reach enters the box, its area at the crossing (cum area minus the
+  inside share of its own local area) is added as a point inflow before accumulation. The
+  Waikato at Hamilton gets 8,633 km² (REC2: 8,405 km²) instead of 1,755 km².
+- *Outlets*: the box edge is an outlet only within 100 m of where a REC2 reach leaves it (plus
+  the sea). Otherwise a lake touching the edge (the Waikato hydro lakes) drains out of the
+  nearest edge.
+
+A tile takes 1-3.5 minutes and up to 12 GB of memory, so tiles run one at a time (the next
+tile's DEM downloads during routing). Per tile only ~20 MB is kept: core segments, an 8 m
+log-area code raster, a 24 m hillshade, local catchments and the truncation mask.
+
+Agreement with REC2 on the Hamilton tile (lowland, 8 m contour DEM): 52% of reaches > 5 km²
+within 10% (60% for hill-country reaches), lower than the 76-88% we get from 5 m LiDAR. The 8 m
+scan is for finding candidates; refine candidates on LiDAR.
+
+**Regions.** Filters follow the river guide's regions (riverguide.co.nz): the regional
+councils, with Nelson filed under Tasman and Manawatū-Whanganui split into *Wanganui*
+(Whanganui, Whangaehu, Turakina, Rangitīkei, Waitotara and the coast north of the Rangitīkei
+mouth) and *Manawatu* (the rest). Auckland is kept although the guide has no sections there.
+
+**Scoring.** One regression pooled over the country. Known runs are still the reference rivers,
+matched by name only inside their reference box (names such as Wairoa recur). Runs, Pareto layers
+and candidates are made per region: `data/nz/regions/<slug>/`, plus `data/nz/candidates.csv`.
+
+**Viewer.** `data/viewer_nz/`: `index.html` holds only an index; picking a region fetches its
+JSON, packed binary segments (~85 bytes each) and four images (≤ 4000 px, the iOS canvas limit).
+The three 5 m reference areas stay available in the same drop-down.
 
 ## Open questions
 

@@ -186,7 +186,7 @@ def national_sections(name: str):
     return out
 
 
-def region_files(name: str, out_dir: Path, max_px: int = 2600, min_area_km2: float = 2.0) -> dict:
+def region_files(name: str, out_dir: Path, max_px: int = 4000, min_area_km2: float = 2.0) -> dict:
     sl = slug(name)
     reg = national_region(name)
     d = region_dir(name)
@@ -299,7 +299,7 @@ def _rec2_lines(bounds, min_order: int = 4) -> list[dict]:
     return out
 
 
-def build(out_dir: Path, regions: list[str] | None = None, refs: list[str] | None = None, max_px: int = 2600):
+def build(out_dir: Path, regions: list[str] | None = None, refs: list[str] | None = None, max_px: int = 4000):
     out_dir.mkdir(parents=True, exist_ok=True)
     index = []
     for name in regions or FILTER_ORDER:
@@ -327,5 +327,9 @@ def build(out_dir: Path, regions: list[str] | None = None, refs: list[str] | Non
     css = resources.files("river_finder").joinpath("assets/leaflet-1.9.4.css").read_text()
     data = json.dumps({"regions": index, "model": model}, separators=(",", ":")).replace("</", "<\\/")
     page = tpl.replace("/*%%LEAFLET_CSS%%*/", css).replace("%%DATA%%", data)
-    (out_dir / "index.html").write_text(page)
+    (out_dir / "index_fragment.html").write_text(page)  # for a claude.ai artifact (it adds the skeleton)
+    (out_dir / "index.html").write_text(
+        "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\">\n"
+        "</head>\n<body>\n" + page + "\n</body>\n</html>\n")
     return out_dir / "index.html"

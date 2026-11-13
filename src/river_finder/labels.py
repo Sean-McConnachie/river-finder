@@ -96,7 +96,7 @@ def section_segments(g: pd.DataFrame, s: Section) -> list[int]:
             cur = up[cur]
         return out
     grad = g["grad_s"] if "grad_s" in g else g["gradient_m_per_km"]
-    m = ((g["river"] == s.river) & (grad >= 10.0) & (g["area_km2"] >= 2.0)).to_numpy()
+    m = ((g["river"] == s.river) & (grad >= 10.0) & (g["area_km2"] >= 2.0)).to_numpy().copy()
     if s.bbox is not None and m.any():
         mid = g.geometry.interpolate(0.5, normalized=True)
         lon, lat = Transformer.from_crs("EPSG:2193", "EPSG:4326", always_xy=True).transform(
