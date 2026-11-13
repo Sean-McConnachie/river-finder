@@ -190,9 +190,27 @@ def region_filters() -> gpd.GeoDataFrame:
 
 
 def assign_regions(points: gpd.GeoSeries) -> np.ndarray:
-    """River-guide region name for each point (EPSG:2193); nearest region for points offshore."""
+    """River-guide region name for each point (EPSG:2193); nearest region for points offshore.
+
+    Point-in-polygon first (prepared geometries, vectorised); only the few points left over
+    (on the coast, in estuaries) go through the much slower nearest-polygon search.
+    """
+    import shapely
+
     rf = region_filters()
-    pts = gpd.GeoDataFrame(geometry=points.reset_index(drop=True), crs="EPSG:2193")
-    j = gpd.sjoin_nearest(pts, rf, how="left", max_distance=20_000)
-    j = j[~j.index.duplicated(keep="first")]
-    return j["region"].fillna("").to_numpy()
+    pts = points.reset_index(drop=True)
+    x, y = pts.x.to_numpy(), pts.y.to_numpy()
+    out = np.full(len(pts), "", dtype=object)
+    for name, geom in zip(rf["region"], rf.geometry, strict=True):
+        shapely.prepare(geom)
+        todo = out == ""
+        hit = shapely.contains_xy(geom, x[todo], y[todo])
+        out[np.flatnonzero(todo)[hit]] = name
+    rest = np.flatnonzero(out == "")
+    if len(rest):
+        simple = rf.assign(geometry=rf.geometry.simplify(50.0))
+        left = gpd.GeoDataFrame(geometry=pts.iloc[rest].reset_index(drop=True), crs="EPSG:2193")
+        j = gpd.sjoin_nearest(left, simple, how="left", max_distance=20_000)
+        j = j[~j.index.duplicated(keep="first")]
+        out[rest] = j["region"].fillna("").to_numpy()
+    return out.astype(str)
