@@ -40,8 +40,9 @@ PAGES = ("map", "top", "models", "info")
 LIBS: tuple[str, ...] = ("https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.js",)
 PAGE_FILES = ("index.html", "artifact.html", "index_fragment.html")
 TARGETS = ("site", "artifact")
-# Data files only the artifact uses: the site streams satellite tiles instead of a per-region image.
-ARTIFACT_ONLY = ("_sat.jpg",)
+# Files only the artifact uses: page fragments (index, ML page) and the per-region satellite images
+# (the site streams satellite tiles instead).
+ARTIFACT_ONLY = ("_sat.jpg", "_fragment.html")
 
 
 def web_root():
