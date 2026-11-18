@@ -44,10 +44,12 @@ call, and access correlates with being in a guide, which would reward documentat
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import re
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import numba
 import numpy as np
@@ -55,7 +57,19 @@ import pandas as pd
 from scipy.spatial import cKDTree
 
 from . import reachtype as RT
-from .models import MODELS_DIR, Mapped, _positive_rows, all_sections, grade_band, map_sections, national_table
+from .models import (
+    MODELS_DIR,
+    Mapped,
+    _positive_rows,
+    _quantiles,
+    all_sections,
+    grade_band,
+    list_cards,
+    map_sections,
+    national_table,
+    save_card,
+    section_dict,
+)
 from .national import nz_dir
 from .scoring import FEATURES, _standardise, logistic_fit
 
@@ -136,7 +150,6 @@ def ml_table(rebuild: bool = False, log=print) -> pd.DataFrame:
     cache = nz_dir() / "ml_table.pkl"
     if cache.exists() and not rebuild:
         return pd.read_pickle(cache)
-    import geopandas as gpd
     import pyogrio
 
     t = national_table(log=log).copy()
@@ -146,20 +159,7 @@ def ml_table(rebuild: bool = False, log=print) -> pd.DataFrame:
     if len(order) < len(t):
         log(f"ml: {len(t) - len(order)} reaches in cycles; they keep their own catchment")
     t["outlet"] = _outlets(down, order)
-    # geology at the reach midpoint
-    geo = pyogrio.read_dataframe(nz_dir() / "geology.gpkg",
-                                 columns=["rockclass", "rockgroup", "mainrock", "absmin_ma", "hard_rock"])
-    pts = gpd.GeoDataFrame(geometry=gpd.points_from_xy(t["x"], t["y"]), crs="EPSG:2193")
-    j = gpd.sjoin(pts, geo, predicate="within", how="left")
-    j = j[~j.index.duplicated()].reindex(t.index)
-    for c in ("rockclass", "rockgroup", "mainrock"):
-        t[c] = j[c].fillna("unknown").astype(str).str.strip().str.lower().to_numpy()
-    t["rock_age_ma"] = pd.to_numeric(j["absmin_ma"], errors="coerce").to_numpy()
-    t["karst_bed"] = t["mainrock"].isin(KARST_ROCKS).astype(np.int8)
-    la = local_area(t)
-    kacc = _accumulate(down, order, la * t["karst_bed"].to_numpy())
-    aacc = _accumulate(down, order, la)
-    t["karst_up_frac"] = np.where(aacc > 0, kacc / np.maximum(aacc, 1e-9), 0.0).clip(0, 1)
+    add_geology(t)
     log(f"ml: geology + karst ({time.time() - t0:.0f} s), {int(t['karst_bed'].sum())} karst reaches")
     # OSM waterfalls (snapped to the reach line by external.attach) and rapids (nearest midpoint)
     xp = nz_dir() / "external.pkl"
@@ -188,6 +188,54 @@ def ml_table(rebuild: bool = False, log=print) -> pd.DataFrame:
     t.to_pickle(cache)
     log(f"ml: table {len(t)} reaches -> {cache}")
     return t
+
+
+GEO_COLS = ("rockclass", "rockgroup", "rock_age_ma", "karst_bed", "karst_up_frac")   # what the features read
+
+
+def add_geology(t: pd.DataFrame) -> pd.DataFrame:
+    """GNS geology at each reach midpoint (``x``, ``y``, EPSG:2193) and karst: ``karst_bed`` (bed on
+    limestone, marble, dolomite ...) and ``karst_up_frac`` (karst share of the area draining to the
+    reach, accumulated down ``down``). In place; returns ``t``."""
+    import geopandas as gpd
+    import pyogrio
+
+    down = t["down"].to_numpy().astype(np.int64)
+    down = np.where((down >= 0) & (down < len(t)), down, -1)   # a cut-out frame: links that leave it end there
+    order = _kahn(down)
+    geo = pyogrio.read_dataframe(nz_dir() / "geology.gpkg",
+                                 columns=["rockclass", "rockgroup", "mainrock", "absmin_ma", "hard_rock"])
+    pts = gpd.GeoDataFrame(geometry=gpd.points_from_xy(t["x"], t["y"]), crs="EPSG:2193")
+    j = gpd.sjoin(pts, geo, predicate="within", how="left")
+    j = j[~j.index.duplicated()].reindex(pts.index)
+    for c in ("rockclass", "rockgroup", "mainrock"):
+        t[c] = j[c].fillna("unknown").astype(str).str.strip().str.lower().to_numpy()
+    t["rock_age_ma"] = pd.to_numeric(j["absmin_ma"], errors="coerce").to_numpy()
+    t["karst_bed"] = t["mainrock"].isin(KARST_ROCKS).astype(np.int8)
+    la = local_area(t.assign(down=down))
+    kacc = _accumulate(down, order, la * t["karst_bed"].to_numpy())
+    aacc = _accumulate(down, order, la)
+    t["karst_up_frac"] = np.where(aacc > 0, kacc / np.maximum(aacc, 1e-9), 0.0).clip(0, 1)
+    return t
+
+
+def enrich(f: pd.DataFrame) -> pd.DataFrame:
+    """The columns the extended features need (geology, karst, reach type and confinement) for any reach
+    frame with ``down``, ``x``, ``y``, ``area_km2``, ``grad_s``, ``maf_m3s`` and ``valley_width_m``:
+    a national region, a 5 m reference area or the national table. A frame that has them already is
+    returned unchanged. Karst share upstream only sees the frame's own network, so score national reaches
+    from ``ml_table`` (whole-NZ network) rather than from a cut-out region."""
+    need_geo = any(c not in f for c in GEO_COLS)
+    need_rt = "confinement_ratio" not in f or "style" not in f
+    if not need_geo and not need_rt:
+        return f
+    f = f.copy()
+    if need_geo:
+        add_geology(f)
+    if need_rt:
+        rt = RT.classify_frame(f)
+        f = pd.concat([f.drop(columns=[c for c in rt.columns if c in f]), rt.set_index(f.index)], axis=1)
+    return f
 
 
 # name -> (builder, description, group)
@@ -354,28 +402,38 @@ def _fit_predict(spec: Spec, t: pd.DataFrame, X: np.ndarray, Xcat: pd.DataFrame 
         coef, b0 = logistic_fit(Z, y[train], l2=1.0)
         s = ((X[score] - mean) / std) @ coef + b0
         return {"score": s, "coef": dict(zip(spec.features, coef.round(4).tolist(), strict=True))}
+    b = _gbm_fit(spec, X, Xcat, train, y, rng)
+    s = b.predict(_gbm_frame(spec, X, Xcat, np.flatnonzero(score)), raw_score=True)
+    return {"score": s, "gain": _gain(b, spec)}
+
+
+def _gbm_frame(spec: Spec, X: np.ndarray, Xcat: pd.DataFrame | None, rows: np.ndarray) -> pd.DataFrame:
+    f = pd.DataFrame(X[rows], columns=spec.features)
+    for c in spec.categorical:
+        f[c] = pd.Categorical(Xcat[c].iloc[rows].to_numpy(), categories=Xcat[c].cat.categories)
+    return f[spec.features + spec.categorical]
+
+
+def _gbm_fit(spec: Spec, X: np.ndarray, Xcat: pd.DataFrame | None, train: np.ndarray, y: np.ndarray, rng,
+             **extra):
+    """LightGBM on the ``train`` rows: every positive and ``NEG_SAMPLE`` of the rest, weighted back up."""
     import lightgbm as lgb
 
     tr = np.flatnonzero(train)
     keep = (y[tr] == 1) | (rng.random(len(tr)) < NEG_SAMPLE)
     tr = tr[keep]
     w = np.where(y[tr] == 1, 1.0, 1.0 / NEG_SAMPLE)
-    cols = spec.features + spec.categorical
-
-    def frame(rows):
-        f = pd.DataFrame(X[rows], columns=spec.features)
-        for c in spec.categorical:
-            f[c] = Xcat[c].iloc[rows].to_numpy()
-            f[c] = pd.Categorical(f[c], categories=Xcat[c].cat.categories)
-        return f[cols]
-
     params = {k: v for k, v in GBM_PARAMS.items() if k != "n_estimators"}
     params["seed"] = int(rng.integers(1 << 30))
-    ds = lgb.Dataset(frame(tr), y[tr], weight=w, categorical_feature=spec.categorical or "auto", free_raw_data=True)
-    b = lgb.train(params, ds, num_boost_round=GBM_PARAMS["n_estimators"])
-    s = b.predict(frame(np.flatnonzero(score)), raw_score=True)
+    params.update(extra)
+    ds = lgb.Dataset(_gbm_frame(spec, X, Xcat, tr), y[tr], weight=w, categorical_feature=spec.categorical or "auto",
+                     free_raw_data=True)
+    return lgb.train(params, ds, num_boost_round=GBM_PARAMS["n_estimators"])
+
+
+def _gain(b, spec: Spec) -> dict:
     gain = b.feature_importance(importance_type="gain")
-    return {"score": s, "gain": dict(zip(cols, (gain / max(gain.sum(), 1e-9)).round(5).tolist(), strict=True))}
+    return dict(zip(spec.features + spec.categorical, (gain / max(gain.sum(), 1e-9)).round(5).tolist(), strict=True))
 
 
 def _cats(t: pd.DataFrame) -> pd.DataFrame:
@@ -609,3 +667,229 @@ def run(log=print, specs: list[Spec] = ZOO, repeats: int = REPEATS) -> dict:
 
 def slug(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", s.lower()).strip("_")
+
+
+# ---------------------------------------------------------------------------- registry cards (kind "gbm")
+def spec_by_id(sid: str) -> Spec:
+    return next(s for s in ZOO if s.id == sid)
+
+
+def train_card(t: pd.DataFrame, mapped: list[Mapped], split: dict, mid: str, title: str, description: str,
+               spec_id: str = "gbm_terrain", order: int | None = None) -> tuple[dict, str]:
+    """A frozen registry card of kind "gbm", trained like ``models.train`` (variant "all") but with the
+    CV recipe of ``spec_id``: positives are the runnable sections of the split's training rivers,
+    every reach of a test river is left out, other known reaches are left out, and every other domain
+    reach (>= 2 km2) is background. Returns the card and the LightGBM model text.
+
+    ``t`` is the national table with the ML columns (``ml_table``); ``mapped`` its section mapping."""
+    spec = spec_by_id(spec_id)
+    t = enrich(t)
+    n = len(t)
+    domain = (t["area_km2"] >= DOMAIN_KM2).to_numpy()
+    train_keys, test_keys = set(split["train"]), set(split["test"])
+    known, neg, y = np.zeros(n, bool), np.zeros(n, bool), np.zeros(n, np.int64)
+    used = []
+    for m in mapped:
+        if not len(m.rows):
+            continue
+        known[m.rows] = True
+        if m.key in test_keys:
+            continue
+        if m.section.status != "runnable":
+            neg[m.rows] = True
+            used.append(m)
+        elif m.key in train_keys and not m.section.held_out:
+            rows = _positive_rows(m, t)
+            y[rows[domain[rows]]] = 1
+            used.append(m)
+    neg &= domain & (y == 0)
+    trainable = domain & ((y == 1) | neg | ~known)
+    X = matrix(t, spec.features)
+    Xcat = _cats(t)
+    t0 = time.time()
+    b = _gbm_fit(spec, X, Xcat, trainable, y, np.random.default_rng(SEED), deterministic=True,
+                 force_row_wise=True)
+    text = b.model_to_string()
+    order = order or (max((c.get("order", 0) for c in list_cards()), default=0) + 1)
+    card = {
+        "id": mid, "order": order, "kind": "gbm", "title": title, "description": description,
+        "created": dt.date.today().isoformat(), "features": spec.features, "categorical": spec.categorical,
+        "categories": {c: [str(v) for v in Xcat[c].cat.categories] for c in spec.categorical},
+        "recipe": spec.id, "gbm_params": {**GBM_PARAMS, "deterministic": True, "force_row_wise": True},
+        "neg_sample": NEG_SAMPLE, "seed": SEED,
+        "booster_file": f"{mid}.lgb.txt", "booster_sha256": hashlib.sha256(text.encode()).hexdigest(),
+        "importance": _gain(b, spec), "coef": {}, "intercept": 0.0, "mean": {}, "std": {},
+        "labels": {"source": "labels/known_runs.toml + labels/guide_research.json", "variant": "all",
+                   "split": split["name"], "positives": int(y[trainable].sum()),
+                   "training_reaches": int(trainable.sum()),
+                   "train_sections": [section_dict(m.section) for m in used], "dropped_sections": [],
+                   "test_sections": [section_dict(m.section) for m in mapped if m.key in test_keys],
+                   "train_rivers": sorted({m.key for m in used if m.section.status == "runnable"}),
+                   "test_rivers": sorted(test_keys)},
+        "train_seconds": round(time.time() - t0, 1),
+    }
+    _BOOSTERS[card["booster_sha256"]] = b
+    card["pool_quantiles"] = _quantiles(gbm_logits(card, t), t)
+    return card, text
+
+
+_BOOSTERS: dict = {}
+
+
+def booster(card: dict):
+    """The card's LightGBM model (``models/<booster_file>``), checked against ``booster_sha256``."""
+    key = card["booster_sha256"]
+    if key not in _BOOSTERS:
+        import lightgbm as lgb
+
+        text = (MODELS_DIR / card["booster_file"]).read_text()
+        if hashlib.sha256(text.encode()).hexdigest() != key:
+            raise ValueError(f"models/{card['booster_file']} does not match card {card['id']}")
+        _BOOSTERS[key] = lgb.Booster(model_str=text)
+    return _BOOSTERS[key]
+
+
+def gbm_logits(card: dict, f: pd.DataFrame) -> np.ndarray:
+    """Raw score (log-odds) of a "gbm" card for every reach of ``f`` (any reach frame; see ``enrich``)."""
+    f = enrich(f)
+    X = matrix(f, card["features"])
+    df = pd.DataFrame(X, columns=card["features"])
+    for c in card["categorical"]:
+        cats = card["categories"][c]
+        v = f[c].astype(str).to_numpy()
+        df[c] = pd.Categorical(np.where(np.isin(v, cats), v, "other"), categories=cats)
+    return booster(card).predict(df[card["features"] + card["categorical"]], raw_score=True)
+
+
+def save_gbm(card: dict, text: str):
+    """Write the booster next to the card, then the card (both frozen: an id is never reused)."""
+    p = MODELS_DIR / card["booster_file"]
+    if p.exists() and hashlib.sha256(p.read_text().encode()).hexdigest() != card["booster_sha256"]:
+        raise FileExistsError(f"{p} is a frozen checkpoint with a different model; pick a new model id.")
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    p.write_text(text)
+    return save_card(card)
+
+
+# ---------------------------------------------------------------------------- audits
+AUDIT_DIR = MODELS_DIR / "audits"
+
+
+def candidate_runs(card: dict, t: pd.DataFrame | None = None, min_pct: float = 99.0, min_len_km: float = 1.0,
+                   max_gap: int = 1) -> pd.DataFrame:
+    """Runs that a card ranks in the top ``100 - min_pct`` % of *unlisted* reaches (domain reaches that no
+    known section covers). A trained model puts its own training rivers at the very top nationally,
+    so the cut is taken among unlisted reaches only.
+
+    A run is a chain of such reaches followed down the main stem, with at most ``max_gap`` reaches
+    below the cut inside it, at least ``min_len_km`` long. One row per run, best first (median
+    percentile, then length). ``oof_pct`` is the same percentile from the out-of-fold CV scores of the
+    card's recipe (mean over repeats, ``data/nz/ml_oof.npz``), a check that the run is not an
+    in-sample or single-fit artefact. For hand audits, the guide status of the river name, terrain,
+    reach style, OSM waterfalls and road distance are listed for the reader; access never changes the
+    order (it is the paddler's call)."""
+    from .models import all_sections, guide_mask, logits, norm_river, percentiles
+
+    t = t if t is not None else ml_table()
+    lg = logits(card, t)
+    nat = percentiles(card, lg)
+    domain = (t["area_km2"] >= DOMAIN_KM2).to_numpy()
+    secs = all_sections()
+    gm = guide_mask(t, secs)
+    unl = domain & ~gm
+
+    def within(score):
+        ref = np.sort(score[unl])
+        return 100.0 * np.searchsorted(ref, score, side="right") / len(ref)
+
+    pct = within(lg)
+    oof = None
+    op = nz_dir() / "ml_oof.npz"
+    if op.exists() and card.get("recipe"):
+        with np.load(op) as z:
+            k = f"cv_{card['recipe']}"
+            if k in z.files and z[k].shape[1] == len(t):
+                oof = within(np.nan_to_num(z[k].mean(axis=0), nan=-1e9))
+    hot = unl & (pct >= min_pct)
+    # a river is "in the guides" if a guide names it or a guide section lies on it (REC2 spellings differ:
+    # Manganui-a-te-ao / Manganui-o-te-ao, Routeburn / Route Burn)
+    listed = ({norm_river(s.river) for s in secs if s.status == "runnable"}
+              | {norm_river(r) for r in t.loc[gm, "river"].dropna().unique()}) - {""}
+    down, up = t["down"].to_numpy(), t["up"].to_numpy()
+    length = t["length_m"].to_numpy(dtype=float)
+    seen = np.zeros(len(t), bool)
+    road = None
+    xp = nz_dir() / "external.pkl"
+    if xp.exists():
+        x = pd.read_pickle(xp)
+        if len(x) == len(t) and (x["seg_id"].to_numpy() == t["seg_id"].to_numpy()).all():
+            road = x["d_road_m"].to_numpy(dtype=float)
+    rows = []
+    for s in np.flatnonzero(hot):
+        if seen[s] or (up[s] >= 0 and hot[up[s]]):
+            continue
+        members, gap, cur = [], [], s
+        while cur >= 0 and not seen[cur]:
+            if hot[cur]:
+                members += gap + [cur]
+                gap = []
+            else:
+                gap.append(cur)
+                if len(gap) > max_gap:
+                    break
+            cur = down[cur]
+        if not members:
+            continue
+        m = np.asarray(members)
+        seen[m] = True
+        km = length[m].sum() / 1000.0
+        if km < min_len_km:
+            continue
+        sub = t.iloc[m]
+        names = sub["river"].fillna("")
+        name = names[names != ""].mode().iloc[0] if (names != "").any() else ""
+        w = length[m]
+        rows.append({
+            "river": name, "region": sub["region"].iloc[-1], "length_km": round(km, 2), "reaches": len(m),
+            "median_pct": round(float(np.median(pct[m])), 2), "min_pct": round(float(pct[m].min()), 2),
+            "oof_pct": round(float(np.median(oof[m])), 2) if oof is not None else None,
+            "national_pct": round(float(np.median(nat[m])), 2),
+            "grad_m_per_km": round(float(np.average(sub["grad_s"], weights=w)), 1),
+            "steep50_max": round(float(sub["steepest_50m_m_per_km"].max()), 0),
+            "drop_m": round(float((sub["grad_s"] * w).sum() / 1000.0), 0),
+            "area_top_km2": round(float(sub["area_km2"].iloc[0]), 1),
+            "area_bottom_km2": round(float(sub["area_km2"].iloc[-1]), 1),
+            "maf_bottom_m3s": round(float(sub["maf_m3s"].iloc[-1]), 1),
+            "gorge_m": round(float(sub["gorge_depth_m"].mean()), 0),
+            "valley_w_m": round(float(sub["valley_width_m"].median()), 0),
+            "style": str(sub["style"].astype(str).mode().iloc[0]) if "style" in sub else "",
+            "rockgroup": str(sub["rockgroup"].mode().iloc[0]) if "rockgroup" in sub else "",
+            "falls_n": int(np.nansum(sub["falls_n"])) if "falls_n" in sub else 0,
+            "falls_max_h_m": float(np.nanmax(sub["falls_max_h_m"])) if "falls_max_h_m" in sub and
+            np.isfinite(sub["falls_max_h_m"]).any() else None,
+            "road_min_m": round(float(np.nanmin(road[m])), 0) if road is not None else None,
+            "river_in_guides": bool(norm_river(name) in listed) if name else False,
+            "lat_top": round(float(sub["lat"].iloc[0]), 5), "lon_top": round(float(sub["lon"].iloc[0]), 5),
+            "lat_bottom": round(float(sub["lat"].iloc[-1]), 5), "lon_bottom": round(float(sub["lon"].iloc[-1]), 5),
+            "top_seg_id": int(sub["seg_id"].iloc[0]),
+        })
+    out = pd.DataFrame(rows)
+    if len(out):
+        out = out.sort_values(["median_pct", "length_km"], ascending=False).reset_index(drop=True)
+        out.insert(0, "rank", np.arange(1, len(out) + 1))
+    return out
+
+
+def write_audit(model_id: str, n: int = 60, log=print) -> Path:
+    """``models/audits/<model>_top_runs.csv``: the best run of each of the ``n`` top unlisted rivers (unnamed
+    reaches count one river per run), from ``candidate_runs``."""
+    from .models import load_card
+
+    runs = candidate_runs(load_card(model_id))
+    key = np.where(runs["river"] != "", runs["river"] + " | " + runs["region"], "#" + runs["rank"].astype(str))
+    best = runs[~pd.Series(key).duplicated().to_numpy()].head(n)
+    AUDIT_DIR.mkdir(parents=True, exist_ok=True)
+    p = AUDIT_DIR / f"{model_id}_top_runs.csv"
+    best.to_csv(p, index=False)
+    log(f"audit: {len(runs)} runs in the top 1% of unlisted reaches; best of {len(best)} rivers -> {p}")
+    return p

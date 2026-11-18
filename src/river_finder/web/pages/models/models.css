@@ -1,0 +1,13 @@
+/* Models page (#models). Owned by the Models agent (rf-aq6.4). */
+.models-cur td { background: var(--accent-soft); }
+.models-cur td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+.models-pick { min-height: var(--touch); flex-wrap: nowrap; align-items: center; }
+.models-pick input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); flex: none; }
+.models-id { font-family: var(--font-data); font-size: var(--fs-xs); }
+.models-ctls { align-items: end; gap: var(--sp-3); }
+.models-ctl { gap: var(--sp-1); flex: 1 1 220px; min-width: 0; }
+.models-ctl select { width: 100%; min-height: var(--touch); }
+.models-mlbtn { text-decoration: none; }
+a.models-ml { color: var(--accent); }
+#page-models .rf-table td { vertical-align: middle; }
+#page-models .rf-table td:first-child { min-width: 11rem; }

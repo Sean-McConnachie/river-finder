@@ -513,8 +513,55 @@ What this says:
   fourth decimal. v2 gets 0.937 style-matched and 0.733 size-matched on the guide rivers
   (`models/evaluations.json`).
 
-Next (rf-gz6): a v3 candidate from gbm_terrain, trained on all labels and without coordinates or
-OSM. Score it like v2 and audit its top-ranked creeks by hand.
+## v3: LightGBM in the registry, and the first top-runs audit (2026-11-18)
+
+`models/v3.json` is the `gbm_terrain` recipe frozen as a registry card, the first of kind `gbm`. The
+LightGBM model is in `models/v3.lgb.txt` (1.4 MB), checked against `booster_sha256`. Like every
+card it is frozen: `save_gbm` refuses to replace it with a different model.
+
+- **Inputs:** the 13 v2 features plus valley width, confinement, karst bed, karst share upstream, rock
+  age, and GNS rock class and group. No coordinates, no OSM and no access.
+- **Training:** the same split and labels as v2 (`guides-v1` training rivers, every section, held-out
+  rivers left out), with the CV recipe: reaches of 2 km² or more, 30% of background, weighted back
+  up, fixed seed, deterministic LightGBM.
+- **Train it:** `river-finder models train --kind gbm --recipe gbm_terrain --name v3 ...` (3 s).
+- **Scoring:** `models.logits` runs on any reach frame. `ml.enrich` adds geology, karst and reach type
+  to frames that lack them, such as the 5 m reference areas. National reaches are scored from
+  `ml_table`, because karst share needs the whole-NZ network. The viewer files are
+  `<region>_m_v3.txt`, as for v2.
+- **Registry:** v3 is now the default model: the newest card trained on every section. The registry
+  payload also carries the CV summary (`cv`) and v3's gain importance.
+
+Held-out guide rivers (`guides-v1`, 49 rivers; `models/evaluations.json`, which now also has a
+style × size column):
+
+| model | AUC | size-matched | style-matched | style × size | recall@10% |
+|---|---|---|---|---|---|
+| baseline-flow | 0.917 | 0.548 | 0.905 | 0.711 | 0.81 |
+| v2 | 0.931 | 0.695 | 0.921 | 0.768 | 0.81 |
+| v2-published | 0.925 | 0.670 | 0.915 | 0.746 | 0.79 |
+| **v3** | **0.952** | **0.840** | **0.948** | **0.859** | **0.85** |
+
+With published coordinates only, v3 scores 0.973 AUC and 0.904 style × size. v3 also scores 0.977
+AUC on the Mangakarengorengo reference test, against 0.889 for v2.
+
+This split holds out whole rivers but not whole catchments, so it flatters a flexible model. The
+catchment-grouped CV is the more honest comparison: `gbm_terrain` gets 0.804 style × size there,
+against 0.754 for `logit13` (the v2 recipe).
+
+**Audit** (`river-finder ml audit`, `models/audits/v3_top_runs.csv`, notes in
+`docs/audits/v3-top-runs-2026-11-18.md`):
+
+- The candidates are the top 1% of unlisted reaches (the national top 1% is 97% guide reaches),
+  chained into runs. Each run carries an out-of-fold percentile as a stability check.
+- 43 of the top 60 rivers are other stretches of guide rivers, and 11 are flat big-river reaches.
+- Two are DEM flats (0 m/km): the Roaring Lion and the lower Arawhata.
+- Three are hydro-affected, including the Waikaremoana outlet.
+- The plausible new leads are mostly remote South Westland and Fiordland rivers: Mahitahi, Olivine,
+  Mueller, Clarke, Hidden Falls Creek, Moeraki, Mikonui and Esk.
+
+Follow-ups are in beads: a gradient or style floor for discovery ranking, a hydro mask, a section
+mapping fix, and a human check of the leads.
 
 ## Open questions
 
