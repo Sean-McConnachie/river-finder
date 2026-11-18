@@ -147,12 +147,12 @@
     // summary
     const pills = el("div", { class: "rf-row" });
     if (sec) pills.append(el("span", { class: "rf-pill det-grade", style: `--g:${M.gradeColor(M.gradeBin(sec))}`, text: sec.grade ? `Grade ${sec.grade}` : "Grade not recorded" }));
-    if (f.kind === "run") pills.append(el("span", { class: `rf-pill ${f.status === "candidate" ? "rf-pill--ok" : f.status === "heldout" ? "rf-pill--warn" : ""}`, text: f.status === "candidate" ? "Not in the guides" : f.status === "heldout" ? "Test river (held out)" : "In the guides" }));
-    if (onSection) pills.append(el("span", { class: "rf-pill", text: `Overlaps ${onSection.river}${onSection.section ? `: ${onSection.section}` : ""}` }));
+    if (f.kind === "run" && !(onSection && f.status === "candidate")) pills.append(el("span", { class: `rf-pill ${f.status === "candidate" ? "rf-pill--ok" : f.status === "heldout" ? "rf-pill--warn" : ""}`, text: f.status === "candidate" ? "Not in the guides" : f.status === "heldout" ? "Test river (held out)" : "In the guides" }));
+    if (onSection) pills.append(el("span", { class: "rf-pill rf-pill--accent", text: `In the guides: overlaps ${onSection.river}${onSection.section ? ` (${onSection.section})` : ""}` }));
     if (sec?.popularity) pills.append(el("span", { class: "rf-pill", text: sec.popularity }));
     if (sec?.time) pills.append(el("span", { class: "rf-pill", text: sec.time }));
     const desc = sec?.desc ? [el("p", { class: "det-desc", text: sec.desc }), el("p", { class: "rf-note", text: SRC_NOTE[sec.src] || "" })]
-      : [el("p", { class: "det-desc", text: f.kind === "section" ? "No description recorded." : onSection ? "Part of a section in the guides (see the pill above)." : "Not in the guides." })];
+      : [el("p", { class: "det-desc", text: f.kind === "section" ? "No description recorded." : onSection ? "Part of this stretch is a section in the guides (see above); open it from the map for its description." : "Not in the guides." })];
     const gen = el("p", { class: "rf-note", text: `${(st.L / 1000).toFixed(1)} km at an average ${fmt.grad(st.grad)} m/km, dropping ${fmt.int(st.drop)} m from ${fmt.int(st.zTop)} m to ${fmt.int(st.zBot)} m. Catchment ${fmt.km2(st.aTop)} → ${fmt.km2(st.aBot)} km²; mean annual flood ${fmt.flow(st.maf)} m³/s at the bottom.${f.kind === "reach" ? ` The profile covers ${f.name === "Unnamed stream" ? "the main stem around the reach" : `the ${f.name} channel`}.` : ""}` });
 
     // coordinates

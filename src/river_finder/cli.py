@@ -177,9 +177,10 @@ def main(argv: list[str] | None = None) -> None:
     px.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz",
                     help="attach: viewer directory to write <region>_x.txt / _falls.json into")
     pw = sub.add_parser("web", help="web app (Map, Top rivers, Models, Info): build | serve (see web/README.md)")
-    pw.add_argument("step", choices=["data", "build", "serve"],
-                    help="data: per-region extras (known sections, roads, tracks) into --data; build: the pages; "
-                         "serve: localhost")
+    pw.add_argument("step", choices=["data", "build", "serve", "pages"],
+                    help="data: per-region extras (known sections, roads, tracks, gauges) into --data; build: the "
+                         "pages; serve: localhost; pages: stage the site for GitHub Pages (--push to publish)")
+    pw.add_argument("--push", action="store_true", help="pages: force-push the staged site to the gh-pages branch")
     pw.add_argument("--data", type=Path, default=REPO_ROOT / "data" / "viewer_nz",
                     help="region data files (from nz viewer / models viewer / external attach)")
     pw.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "web")
@@ -213,6 +214,14 @@ def main(argv: list[str] | None = None) -> None:
             out = webapp.build(args.out, args.data if args.data.exists() else None, args.basemaps_key)
             print(f"web -> {out['site']} and {out['artifact'].name} ({out['regions']} regions, "
                   f"{out['data_files']} data files)")
+        elif args.step == "pages":
+            import subprocess
+
+            remote = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True,
+                                    text=True).stdout.strip()
+            stage = args.out.parent / "web_pages"
+            sha = webapp.deploy_pages(args.out, stage, remote, push=args.push)
+            print(f"pages: staged {stage} as {sha}", "and pushed" if args.push else "(not pushed; add --push)")
         else:
             webapp.serve(args.out, args.port)
         return

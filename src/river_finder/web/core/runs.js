@@ -98,6 +98,8 @@
     const n = S.g.length, ok = new Uint8Array(n), runId = new Int32Array(n).fill(-1), runs = [];
     for (let i = 0; i < n; i++) ok[i] = D.ws[i] >= p.threshold && (!p.gate || (D.dQ[i] > 0 && D.dS[i] > 0 && D.dH[i] > 0)) ? 1 : 0;
     const listed = new Set(S.listed);
+    // reaches on a known guide section (R.sections): a run touching one counts as in the guides
+    const onGuide = new Set((R.sections || []).flatMap((x) => x.m));
     for (let s = 0; s < n; s++) {
       if (!ok[s] || runId[s] >= 0 || (S.u[s] >= 0 && ok[S.u[s]])) continue;
       const members = []; let gap = [], cur = s;
@@ -128,7 +130,7 @@
         acc = { putIn: S.dRoad[first], takeOut: S.dRoad[last], road: near(S.dRoad), track: near(S.dTrack), foot: near(S.dFoot) };
         members.forEach((m) => { falls += S.fallsN[m]; fallsH = Math.max(fallsH, S.fallsH[m]); });
       }
-      const isListed = listed.has(river) || guide;
+      const isListed = listed.has(river) || guide || members.some((m) => onGuide.has(m));
       runs.push({
         kind: "run", region: R.id, id: `${R.id}:run:${first}`, rid, members, name: river || "Unnamed creek", river,
         len, drop, grad: drop / (len * 1000) * 1000, effG: eg / (len * 1000), s50,

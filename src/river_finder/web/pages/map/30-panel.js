@@ -155,7 +155,7 @@
     panel.toggleAttribute("data-collapsed", !open);
     document.querySelector(".map-layers-btn")?.setAttribute("aria-expanded", String(open));
     if (!M.isPhone()) { M.prefs.panelOpen = open; M.savePrefs(); }
-    if (open && M.isPhone()) panel.querySelector(".map-panel-close")?.focus({ preventScroll: true });
+    if (open && M.isPhone()) panel.querySelector(".map-panel-close")?.focus({ preventScroll: true, focusVisible: false });
   };
 
   /** Build the panel inside the map root. */

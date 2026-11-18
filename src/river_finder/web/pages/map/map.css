@@ -150,5 +150,7 @@
   .map-card, .map-root:has(.map-panel:not([data-collapsed])) .map-card { left: 8px; right: 8px; bottom: 8px; transform: none; width: auto; }
   .map-minilegend { bottom: 30px; width: 190px; }
   .map-root:has(.map-card:not([hidden])) .map-minilegend { display: none; }
-  .map-basemaps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .map-basemaps { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .map-basemap { padding: 4px 3px; }
+  .map-basemap-thumb { height: 24px; }
 }

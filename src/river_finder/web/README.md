@@ -38,7 +38,19 @@ uv run river-finder web build                        # -> data/web/index.html + 
 uv run river-finder web serve                        # http://localhost:8000/
 ```
 
-`web build` takes a second, so rebuild after each edit. With no data the app still builds and every
+`web build` takes a second, so rebuild after each edit.
+
+Publishing:
+
+- claude.ai artifact (private to the owner until shared): https://claude.ai/artifact/EhgWyCEjHYFHAY5235CHcu.
+  Publish `data/web/artifact.html` with every other file in `data/web/` (not `index.html`) as
+  supporting files at the same relative paths.
+- Standalone site (GitHub Pages): `uv run river-finder web pages` stages `data/web_pages/` (a single
+  orphan commit); `--push` force-pushes it to the `gh-pages` branch. Pages must be enabled for the
+  repository (Settings → Pages → branch `gh-pages`); a private repository needs a paid GitHub plan
+  and the site itself is public. Topographic and aerial base maps need a LINZ Basemaps API key at
+  build time (`--basemaps-key` or `$LINZ_BASEMAPS_KEY`); without one, tiles outside LINZ's CDN cache
+  fail (HTTP 400). With no data the app still builds and every
 page shows its empty state. Run `uv run pytest -q tests/test_webapp.py` before pushing.
 
 ## Writing a page

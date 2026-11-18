@@ -185,3 +185,35 @@ def serve(out_dir: Path, port: int = 8000) -> None:
     with http.server.ThreadingHTTPServer(("127.0.0.1", port), handler) as httpd:
         print(f"serving {out_dir} on http://localhost:{port}/", flush=True)
         httpd.serve_forever()
+
+
+def stage_pages(out_dir: Path, stage: Path) -> Path:
+    """Copy the standalone site (``index.html``, data files, glyphs; not ``artifact.html``) into
+    ``stage`` as a GitHub Pages tree (with ``.nojekyll``)."""
+    if stage.exists():
+        shutil.rmtree(stage)
+    stage.mkdir(parents=True)
+    for p in out_dir.rglob("*"):
+        rel = p.relative_to(out_dir)
+        if p.is_dir() or rel.name in ("artifact.html", "index_fragment.html"):
+            continue
+        q = stage / rel
+        q.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(p, q)
+    (stage / ".nojekyll").write_text("")
+    return stage
+
+
+def deploy_pages(out_dir: Path, stage: Path, remote_url: str, branch: str = "gh-pages", push: bool = False) -> str:
+    """Commit the staged site as a single orphan commit on ``branch``; push (force: the branch only
+    ever holds the latest build) when ``push`` is set. Returns the commit id."""
+    stage_pages(out_dir, stage)
+    run = lambda *a: subprocess.run(["git", *a], cwd=stage, check=True, capture_output=True, text=True).stdout.strip()  # noqa: E731
+    run("init", "-q", "-b", branch)
+    run("add", "-A")
+    run("-c", "user.name=river-finder", "-c", "user.email=river-finder@users.noreply.github.com",
+        "commit", "-q", "-m", f"Site build {time.strftime('%Y-%m-%d %H:%M')} from {_commit() or 'working tree'}")
+    sha = run("rev-parse", "--short", "HEAD")
+    if push:
+        run("push", "-f", remote_url, f"HEAD:{branch}")
+    return sha
