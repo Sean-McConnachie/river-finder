@@ -467,10 +467,13 @@ const MODELS = R ? R.models : [];
 const METRIC_LABEL = { auc_style: "Style-matched AUC", auc: "AUC", auc_size: "Size-matched AUC", auc_style_size: "Style × size AUC",
   recall_top10: "Recall @ top 10%", recall_top5: "Recall @ top 5%", median_pct: "Median percentile" };
 
+const OV_SERIES = [{ label: "Style-matched AUC", color: "var(--s1)" }, { label: "Style × size AUC", color: "var(--s2)" }];
 renders.overview = () => {
   const v = $("v-overview");
   const T = E ? E.total : null;
-  const best = MODELS.length ? [...MODELS].sort((a, b) => b.cv.auc_style.mean - a.cv.auc_style.mean)[0] : null;
+  // the best model without coordinates: coordinates can learn where the guide authors paddled
+  const noXY = MODELS.filter((m) => !m.features.includes("x_km"));
+  const best = noXY.length ? [...noXY].sort((a, b) => b.cv.auc_style_size.mean - a.cv.auc_style_size.mean)[0] : null;
   v.innerHTML = `
   <div>
     <p class="eyebrow">River Finder · model evaluation</p>
@@ -480,10 +483,10 @@ renders.overview = () => {
   <div class="stats">
     <div class="stat"><div class="v">${T ? NZ(T.background + T.positives) : "–"}</div><div class="k">reaches in the domain (≥ ${E ? E.domain_km2 : 2} km², about 250 m each)</div></div>
     <div class="stat"><div class="v">${T ? NZ(T.positives) : "–"}</div><div class="k">known-run reaches on ${T ? NZ(T.rivers) : "–"} rivers (positives)</div></div>
-    <div class="stat"><div class="v">${best ? F3(best.cv.auc_style.mean) : "–"}</div><div class="k">best style-matched AUC (${best ? esc(best.title) : "no CV yet"})</div></div>
+    <div class="stat"><div class="v">${best ? F3(best.cv.auc_style_size.mean) : "–"}</div><div class="k">best style × size AUC without coordinates (${best ? esc(best.title) : "no CV yet"}; style-matched ${best ? F3(best.cv.auc_style.mean) : "–"})</div></div>
     <div class="stat"><div class="v">${R ? `${R.repeats}×${R.folds}` : "–"}</div><div class="k">repeated catchment-grouped folds, plus leave-one-region-out</div></div>
   </div>
-  <div class="panel"><h3>Style-matched AUC by model</h3><p class="note">Mean over ${R ? R.repeats : 5} repeats of the 5-fold split; whiskers ± 1 sd over repeats (thin line: ± 1 sd over single folds). Grey dash: chance. Higher is better; it is a lower bound because the background still holds undiscovered runs.</p><div class="chart" id="ov-dots"></div></div>
+  <div class="panel"><h3>Style-matched and style × size AUC by model</h3><p class="note">Mean over ${R ? R.repeats : 5} repeats of the 5-fold split; whiskers ± 1 sd over repeats (thin line: ± 1 sd over single folds). Grey dash: chance. Higher is better; both are lower bounds because the background still holds undiscovered runs. Style is set by slope and confinement only, so style matching alone does not control river size: within a style, bigger rivers still win, and flood size alone scores high. Style × size also matches the flood quintile, so it separates the models more clearly.</p><div class="chart" id="ov-dots"></div></div>
   <div><h2>All headline metrics</h2><div id="ov-table"></div></div>
   <div class="grid2">
     <div class="panel"><h3>What the metrics mean</h3>
@@ -500,9 +503,13 @@ renders.overview = () => {
   if (!R) { $("ov-dots").innerHTML = missing("Cross-validation results", "uv run river-finder ml cv"); $("ov-table").innerHTML = ""; return; }
   const ms = MODELS;
   dotRows($("ov-dots"), {
-    rows: ms.map((m) => ({ label: m.title, values: [m.cv.auc_style.mean], lo: [m.cv.auc_style.mean - m.cv.auc_style.sd], hi: [m.cv.auc_style.mean + m.cv.auc_style.sd],
-      lo2: [m.cv.auc_style.mean - (m.cv.auc_style.fold_sd || 0)], hi2: [m.cv.auc_style.mean + (m.cv.auc_style.fold_sd || 0)], note: `${m.description} Fold sd ${F3(m.cv.auc_style.fold_sd)}.` })),
-    series: [{ label: "Style-matched AUC", color: "var(--s1)" }], domain: [0.4, 1], ref: 0.5, xlabel: "Style-matched AUC (OOF)", labelW: 210 });
+    rows: ms.map((m) => {
+      const a = m.cv.auc_style, b = m.cv.auc_style_size;
+      return { label: m.title, values: [a.mean, b.mean], lo: [a.mean - a.sd, b.mean - b.sd], hi: [a.mean + a.sd, b.mean + b.sd],
+        lo2: [a.mean - (a.fold_sd || 0), b.mean - (b.fold_sd || 0)], hi2: [a.mean + (a.fold_sd || 0), b.mean + (b.fold_sd || 0)],
+        note: `${m.description} Fold sd ${F3(a.fold_sd)} (style), ${F3(b.fold_sd)} (style × size).` };
+    }), series: OV_SERIES, domain: [0.4, 1], ref: 0.5, xlabel: "AUC (out-of-fold)", labelW: 210 });
+  legend($("ov-dots"), OV_SERIES);
   // fold-sd underlay
   const keys = ["auc_style", "auc", "auc_size", "auc_style_size", "recall_top10", "recall_top5"];
   const loroMean = (m) => { const xs = m.loro.map((r) => r.auc_style).filter((x) => x != null); return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null; };
