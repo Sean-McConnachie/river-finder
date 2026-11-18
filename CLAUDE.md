@@ -94,6 +94,7 @@ uv run river-finder score kaimai karangahake tutamoe  # re-score only (regressio
 uv run river-finder nz fetch|tiles|score|viewer   # national 8 m scan in 64 km tiles (data/nz/, ~4 h)
 uv run river-finder external fetch|attach   # OSM waterfalls/roads/tracks per reach via Overture S3 (~10 min)
 uv run river-finder web data|build|serve|pages  # web app (Map, Top rivers, Models, Info) -> data/web/
+uv run river-finder ml table|explore|cv|page  # ML: features, grouped repeated 5-fold OOF + LORO, ML page (~10 min)
 ```
 
 Web app: `src/river_finder/web/` (contract and ownership in `web/README.md`; page briefs in
@@ -108,7 +109,9 @@ Outputs go to `data/<region>/` (gitignored): `area_km2.tif`, `validation_summary
 Code: `src/river_finder/`. `routing.py` holds the graph algorithms (Priority-Flood, D8, flat
 resolution, Kahn accumulation), `reaches.py` the channel network and reach metrics, `scoring.py`
 the run finder, signature, composite and regression, and `context.py` the geology and flood
-fetchers. An 80 M-cell (5 m) region routes in about 100 s on this 4-core, 15 GB machine.
+fetchers. `ml.py` holds the CV evaluation (catchment folds, model zoo, metrics), `reachtype.py`
+the Montgomery & Buffington reach types used for style-matched AUC (spec: `docs/MB1997_reach_classification_spec.pdf`),
+`mlpage.py` the ML page (`data/viewer_nz/ml.html`) built from `models/cv/*.json`. An 80 M-cell (5 m) region routes in about 100 s on this 4-core, 15 GB machine.
 
 ## Conventions & Patterns
 
