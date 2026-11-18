@@ -89,7 +89,7 @@
   });
 
   // ---------- data per region ----------
-  const multi = (S, members) => ({ type: "MultiLineString", coordinates: members.map((m) => S.c[m]) });
+  const multi = (S, members) => ({ type: "MultiLineString", coordinates: RF.runs.chains(S, members) });
 
   function buildKnown(R) {
     const S = R.segments; if (!S) return EMPTY;
@@ -163,6 +163,7 @@
       const c = []; for (let j = 0; j < flat.length; j += 2) c.push([flat[j], flat[j + 1]]);
       return { type: "Feature", properties: { i, t, n: n >= 0 ? L.names[n] : "", named: n >= 0, sid }, geometry: { type: "LineString", coordinates: c } };
     });
+    M.linzFeats = feats;
     M.map.getSource("src-linz").setData({ type: "FeatureCollection", features: feats });
     // labels: LINZ names (their lines are smooth Topo50 centrelines); REC2 chains when there is no LINZ file
     M.map.getSource("src-names").setData(L ? { type: "FeatureCollection", features: feats.filter((f) => f.properties.named).map((f) => ({ type: "Feature", properties: { n: f.properties.n }, geometry: f.geometry })) } : buildNames(R));
@@ -170,6 +171,7 @@
   }
 
   M.onRegion((R) => {
+    M.linzFeats = null;
     if (!M.map.getSource("src-known")) return;
     M.map.getSource("src-known").setData(buildKnown(R));
     M.map.getSource("src-net").setData(buildNet(R));
@@ -234,6 +236,8 @@
   const LINZ_TYPE = { river_cl: "river", canal_cl: "canal" };
   function linzFeature(f, e) {
     const p = f.properties, S = M.R?.segments, type = LINZ_TYPE[M.linz?.types?.[p.t]] || "river";
+    // the whole LINZ line (rendered features are clipped to map tiles)
+    f = { properties: p, geometry: M.linzFeats?.[p.i]?.geometry || f.geometry };
     const linz = { name: p.n || "", sid: p.sid, type };
     const seg = S ? nearestReach(S, e.lngLat.lng, e.lngLat.lat) : -1;
     const name = p.n || (seg >= 0 && S.r[seg] >= 0 ? S.rivers[S.r[seg]] : `Unnamed ${type}`);

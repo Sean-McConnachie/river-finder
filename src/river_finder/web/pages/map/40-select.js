@@ -14,9 +14,10 @@
   M.clickable = (c) => { clickables.push(Object.assign({ priority: 50 }, c)); clickables.sort((a, b) => b.priority - a.priority); };
 
   // ---------- geometry of feature references ----------
-  M.geometry.run = (f) => { const S = M.R?.segments; return S ? { type: "LineString", coordinates: RF.runs.path(S, f.members) } : null; };
+  // Lines follow each connected downstream chain of reaches (never joined out of order), smoothed.
+  M.geometry.run = (f) => { const S = M.R?.segments; return S ? { type: "MultiLineString", coordinates: RF.runs.chains(S, f.members) } : null; };
   M.geometry.section = M.geometry.run;
-  M.geometry.reach = (f) => { if (f.geometry) return f.geometry; const S = M.R?.segments; return S ? { type: "LineString", coordinates: S.c[f.seg] } : null; };
+  M.geometry.reach = (f) => { if (f.geometry) return f.geometry; const S = M.R?.segments; return S ? { type: "LineString", coordinates: RF.runs.smooth(S.c[f.seg]) } : null; };
   M.geometry["linz-river"] = (f) => f.geometry || null;
   M.card["linz-river"] = (f) => ({ eyebrow: `LINZ ${f.linz.type}`, title: f.name,
     lines: [f.km2 ? el("span", { class: "num", text: `Catchment area here: ${M.fmtArea(f.km2)}` }) : null,
@@ -34,11 +35,11 @@
   M.initSelection = () => {
     const map = M.map;
     map.addSource("sel", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-    M.addLayer({ id: "sel-casing", type: "line", source: "sel", filter: ["==", ["geometry-type"], "LineString"],
+    M.addLayer({ id: "sel-casing", type: "line", source: "sel", filter: ["in", ["geometry-type"], ["literal", ["LineString", "MultiLineString"]]],
       layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 8, 7, 14, 12], "line-opacity": 0.9 } }, "select");
-    M.addLayer({ id: "sel-line", type: "line", source: "sel", filter: ["==", ["geometry-type"], "LineString"],
+    M.addLayer({ id: "sel-line", type: "line", source: "sel", filter: ["in", ["geometry-type"], ["literal", ["LineString", "MultiLineString"]]],
       layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": M.token("--accent"), "line-width": ["interpolate", ["linear"], ["zoom"], 8, 3, 14, 6] } }, "select");
-    M.addLayer({ id: "sel-point", type: "circle", source: "sel", filter: ["==", ["geometry-type"], "Point"],
+    M.addLayer({ id: "sel-point", type: "circle", source: "sel", filter: ["in", ["geometry-type"], ["literal", ["Point", "MultiPoint"]]],
       paint: { "circle-radius": 9, "circle-color": "rgba(0,0,0,0)", "circle-stroke-color": M.token("--accent"), "circle-stroke-width": 3 } }, "select");
     M.onTheme(() => { if (map.getLayer("sel-line")) { map.setPaintProperty("sel-line", "line-color", M.token("--accent")); map.setPaintProperty("sel-point", "circle-stroke-color", M.token("--accent")); } });
 

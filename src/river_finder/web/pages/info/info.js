@@ -13,8 +13,8 @@
   const SOURCES = [
     ["Elevation (8 m national DEM, 1 m LiDAR)", "LINZ, via the nz-elevation open data bucket", "Flow routing, catchment area, gradient, terrain shading", "CC BY 4.0",
       "https://registry.opendata.aws/nz-elevation/"],
-    ["Satellite imagery (EOxCloudless 2016)", "EOX IT Services; contains modified Copernicus Sentinel data 2016", "Satellite base map (10 m)", "CC BY 4.0",
-      "https://cloudless.eox.at"],
+    ["Satellite imagery (EOxCloudless 2025)", "EOX IT Services; contains modified Copernicus Sentinel data 2025", "Satellite base map (10 m)",
+      "CC BY-NC-SA 4.0", "https://cloudless.eox.at"],
     ["NZ Topo50 maps", "LINZ Basemaps", "Topographic base map (standalone site)", "CC BY 4.0", "https://basemaps.linz.govt.nz/"],
     ["River lines and names (NZ River Name Lines, Topo50)", "LINZ Data Service", "The river network on the map and its names", "CC BY 4.0",
       "https://data.linz.govt.nz/layer/103632-nz-river-name-lines-pilot/"],

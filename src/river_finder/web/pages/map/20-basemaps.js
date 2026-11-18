@@ -1,5 +1,5 @@
 /* Base maps: none, terrain (own LINZ-DEM hillshade), NZ Topo50 (LINZ Basemaps; standalone site only,
-   needs a Basemaps key), satellite (open Sentinel-2 cloudless 2016 by EOX, CC BY 4.0: live tiles on the
+   needs a Basemaps key), satellite (Sentinel-2 cloudless 2025 by EOX, CC BY-NC-SA 4.0: live tiles on the
    standalone site, a pre-rendered image per region on the artifact host, which blocks tile servers),
    catchment area (linear) and catchment area (log), plus region outlines. Owner: map agent. */
 (() => {
@@ -9,15 +9,15 @@
   const KEY = RF.config.basemapsKey || "";
   const linz = (set) => `https://basemaps.linz.govt.nz/v1/tiles/${set}/WebMercatorQuad/{z}/{x}/{y}.webp${KEY ? `?api=${encodeURIComponent(KEY)}` : ""}`;
   const LINZ_ATTR = '<a href="https://basemaps.linz.govt.nz/" target="_blank" rel="noopener">LINZ Basemaps</a> CC BY 4.0';
-  // EOxCloudless (Sentinel-2 cloudless): 2016 is CC BY 4.0 and covers NZ (2017 does not; 2018+ are non-commercial)
-  const S2_TILES = "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless_3857/default/g/{z}/{y}/{x}.jpg";
-  M.S2_ATTR = 'Satellite <a href="https://cloudless.eox.at" target="_blank" rel="noopener">EOxCloudless 2016</a> by EOX (modified Copernicus Sentinel data 2016) CC BY 4.0';
+  // EOxCloudless (Sentinel-2 cloudless) 2025: the newest cloud-free mosaic, CC BY-NC-SA 4.0
+  const S2_TILES = "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2025_3857/default/g/{z}/{y}/{x}.jpg";
+  M.S2_ATTR = 'Satellite <a href="https://cloudless.eox.at" target="_blank" rel="noopener">EOxCloudless 2025</a> by EOX (modified Copernicus Sentinel data 2025) <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noopener">CC BY-NC-SA 4.0</a>';
 
   M.BASEMAPS = [
     { id: "none", label: "None", note: "Plain background" },
     { id: "terrain", label: "Terrain", note: "Shaded relief from the LINZ elevation model" },
     { id: "topo", label: "Topographic", note: "NZ Topo50 maps (LINZ)", site: true },
-    { id: "satellite", label: "Satellite", note: "Sentinel-2 cloudless 2016 (EOX, CC BY 4.0), 10 m pixels" },
+    { id: "satellite", label: "Satellite", note: "Sentinel-2 cloudless 2025 (EOX), 10 m pixels" },
     { id: "catch", label: "Catchment area", note: "Upstream area at every point, linear colour scale" },
     { id: "catch-log", label: "Catchment area (log)", note: "Upstream area, logarithmic colour scale" },
   ];

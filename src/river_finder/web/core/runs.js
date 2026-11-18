@@ -144,14 +144,8 @@
     return rankBy === "pareto" ? runs.sort((a, b) => a.layer - b.layer || b.ws - a.ws) : runs.sort((a, b) => b.score - a.score);
   }
 
-  /** One smoothed line for a run: [[lon, lat], ...] (reach pieces joined, two Chaikin passes). */
-  function path(S, members) {
-    const pts = [];
-    members.forEach((m) => S.c[m].forEach((pt, k) => {
-      const q = pts[pts.length - 1];
-      if (k === 0 && q && q[0] === pt[0] && q[1] === pt[1]) return;
-      pts.push(pt);
-    }));
+  /** Two Chaikin passes: softens the 5-8 m grid staircase; keeps both end points. */
+  function smooth(pts) {
     if (pts.length < 3) return pts;
     let sm = pts;
     for (let pass = 0; pass < 2; pass++) {
@@ -165,6 +159,38 @@
     }
     return sm;
   }
+  const join = (S, ms) => {
+    const pts = [];
+    ms.forEach((m) => S.c[m].forEach((pt, k) => {
+      const q = pts[pts.length - 1];
+      if (k === 0 && q && q[0] === pt[0] && q[1] === pt[1]) return;
+      pts.push(pt);
+    }));
+    return pts;
+  };
+
+  /** One smoothed line for reaches already in downstream order (a run): [[lon, lat], ...]. */
+  function path(S, members) { return smooth(join(S, members)); }
+
+  /**
+   * Smoothed lines for any set of reaches (in any order, with branches): one line per connected
+   * downstream chain, so reaches are never joined out of order. Returns [[[lon, lat], ...], ...].
+   */
+  function chains(S, members) {
+    const set = new Set(members), fed = new Set(), seen = new Set(), out = [];
+    members.forEach((m) => { if (set.has(S.d[m])) fed.add(S.d[m]); });
+    const walk = (start) => {
+      const chain = []; let cur = start;
+      while (cur >= 0 && set.has(cur) && !seen.has(cur)) { seen.add(cur); chain.push(cur); cur = S.d[cur]; }
+      if (!chain.length) return;
+      const pts = join(S, chain);
+      if (cur >= 0 && seen.has(cur)) pts.push(S.c[cur][0]); // close the joint at a confluence already drawn
+      out.push(smooth(pts));
+    };
+    members.filter((m) => !fed.has(m)).forEach(walk);
+    members.forEach((m) => { if (!seen.has(m)) walk(m); });
+    return out;
+  }
 
   /** Every reach upstream of (and including) a reach: Uint8Array mask in reach order. */
   function upstream(S, seg) {
@@ -175,5 +201,5 @@
     return mask;
   }
 
-  RF.runs = { defaults, find, path, upstream, segmentScores, percentiles, paretoLayers };
+  RF.runs = { defaults, find, path, chains, smooth, upstream, segmentScores, percentiles, paretoLayers };
 })();

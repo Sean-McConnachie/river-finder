@@ -270,13 +270,13 @@ def write_gauges(data_dir: Path, refresh: bool = False, log=print) -> int:
 
 
 # ---------------------------------------------------------------------------- satellite
-# EOxCloudless (Sentinel-2 cloudless) by EOX: the 2016 and 2017 editions are CC BY 4.0 (later years are
-# CC BY-NC-SA), and 2017 has no imagery over New Zealand, so the map uses 2016. Tiles are Web Mercator,
-# {z}/{row}/{col}; ~10 m (zoom 14).
-S2_LAYER = "s2cloudless_3857"
+# EOxCloudless (Sentinel-2 cloudless) by EOX, the 2025 edition: the newest cloud-free mosaic, ~10 m (zoom 14),
+# CC BY-NC-SA 4.0 (attribution, non-commercial, share-alike; 2016 is CC BY but too old for rivers that move).
+# Tiles are Web Mercator, {z}/{row}/{col}.
+S2_LAYER = "s2cloudless-2025_3857"
 S2_TILES = "https://tiles.maps.eox.at/wmts/1.0.0/{layer}/default/g/{z}/{y}/{x}.jpg"
-S2_ATTRIBUTION = ("EOxCloudless 2016 (https://cloudless.eox.at) by EOX IT Services GmbH, contains modified "
-                  "Copernicus Sentinel data 2016, CC BY 4.0")
+S2_ATTRIBUTION = ("EOxCloudless 2025 (https://cloudless.eox.at) by EOX IT Services GmbH, contains modified "
+                  "Copernicus Sentinel data 2025, CC BY-NC-SA 4.0")
 _ORIGIN = 20037508.342789244
 
 

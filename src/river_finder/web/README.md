@@ -48,7 +48,7 @@ Publishing:
 - Standalone site (GitHub Pages): `uv run river-finder web pages` stages `data/web_pages/` (a single
   orphan commit); `--push` force-pushes it to the `gh-pages` branch. Pages must be enabled for the
   repository (Settings → Pages → branch `gh-pages`); a private repository needs a paid GitHub plan
-  and the site itself is public. The satellite base map is open Sentinel-2 cloudless 2016 (EOX, CC BY 4.0): live tiles
+  and the site itself is public. The satellite base map is Sentinel-2 cloudless 2025 (EOX, CC BY-NC-SA 4.0): live tiles
   on the site, `<region>_sat.jpg` (from `web data`) on the artifact. The topographic base map needs a LINZ Basemaps API key at
   build time (`--basemaps-key` or `$LINZ_BASEMAPS_KEY`); without one, tiles outside LINZ's CDN cache
   fail (HTTP 400). With no data the app still builds and every
