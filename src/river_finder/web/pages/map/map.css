@@ -7,7 +7,7 @@
 /* ---------- side panel / bottom sheet ---------- */
 .map-panel {
   position: absolute; z-index: 5; top: 12px; bottom: 12px; left: max(12px, env(safe-area-inset-left, 0px)); width: 340px;
-  display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); background: var(--surface); color: var(--fg);
+  display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); background: var(--surface); color: var(--fg);
   border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow); overflow: hidden;
 }
 .map-panel[data-collapsed] { display: none; }
@@ -19,8 +19,8 @@
 .map-tabs button { flex: 1; min-height: 30px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font: 600 var(--fs-sm) var(--font-ui); cursor: pointer; }
 .map-tabs button[aria-selected="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / 0.12); }
 .map-panel-body { overflow: auto; overscroll-behavior: contain; padding: var(--sp-3) var(--sp-3) var(--sp-5); }
-.map-pane { display: grid; gap: var(--sp-5); }
-.map-sec { display: grid; gap: var(--sp-2); }
+.map-pane { display: grid; gap: var(--sp-5); grid-template-columns: minmax(0, 1fr); }
+.map-sec { display: grid; gap: var(--sp-2); grid-template-columns: minmax(0, 1fr); min-width: 0; }
 
 /* base maps */
 .map-basemaps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-2); }
@@ -68,6 +68,8 @@
 .map-swatch--area, .map-key--area { width: 14px; height: 14px; border-radius: 3px; background: var(--sw); }
 @media (pointer: coarse) { .map-swatch--line { height: 10px; width: 26px; } .map-swatch--dot { width: 18px; height: 18px; } }
 .map-key { display: inline-block; flex: none; }
+.map-model { display: grid; gap: 4px; padding: var(--sp-3); background: var(--surface-2); border-radius: var(--radius); font-size: var(--fs-sm); }
+.map-model-more { justify-self: start; font-size: var(--fs-xs); padding: 0; min-height: 24px; }
 .map-reset { justify-self: start; font-size: var(--fs-xs); color: var(--muted); }
 
 /* legend */

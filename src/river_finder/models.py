@@ -120,11 +120,10 @@ def national_table(rebuild: bool = False, log=print) -> pd.DataFrame:
     return t
 
 
-def reference_frame(rid: str) -> pd.DataFrame:
-    """A 5 m reference area's reaches in the same layout (``vi``: viewer index, reaches >= 1 km2)."""
+def reference_frame(rid: str, guide_regions: bool = True) -> pd.DataFrame:
+    """A 5 m reference area's reaches in the same layout (``vi``: viewer index, reaches >= 1 km2).
+    ``guide_regions=False`` skips the guide-region lookup (it needs the national council layer)."""
     import pyogrio
-
-    from .national import assign_regions
 
     reg = load_region(rid)
     g = pyogrio.read_dataframe(reg.data_dir() / "segments_scored.gpkg",
@@ -136,7 +135,12 @@ def reference_frame(rid: str) -> pd.DataFrame:
     f["vi"] = np.where(big, np.cumsum(big) - 1, -1)
     f["region"] = rid
     f = _finish(f, mid.x.to_numpy(), mid.y.to_numpy())
-    f["guide_region"] = assign_regions(mid.reset_index(drop=True))
+    if guide_regions:
+        from .national import assign_regions
+
+        f["guide_region"] = assign_regions(mid.reset_index(drop=True))
+    else:
+        f["guide_region"] = ""
     return f
 
 

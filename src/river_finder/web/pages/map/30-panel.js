@@ -11,7 +11,7 @@
   M.nodes = new Map();
   M.order = [];
 
-  M.defineGroup = (g) => { const n = Object.assign({ type: "group", defaultOn: true }, g); M.nodes.set(n.id, n); M.order.push(n.id); return n; };
+  M.defineGroup = (g) => { const n = Object.assign({ type: "group", defaultOn: true, colors: [] }, g); M.nodes.set(n.id, n); M.order.push(n.id); return n; };
   M.defineLayer = (l) => { const n = Object.assign({ type: "layer", defaultOn: false, colors: [], swatch: "line" }, l); M.nodes.set(n.id, n); M.order.push(n.id); return n; };
   M.isOn = (id) => { const n = M.nodes.get(id); if (!n) return false; const p = M.prefs.layers[id]; return p === undefined ? n.defaultOn : p; };
   M.isVisible = (id) => { let n = M.nodes.get(id); while (n) { if (!M.isOn(n.id)) return false; n = n.parent ? M.nodes.get(n.parent) : null; } return true; };
@@ -133,6 +133,17 @@
   };
   M.drawCatchLegend = () => M.renderLegend();
 
+  function modelPicker() {
+    const models = RF.models.list();
+    if (!models.length) return null;
+    const sel = el("select", { class: "rf-select", id: "map-model" },
+      ...models.slice().reverse().map((m) => el("option", { value: m.id, text: m.title || m.id, selected: m.id === RF.state.model })));
+    sel.addEventListener("change", () => RF.setModel(sel.value));
+    RF.on("model", ({ id }) => { sel.value = id; });
+    return el("div", { class: "map-model" }, el("label", { for: "map-model", text: "Model for predicted runs" }), sel,
+      el("button", { type: "button", class: "rf-btn rf-btn--quiet map-model-more", onclick: () => RF.go("models") }, "About the models"));
+  }
+
   function setTab(name) {
     Object.entries(tabs).forEach(([k, t]) => { t.btn.setAttribute("aria-selected", String(k === name)); t.pane.hidden = k !== name; });
     M.prefs.tab = name; M.savePrefs();
@@ -154,7 +165,7 @@
     legendEl = el("div", { class: "map-legend" });
     const layersPane = el("div", { class: "map-pane", role: "tabpanel", id: "map-pane-layers" },
       el("section", { class: "map-sec" }, el("h3", { class: "rf-eyebrow", text: "Base map" }), baseEl),
-      el("section", { class: "map-sec" }, el("h3", { class: "rf-eyebrow", text: "Layers" }), treeEl,
+      el("section", { class: "map-sec" }, el("h3", { class: "rf-eyebrow", text: "Layers" }), treeEl, modelPicker(),
         el("button", { type: "button", class: "rf-btn rf-btn--quiet map-reset", onclick: () => { M.prefs.colors = {}; M.savePrefs(); M.applyLayers(); M.renderTree(); RF.util.toast("Colours reset"); } }, "Reset colours")));
     const legendPane = el("div", { class: "map-pane", role: "tabpanel", id: "map-pane-legend", hidden: true }, legendEl);
     const tabBar = el("div", { class: "map-tabs", role: "tablist" });

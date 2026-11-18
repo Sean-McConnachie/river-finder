@@ -63,6 +63,12 @@
     } catch (e) { R.falls = R.falls || []; /* optional layer */ }
   }
 
+  // Known sections placed on this region's reaches (river_finder.webdata): <id>_sections.json.
+  async function loadSections(R) {
+    R.sections = [];
+    try { const res = await fetch(`${R.id}_sections.json`); if (res.ok) R.sections = await res.json(); } catch (e) { /* optional */ }
+  }
+
   async function load(entry) {
     const R = Object.assign({}, entry);
     if (R.src) {
@@ -70,7 +76,7 @@
       if (R.segB64) R.segments = decodeSegments(RF.util.b64bytes(await getText(R.segB64, `the ${R.title} reaches`)).buffer, R.segHead, R.segInfo);
     }
     R.falls = R.falls || [];
-    await loadExternal(R);
+    await Promise.all([loadExternal(R), loadSections(R)]);
     R.loaded = true;
     return R;
   }

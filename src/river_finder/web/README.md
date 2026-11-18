@@ -32,6 +32,8 @@ Build order: `core/tokens.css`, `core/base.css`, `vendor/*.css`, `pages/<id>/*.c
 ```bash
 uv run river-finder run kaimai karangahake tutamoe   # reference regions, ~15 min (once)
 uv run river-finder nz viewer                        # region data files -> data/viewer_nz/ (refs only if no national scan)
+uv run river-finder external all                     # waterfalls, roads, tracks (~1 min for the refs)
+uv run river-finder web data                         # known sections per region
 uv run river-finder web build                        # -> data/web/index.html + artifact.html (+ data files)
 uv run river-finder web serve                        # http://localhost:8000/
 ```
@@ -93,7 +95,10 @@ Stable unless noted. Anything not listed here is internal.
 | `RF.data.loaded(id)` | the region if already loaded, else null |
 | `RF.data.scores(regionId, modelId)` → `Promise<{pct, role}>` | per-reach percentile (0-100) for a model; `role` bits 0-1: 1 trained on, 2 test river; bit 2: on a guide section |
 
-`Region` has `id, title, description, bounds, segments` (below), `falls`
+`Region` has `id, title, description, bounds, segments` (below), `sections` (known whitewater
+sections placed on reaches: `{id, river, section, grade, gmin, gmax, src, srcName, desc, putIn, takeOut,
+putInDesc, takeOutDesc, coords, gauge, flow, len, time, hazards, links: [{t, u}], how, m: [reach]}`,
+see `webdata.py`), `falls`
 (`[lon, lat, name, height_m | null, reach | -1, kind ("r" = rapids)]`), `runs` (reference markers),
 `rec2` (NIWA REC2 main rivers), `stats`, and image fields used by the map.
 
@@ -150,7 +155,7 @@ Anything selectable is a plain object with `kind`, `region`, `id` and `name`:
 |---|---|
 | `run` | `members` (reach indices, upstream first), `river`, `len` km, `drop` m, `grad` m/km, `s50`, `aTop`, `aBot` km², `maf` m³/s, `ha`, `score` 0-100, `status` (`listed` / `heldout` / `candidate`), `layer` (Pareto), `acc`, `falls`, `fallsH` |
 | `reach` | `seg` (reach index) |
-| `section` | known guide section (coming with rf-aq6.10): `members`, `section`, `grade`, `source`, `links` |
+| `section` | known guide section: `members` (reaches), `section`, `grade`, `src`, `sec` (the full record from `Region.sections`) |
 | `waterfall` | `lon`, `lat`, `height`, `seg` |
 | `gauge-rain`, `gauge-flow`, `road`, `track` | coming (rf-aq6.13, rf-aq6.14) |
 

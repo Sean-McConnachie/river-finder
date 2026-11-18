@@ -62,3 +62,21 @@ def test_build_writes_site_and_artifact_and_links_data(tmp_path):
     assert (out / "r1.json").exists() and res["regions"] == 1
     assert "legacy page" not in (out / "index.html").read_text()
     assert '"basemapsKey":"k123"' in site and "k123" not in art  # keys only in the standalone site
+
+
+def test_section_record_shapes_a_research_section():
+    from river_finder.labels import Section
+    from river_finder.webdata import section_record, source_group
+
+    s = Section(region="Bay of Plenty", river="Kaituna River", status="runnable", grade="4-4+",
+                put_in=(176.38, -37.88), take_out=(176.39, -37.84), coords="inferred",
+                extra={"id": "riverguide:x", "primary_source": "riverguide", "section": "Lowers", "grade_max": 5,
+                       "description": "Pushy gorge.", "hazards": ["wood"]})
+    rec = section_record(s, [3, 4], "put-in to take-out",
+                         {"riverguide:x": {"sources": [{"title": "NZ RiverGuide", "url": "https://www.riverguide.co.nz/x"}]}})
+    assert source_group(s) == "riverguide" and rec["src"] == "riverguide"
+    assert rec["putIn"] == [-37.88, 176.38]  # [lat, lon]
+    assert 4 <= rec["gnum"] < 5 and rec["gmax"] == 5
+    assert rec["links"] == [{"t": "NZ RiverGuide", "u": "https://www.riverguide.co.nz/x"}] and rec["m"] == [3, 4]
+    local = Section(region="kaimai", river="Tuakopae Stream", status="runnable", source="Sean: top run")
+    assert source_group(local) == "local" and section_record(local, [1], "name")["desc"] == "Sean: top run"

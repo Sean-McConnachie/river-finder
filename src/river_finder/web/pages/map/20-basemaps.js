@@ -42,11 +42,15 @@
       map.addSource("bm-aerial", { type: "raster", tiles: [linz("aerial")], tileSize: 256, maxzoom: 19, attribution: LINZ_ATTR });
       M.addLayer({ id: "bm-topo", type: "raster", source: "bm-topo", layout: { visibility: "none" }, paint: { "raster-fade-duration": 150 } }, "base");
       M.addLayer({ id: "bm-aerial", type: "raster", source: "bm-aerial", layout: { visibility: "none" }, paint: { "raster-fade-duration": 150 } }, "base");
-      let warned = false;
-      map.on("error", (e) => {
-        if (!warned && e?.sourceId && String(e.sourceId).startsWith("bm-")) { warned = true; RF.util.toast("LINZ Basemaps tiles did not load. Check the connection or the API key."); }
-      });
     }
+    let warned = false;
+    map.on("error", (e) => {
+      if (e?.sourceId && String(e.sourceId).startsWith("bm-")) {
+        if (!warned) { warned = true; RF.util.toast("LINZ Basemaps tiles did not load. Check the connection or the API key."); }
+        return;
+      }
+      console.warn("map:", e?.error?.message || e);
+    });
     // region outlines (every region in the index)
     const feats = RF.data.regions().map((r) => {
       const [[la0, lo0], [la1, lo1]] = r.bounds;
