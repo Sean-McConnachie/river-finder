@@ -16,7 +16,7 @@
   // Colour by the section's stated grade (gnum), not its hardest rapid.
   M.gradeBin = (sec) => { const g = sec.gnum ?? sec.gmin ?? sec.gmax; return g == null ? 0 : Math.max(2, Math.min(6, Math.floor(g + 1e-6))); };
   M.gradeColor = (bin) => bin ? M.colorOf(`known-g${bin}`) : M.colorOf("known-g0");
-  let runs = [], runToken = 0;
+  let runs = [], runToken = 0, scored = null; // scored: {R, model} the predicted runs were found with
 
   // ---------- layer tree ----------
   M.defineGroup({ id: "rivers", label: "Rivers" });
@@ -143,12 +143,13 @@
     const model = RF.state.model ? await RF.data.scores(R.id, RF.state.model) : null;
     if (my !== runToken || M.R !== R) return;
     runs = RF.runs.find(R, { model });
+    scored = { R, model };
     const sc = runs.map((r) => r.score), lo = Math.min(...sc), hi = Math.max(...sc);
     M.predRange = runs.length ? [lo, hi] : null;
     M.map.getSource("src-pred")?.setData({ type: "FeatureCollection", features: runs.map((r, i) => ({
       type: "Feature", properties: { i, t: hi > lo ? (r.score - lo) / (hi - lo) : 1, listed: r.status === "listed" ? 1 : 0 },
       geometry: { type: "LineString", coordinates: RF.runs.path(S, r.members) } })) });
-    applyPred(); M.renderTree();
+    applyPred(); M.renderTree(); M.refreshCard("section");
   }
   M.runs = () => runs;
 
@@ -177,7 +178,7 @@
     M.map.getSource("src-net").setData(buildNet(R));
     M.linz = null; M.map.getSource("src-linz").setData(EMPTY); M.map.getSource("src-names").setData(EMPTY);
     loadLinz(R);
-    runs = []; M.map.getSource("src-pred").setData(EMPTY);
+    runs = []; scored = null; M.map.getSource("src-pred").setData(EMPTY);
     buildPred(R);
   });
   RF.on("model", () => { if (M.R && M.ready) buildPred(M.R); });
@@ -254,13 +255,16 @@
   M.sectionFeature = sectionFeature; M.reachFeature = reachFeature;
 
   const SRC_LABEL = Object.fromEntries(SOURCES.map(([k, l]) => [k, l]));
+  // The numbers a predicted run shows, from the section's reaches and the model the runs were found with
+  // (no score until those scores have loaded). A section placed by river name can be separate pieces.
   M.card.section = (f) => {
-    const s = f.sec, km = s.m.reduce((t, m) => t + M.R.segments.len[m], 0);
+    const s = f.sec, ready = scored?.R === M.R, st = RF.runs.measure(M.R, s.m, { model: ready ? scored.model : null });
     return {
       eyebrow: `Known river · ${SRC_LABEL[s.src] || s.srcName}`, title: s.section ? `${s.river}: ${s.section}` : s.river,
       lines: [el("span", { class: "rf-row" },
-        el("span", { class: "rf-pill", style: `background:${M.gradeColor(M.gradeBin(s))};color:#fff;border-color:transparent`, text: s.grade ? `Grade ${s.grade}` : "Grade not recorded" }),
-        el("span", { class: "num", text: `${fmt.km(km)} mapped` }))],
+        el("span", { class: "rf-pill", style: `background:${M.gradeColor(M.gradeBin(s))};color:#fff;border-color:transparent`, text: s.grade ? `Grade ${s.grade}` : "Grade not recorded" })),
+      st ? M.runLine(ready ? st : Object.assign(st, { score: null }), { mapped: true }) : el("span", { class: "rf-note", text: "No modelled reaches here." }),
+      st?.pieces > 1 ? el("span", { class: "rf-note", text: `Mapped as ${st.pieces} separate pieces: length is their total, flow and area are for the largest.` }) : null],
     };
   };
   M.card.reach = (f) => {

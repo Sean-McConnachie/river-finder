@@ -14,11 +14,6 @@
   const ext = (href, text) => el("a", { href, target: "_blank", rel: "noopener", class: "det-link" }, el("span", { text }), el("span", { html: icon("external"), "aria-hidden": "true" }));
   const median = (a) => { const b = a.filter((v) => isFinite(v)).sort((p, q) => p - q); return b.length ? b[b.length >> 1] : NaN; };
 
-  /** Reaches in downstream order: keep a joined path, otherwise sort by elevation (high to low). */
-  function ordered(S, members) {
-    const joined = members.every((m, i) => i === 0 || S.d[members[i - 1]] === m);
-    return joined ? members.slice() : members.slice().sort((a, b) => S.zt[b] - S.zt[a]);
-  }
   /** A reach's named river (or ±20 reaches of main stem when unnamed), downstream order. */
   function stretch(S, seg) {
     const nm = S.r[seg], same = (i) => (nm >= 0 ? S.r[i] === nm : true);
@@ -29,30 +24,42 @@
     return [...up.reverse(), seg, ...down];
   }
 
-  function stats(S, ms) {
-    const L = ms.reduce((t, m) => t + S.len[m], 0), first = ms[0], last = ms[ms.length - 1];
-    const zTop = S.zt[first], zBot = S.zb[last], drop = zTop - zBot;
-    let falls = 0, fallsH = 0;
-    if (S.fallsN) ms.forEach((m) => { falls += S.fallsN[m]; fallsH = Math.max(fallsH, S.fallsH[m]); });
-    return { L, zTop, zBot, drop, grad: L > 0 ? drop / L * 1000 : NaN, s50: Math.max(...ms.map((m) => S.s50[m])),
-      mel: median(ms.map((m) => S.mel[m])), maf: Math.max(...ms.map((m) => S.maf[m])), aTop: S.a[first], aBot: Math.max(...ms.map((m) => S.a[m])),
-      road: S.dRoad ? [S.dRoad[first], S.dRoad[last]] : null, foot: S.dFoot ? Math.min(...ms.map((m) => S.dFoot[m])) : null, falls, fallsH, first, last };
+  /**
+   * The numbers each predicted run gets (RF.runs.measure: same parameters and model), plus the elevation range,
+   * the median Melton ratio and the reaches the profile follows. A known section placed by river name can be
+   * several separate pieces (n > 1): then the profile follows the main stem of the longest piece. Null: no reaches.
+   */
+  function stats(R, ms, model) {
+    const S = R.segments, st = RF.runs.measure(R, ms, { model });
+    if (!st) return null;
+    const parts = RF.runs.pieces(S, ms), longest = parts.reduce((b, q) => (q.len > b.len ? q : b)), stem = longest.stem;
+    return Object.assign(st, {
+      n: st.pieces, simple: parts.length === 1 && stem.length === longest.members.length, stem, wholePiece: stem.length === longest.members.length,
+      stemKm: stem.reduce((t, m) => t + S.len[m], 0) / 1000, zTop: S.zt[st.top], zBot: S.zb[st.bottom],
+      zMax: Math.max(...ms.map((m) => S.zt[m])), zMin: Math.min(...ms.map((m) => S.zb[m])), mel: median(ms.map((m) => S.mel[m])) });
   }
 
   function statsTable(st, score) {
+    // not one joined stretch: no single top → bottom, so say what each figure covers
+    const many = st.n > 1, over = many ? `${st.n} separate pieces` : "the main stem and its side branches";
     const rows = [
-      ["Length", `${(st.L / 1000).toFixed(1)} km`, ""],
-      ["Average gradient", `${fmt.grad(st.grad)} m/km`, `${fmt.int(st.drop)} m drop over the length`],
+      ["Length", `${st.len.toFixed(1)} km`, st.simple ? "" : `Total of ${over}`],
+      ["Average gradient", `${fmt.grad(st.grad)} m/km`, st.simple ? `${fmt.int(st.drop)} m drop over the length` : `Length-weighted over ${over}`],
       ["Max gradient", `${fmt.grad(st.s50)} m/km`, "Steepest 50 m of channel"],
       ["Height-to-area", isFinite(st.mel) ? st.mel.toFixed(3) : "–", "Melton ratio: catchment relief ÷ √area (median)"],
-      ["Flow (mean annual flood)", `${fmt.flow(st.maf)} m³/s`, "NIWA statistic at the bottom, not live flow"],
-      ["Catchment area", `${fmt.km2(st.aTop)} → ${fmt.km2(st.aBot)} km²`, "Top → bottom"],
-      ["Elevation", `${fmt.int(st.zTop)} → ${fmt.int(st.zBot)} m`, "NZVD2016"],
+      ["Flow (mean annual flood)", `${fmt.flow(st.maf)} m³/s`, `NIWA statistic at the bottom${many ? " of the largest piece" : ""}, not live flow`],
+      many ? ["Catchment area", `${fmt.km2(st.aBot)} km²`, "At the bottom of the largest piece (the pieces have no common top)"]
+        : ["Catchment area", `${fmt.km2(st.aTop)} → ${fmt.km2(st.aBot)} km²`, "Top → bottom"],
+      many ? ["Elevation", `${fmt.int(st.zMin)} to ${fmt.int(st.zMax)} m`, "Lowest to highest point of the pieces (NZVD2016)"]
+        : ["Elevation", `${fmt.int(st.zTop)} → ${fmt.int(st.zBot)} m`, "NZVD2016"],
     ];
     if (score) rows.push(["Model score", `${score.pct.toFixed(score.pct >= 99 ? 1 : 0)} percentile`, `${score.model}: nationally, higher is more like the known runs`]);
-    if (st.road) rows.push(["Road access", `${fmt.dist(st.road[0])} · ${fmt.dist(st.road[1])}`, "From the top · from the bottom (OpenStreetMap)"]);
-    if (st.foot !== null && st.foot !== undefined) rows.push(["Nearest foot track", fmt.dist(st.foot), "Along the section"]);
-    if (st.falls !== undefined && st.road) rows.push(["Mapped waterfalls", st.falls ? `${st.falls}${st.fallsH ? `, tallest ${st.fallsH} m` : ""}` : "None mapped", "OpenStreetMap; coverage is patchy"]);
+    if (st.acc) {
+      rows.push(many ? ["Road access", fmt.dist(st.acc.road), "Nearest road to any of the pieces (OpenStreetMap)"]
+        : ["Road access", `${fmt.dist(st.acc.putIn)} · ${fmt.dist(st.acc.takeOut)}`, "From the top · from the bottom (OpenStreetMap)"]);
+      rows.push(["Nearest foot track", fmt.dist(st.acc.foot), "Along the section"]);
+      rows.push(["Mapped waterfalls", st.falls ? `${st.falls}${st.fallsH ? `, tallest ${st.fallsH} m` : ""}` : "None mapped", "OpenStreetMap; coverage is patchy"]);
+    }
     return el("div", { class: "rf-tablewrap" }, el("table", { class: "rf-table det-stats" },
       el("thead", {}, el("tr", {}, el("th", { text: "Measure" }), el("th", { class: "n", text: "Value" }), el("th", { class: "det-note", text: "Note" }))),
       el("tbody", {}, ...rows.map(([k, v, n]) => el("tr", {}, el("th", { scope: "row" }, k, n ? el("span", { class: "det-note-inline", text: n }) : null),
@@ -123,16 +130,16 @@
   async function riverDetail(f, ctx) {
     const R = await RF.data.region(f.region), S = R.segments;
     let ms, sec = null, highlight;
-    if (f.kind === "section") { sec = f.sec || R.sections.find((x) => x.id === f.id); ms = ordered(S, sec.m); }
+    if (f.kind === "section") { sec = f.sec || R.sections.find((x) => x.id === f.id); ms = sec.m.slice(); }
     else if (f.kind === "run") ms = f.members.slice();
     else { ms = stretch(S, f.seg); highlight = f.seg; }
-    const st = stats(S, ms);
-    let score = null;
-    if (RF.state.model) {
-      const sc = await RF.data.scores(R.id, RF.state.model);
-      if (sc.pct?.length) score = { pct: Math.max(...ms.map((m) => sc.pct[m])),
-        model: sc.fallback ? "Pooled regression (this build has no per-model scores)" : RF.models.get(RF.state.model)?.title || RF.state.model };
-    }
+    // scored like the predicted runs on the map: the current model's best reach
+    const sc = RF.state.model ? await RF.data.scores(R.id, RF.state.model) : null;
+    const st = stats(R, ms, sc?.pct?.length ? sc : null);
+    if (!st) return { title: f.name, subtitle: R.title, body: el("p", { class: "rf-muted", text: "No modelled reaches here." }) };
+    const many = st.n > 1;
+    const score = sc?.pct?.length ? { pct: st.score,
+      model: sc.fallback ? "Pooled regression (this build has no per-model scores)" : RF.models.get(RF.state.model)?.title || RF.state.model } : null;
     const onSection = f.kind !== "section" ? R.sections.find((x) => ms.some((m) => x.m.includes(m))) : null;
     const name = f.kind === "section" ? sec.river : f.name;
 
@@ -154,23 +161,29 @@
     if (sec?.time) pills.append(el("span", { class: "rf-pill", text: sec.time }));
     const desc = sec?.desc ? [el("p", { class: "det-desc", text: sec.desc }), el("p", { class: "rf-note", text: SRC_NOTE[sec.src] || "" })]
       : [el("p", { class: "det-desc", text: f.kind === "section" ? "No description recorded." : onSection ? "Part of this stretch is a section in the guides (see above); open it from the map for its description." : "Not in the guides." })];
-    const gen = el("p", { class: "rf-note", text: `${(st.L / 1000).toFixed(1)} km at an average ${fmt.grad(st.grad)} m/km, dropping ${fmt.int(st.drop)} m from ${fmt.int(st.zTop)} m to ${fmt.int(st.zBot)} m. Catchment ${fmt.km2(st.aTop)} → ${fmt.km2(st.aBot)} km²; mean annual flood ${fmt.flow(st.maf)} m³/s at the bottom.${f.kind === "reach" ? ` The profile covers ${f.name === "Unnamed stream" ? "the main stem around the reach" : `the ${f.name} channel`}.` : ""}` });
+    const gen = el("p", { class: "rf-note", text: many
+      ? `${st.len.toFixed(1)} km mapped in ${st.n} separate pieces, at an average ${fmt.grad(st.grad)} m/km. The largest drains ${fmt.km2(st.aBot)} km², with a mean annual flood of ${fmt.flow(st.maf)} m³/s at its bottom.`
+      : `${st.len.toFixed(1)} km${st.simple ? "" : " with side branches"} at an average ${fmt.grad(st.grad)} m/km, ${st.simple ? `dropping ${fmt.int(st.drop)} m` : "the main stem dropping"} from ${fmt.int(st.zTop)} m to ${fmt.int(st.zBot)} m. Catchment ${fmt.km2(st.aTop)} → ${fmt.km2(st.aBot)} km²; mean annual flood ${fmt.flow(st.maf)} m³/s at the bottom.${f.kind === "reach" ? ` The profile covers ${f.name === "Unnamed stream" ? "the main stem around the reach" : `the ${f.name} channel`}.` : ""}` });
+    const apart = many ? el("p", { class: "rf-note", text: "The pieces are not joined, so the section has no single drop, top or bottom. The long profile shows the longest piece." }) : null;
+    const stemNote = st.simple ? null : el("p", { class: "rf-note",
+      text: `The profile shows ${st.stemKm.toFixed(1)} of the ${st.len.toFixed(1)} km mapped: ${many ? (st.wholePiece ? "the longest piece" : "the main stem of the longest piece") : "the main stem"}.` });
 
-    // coordinates
-    const topLL = S.c[st.first][0], botLL = S.c[st.last][S.c[st.last].length - 1];
+    // coordinates: published put-in and take-out, else the ends of the profiled stretch
+    const top = st.stem[0], bot = st.stem[st.stem.length - 1], topLL = S.c[top][0], botLL = S.c[bot][S.c[bot].length - 1];
+    const ends = f.kind !== "section" ? ["Top", "Bottom"] : many ? ["Top of the longest piece", "Bottom of the longest piece"] : ["Top of the mapped section", "Bottom of the mapped section"];
     const coords = [];
     if (sec?.putIn) coords.push(coordBlock("Put-in", sec.putIn[0], sec.putIn[1], sec.putInDesc, sec.coords === "inferred" ? "Worked out from directions, not published: check before relying on it." : null));
-    else coords.push(coordBlock(f.kind === "section" ? "Top of the mapped section" : "Top", topLL[1], topLL[0], null, null));
+    else coords.push(coordBlock(ends[0], topLL[1], topLL[0], null, null));
     if (sec?.takeOut) coords.push(coordBlock("Take-out", sec.takeOut[0], sec.takeOut[1], sec.takeOutDesc, sec.coords === "inferred" ? "Worked out from directions, not published: check before relying on it." : null));
-    else coords.push(coordBlock(f.kind === "section" ? "Bottom of the mapped section" : "Bottom", botLL[1], botLL[0], null, null));
-    const midC = S.c[ms[ms.length >> 1]][0];
+    else coords.push(coordBlock(ends[1], botLL[1], botLL[0], null, null));
+    const midC = S.c[st.stem[st.stem.length >> 1]][0];
 
     const body = [
-      el("div", { class: "det-summary" }, pills, ...desc, gen),
+      el("div", { class: "det-summary" }, pills, ...desc, gen, apart),
       section("Key numbers", statsTable(st, score)),
-      section("Long profile", ...profile(S, ms, highlight)),
+      section("Long profile", ...profile(S, st.stem, highlight), stemNote),
       section("Flow rate", RF.chart.placeholder("Flow rate over time",
-        `To do: live and historical flow need the river gauges (planned). For now the best guide is the NIWA mean annual flood at the bottom: ${fmt.flow(st.maf)} m³/s.`)),
+        `To do: live and historical flow need the river gauges (planned). For now the best guide is the NIWA mean annual flood at the bottom${many ? " of the largest piece" : ""}: ${fmt.flow(st.maf)} m³/s.`)),
       section("Put-in and take-out", el("div", { class: "det-coords" }, ...coords)),
     ];
     if (sec?.hazards?.length || sec?.deaths) {

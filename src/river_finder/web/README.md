@@ -152,6 +152,8 @@ see `webdata.py`), `falls`
 |---|---|
 | `RF.runs.defaults()` | `{q: [lo, hi] m³/s, g: [lo, hi] m/km, haMeasure, haHi, w: [flow, gradient, H/A], threshold, gate, flowScaled, minLen, maxGap, featureWeights}` |
 | `RF.runs.find(region, {params?, model?, rankBy?})` | runs, best first. `model` = result of `RF.data.scores`; `rankBy`: `"model"` (default with a model), `"pareto"`, `"wsum"`, `"sig"`, `"comp"` |
+| `RF.runs.measure(region, members, {params?, model?, rankBy?})` | the numbers `find` gives a run (`len`, `grad`, `s50`, `aTop`, `aBot`, `maf`, `ha`, `score`, `acc`, `falls`, …) for any set of reaches, e.g. a known section; `pieces` counts its separate pieces (totals for length and drop, so the gradient is length-weighted; area and flow at the largest piece), null if none |
+| `RF.runs.pieces(S, members)` | connected pieces of a set of reaches, largest catchment first: `[{members, top, bottom, stem, len}]` |
 | `RF.runs.path(S, members)` | smoothed `[[lon, lat], …]` for drawing |
 | `RF.runs.upstream(S, reach)` | `Uint8Array` mask of every reach upstream of `reach` |
 

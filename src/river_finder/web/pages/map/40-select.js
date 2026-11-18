@@ -78,7 +78,7 @@
   }
 
   // ---------- highlight + card ----------
-  let cardEl = null;
+  let cardEl = null, shown = null;
   M.buildCard = (root) => { cardEl = el("div", { class: "map-card", hidden: true, role: "region", "aria-label": "Selected feature" }); root.append(cardEl); };
 
   M.card.point = (f) => ({
@@ -91,13 +91,17 @@
       el("span", { class: "rf-note", text: `Area draining through this point (map cell about ${f.pixelM} m).` })],
     noDetails: true,
   });
+  /** The numbers line of a run card, also used for known sections (RF.runs.measure); score left out when null. */
+  M.runLine = (r, opts = {}) => el("span", { class: "num", text: [`${r.len.toFixed(1)} km${opts.mapped ? " mapped" : ""}`, `${fmt.grad(r.grad)} m/km`,
+    `flood ${fmt.flow(r.maf)} m³/s`, `${fmt.km2(r.aBot)} km²`, r.score == null ? "" : `score ${r.score.toFixed(0)}`].filter(Boolean).join(" · ") });
   M.card.run = (f) => ({
     eyebrow: f.status === "listed" ? "Known river · in guides" : f.status === "heldout" ? "Predicted run · test river" : "Predicted run · not in guides",
     title: f.name,
-    lines: [el("span", { class: "num", text: `${f.len.toFixed(1)} km · ${fmt.grad(f.grad)} m/km · flood ${fmt.flow(f.maf)} m³/s · ${fmt.km2(f.aBot)} km² · score ${f.score.toFixed(0)}` })],
+    lines: [M.runLine(f)],
   });
 
   function renderCard(f) {
+    shown = f;
     const def = (M.card[f.kind] || ((x) => ({ eyebrow: x.kind, title: x.name || x.kind, lines: [] })))(f);
     const close = el("button", { type: "button", class: "rf-btn rf-btn--quiet rf-iconbtn map-card-close", "aria-label": "Clear selection", html: icon("close"), onclick: () => M.clearSelection() });
     const actions = el("div", { class: "rf-row map-card-actions" });
@@ -108,6 +112,8 @@
     ...(def.lines || []).filter(Boolean).map((l) => el("div", { class: "map-card-line" }, l)), actions);
     cardEl.hidden = false;
   }
+  /** Draw the open card again (e.g. once the model scores it shows have loaded). kind: only a card of that kind. */
+  M.refreshCard = (kind) => { if (shown && cardEl && !cardEl.hidden && (!kind || shown.kind === kind)) renderCard(shown); };
 
   M.zoomTo = (f) => {
     const cs = coordsOf(M.geometryOf(f)); if (!cs.length) return;
@@ -127,6 +133,7 @@
   M.clearSelection = () => {
     M.map?.getSource("sel")?.setData({ type: "FeatureCollection", features: [] });
     if (cardEl) cardEl.hidden = true;
+    shown = null;
     RF.select(null);
   };
   M.onRegion(() => M.clearSelection());

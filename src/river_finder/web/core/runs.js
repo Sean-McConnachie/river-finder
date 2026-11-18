@@ -83,6 +83,73 @@
   // 0 = no label, 1 = the model trained on it, 2 = held out (its test set).
   const segRole = (S, role, m) => role ? role[m] & 3 : S.lab[m] === 1 ? 1 : S.ho[m] === 1 ? 2 : 0;
 
+  /** What scoring a set of reaches needs for one region, parameter set and model (shared by find and measure). */
+  function context(R, opts) {
+    const S = R.segments, p = opts.params || RF.state.runParams || defaults();
+    const model = opts.model || null, rankBy = opts.rankBy || (model ? "model" : "pareto");
+    const D = segmentScores(S, p);
+    return { R, S, p, model, role: model?.role || null, rankBy, D, scores: rankScores(S, D, rankBy, p, model),
+      listed: new Set(S.listed),
+      // reaches on a known guide section (R.sections): a run touching one counts as in the guides
+      onGuide: new Set((R.sections || []).flatMap((x) => x.m)) };
+  }
+
+  /**
+   * Connected pieces of a set of reaches (joined by downstream steps inside the set), largest catchment first.
+   * Each: {members, top, bottom, stem, len (m)}: bottom = the outlet, stem = main stem top to bottom (at a
+   * confluence it follows the larger catchment). A run is one piece whose stem is the whole run.
+   */
+  function pieces(S, members) {
+    const set = new Set(members), up = new Map();
+    set.forEach((m) => { const d = S.d[m]; if (set.has(d)) { if (!up.has(d)) up.set(d, []); up.get(d).push(m); } });
+    return [...set].filter((m) => !set.has(S.d[m])).map((bottom) => {
+      const all = [], stack = [bottom];
+      while (stack.length) { const s = stack.pop(); all.push(s); (up.get(s) || []).forEach((u) => stack.push(u)); }
+      const stem = [bottom];
+      for (let cur = bottom, us; (us = up.get(cur));) { cur = us.reduce((b, u) => (S.a[u] > S.a[b] ? u : b)); stem.push(cur); }
+      stem.reverse();
+      return { members: all, top: stem[0], bottom, stem, len: all.reduce((t, m) => t + S.len[m], 0) };
+    }).sort((a, b) => S.a[b.bottom] - S.a[a.bottom]);
+  }
+
+  /**
+   * The numbers of a run for any set of reaches. Separate pieces count together: length and drop are totals
+   * (so the gradient is the length-weighted mean), max gradient the steepest reach, score the best reach;
+   * catchment area, flood flow, top and bottom belong to the piece with the largest catchment.
+   */
+  function summarize(C, members) {
+    const { S, D, scores, role } = C, P = pieces(S, members), first = P[0].top, last = P[0].bottom;
+    const counts = {}; let score = 0, s50 = 0, eg = 0, wsc = 0, rl = 0, guide = false;
+    const has = [];
+    members.forEach((m) => {
+      if (S.r[m] >= 0) counts[S.r[m]] = (counts[S.r[m]] || 0) + 1;
+      score = Math.max(score, scores[m]); s50 = Math.max(s50, S.s50[m]);
+      const rv = segRole(S, role, m); if (rv === 1) rl = 1; else if (rv === 2 && rl !== 1) rl = 2;
+      guide = guide || (role ? (role[m] & 4) > 0 : false);
+      eg += D.effG[m] * S.len[m]; wsc += D.ws[m] * S.len[m]; has.push(D.ha[m]);
+    });
+    has.sort((a, b) => a - b);
+    const topName = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+    const river = topName ? S.rivers[+topName[0]] : "";
+    const len = members.reduce((t, m) => t + S.len[m], 0) / 1000;
+    // each piece's main stem drops from its top to its bottom; side branches add their own reaches' drop
+    let drop = 0;
+    P.forEach((q) => { const st = new Set(q.stem); drop += S.zt[q.top] - S.zb[q.bottom]; q.members.forEach((m) => { if (!st.has(m)) drop += S.zt[m] - S.zb[m]; }); });
+    let acc = null, falls = 0, fallsH = 0;
+    if (S.dRoad) {
+      const near = (A) => members.reduce((t, m) => Math.min(t, A[m]), Infinity);
+      acc = { putIn: S.dRoad[first], takeOut: S.dRoad[last], road: near(S.dRoad), track: near(S.dTrack), foot: near(S.dFoot) };
+      members.forEach((m) => { falls += S.fallsN[m]; fallsH = Math.max(fallsH, S.fallsH[m]); });
+    }
+    const isListed = C.listed.has(river) || guide || members.some((m) => C.onGuide.has(m)), ws = wsc / (len * 1000);
+    return {
+      river, len, drop, grad: drop / (len * 1000) * 1000, effG: eg / (len * 1000), s50,
+      aTop: S.a[first], aBot: S.a[last], maf: S.maf[last], ha: has[has.length >> 1], ws,
+      score: C.rankBy === "pareto" || C.rankBy === "wsum" ? 100 * ws : score, role: rl, guide: isListed, acc, falls, fallsH,
+      status: isListed ? "listed" : rl === 2 ? "heldout" : "candidate", pieces: P.length, top: first, bottom: last,
+    };
+  }
+
   /**
    * Find runs in a loaded region.
    * opts: {params (default RF.state.runParams), rankBy ("model" default when a model is given, else "pareto"),
@@ -91,15 +158,9 @@
    */
   function find(R, opts = {}) {
     const S = R.segments; if (!S) return [];
-    const p = opts.params || RF.state.runParams || defaults();
-    const model = opts.model || null, role = model?.role || null;
-    const rankBy = opts.rankBy || (model ? "model" : "pareto");
-    const D = segmentScores(S, p), scores = rankScores(S, D, rankBy, p, model);
+    const C = context(R, opts), { p, D, rankBy } = C;
     const n = S.g.length, ok = new Uint8Array(n), runId = new Int32Array(n).fill(-1), runs = [];
     for (let i = 0; i < n; i++) ok[i] = D.ws[i] >= p.threshold && (!p.gate || (D.dQ[i] > 0 && D.dS[i] > 0 && D.dH[i] > 0)) ? 1 : 0;
-    const listed = new Set(S.listed);
-    // reaches on a known guide section (R.sections): a run touching one counts as in the guides
-    const onGuide = new Set((R.sections || []).flatMap((x) => x.m));
     for (let s = 0; s < n; s++) {
       if (!ok[s] || runId[s] >= 0 || (S.u[s] >= 0 && ok[S.u[s]])) continue;
       const members = []; let gap = [], cur = s;
@@ -108,40 +169,29 @@
         else { gap.push(cur); if (gap.length > p.maxGap) break; }
         cur = S.d[cur];
       }
-      const len = members.reduce((t, m) => t + S.len[m], 0) / 1000;
-      if (len < p.minLen) continue;
+      if (members.reduce((t, m) => t + S.len[m], 0) / 1000 < p.minLen) continue;
       const rid = runs.length; members.forEach((m) => { runId[m] = rid; });
-      const counts = {}; let score = 0, s50 = 0, eg = 0, wsc = 0, rl = 0, guide = false;
-      const has = [];
-      members.forEach((m) => {
-        if (S.r[m] >= 0) counts[S.r[m]] = (counts[S.r[m]] || 0) + 1;
-        score = Math.max(score, scores[m]); s50 = Math.max(s50, S.s50[m]);
-        const rv = segRole(S, role, m); if (rv === 1) rl = 1; else if (rv === 2 && rl !== 1) rl = 2;
-        guide = guide || (role ? (role[m] & 4) > 0 : false);
-        eg += D.effG[m] * S.len[m]; wsc += D.ws[m] * S.len[m]; has.push(D.ha[m]);
-      });
-      has.sort((a, b) => a - b);
-      const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
-      const river = top ? S.rivers[+top[0]] : "";
-      const first = members[0], last = members[members.length - 1], drop = S.zt[first] - S.zb[last];
-      let acc = null, falls = 0, fallsH = 0;
-      if (S.dRoad) {
-        const near = (A) => members.reduce((t, m) => Math.min(t, A[m]), Infinity);
-        acc = { putIn: S.dRoad[first], takeOut: S.dRoad[last], road: near(S.dRoad), track: near(S.dTrack), foot: near(S.dFoot) };
-        members.forEach((m) => { falls += S.fallsN[m]; fallsH = Math.max(fallsH, S.fallsH[m]); });
-      }
-      const isListed = listed.has(river) || guide || members.some((m) => onGuide.has(m));
-      runs.push({
-        kind: "run", region: R.id, id: `${R.id}:run:${first}`, rid, members, name: river || "Unnamed creek", river,
-        len, drop, grad: drop / (len * 1000) * 1000, effG: eg / (len * 1000), s50,
-        aTop: S.a[first], aBot: S.a[last], maf: S.maf[last], ha: has[has.length >> 1], ws: wsc / (len * 1000),
-        score, role: rl, guide: isListed, acc, falls, fallsH,
-        status: isListed ? "listed" : rl === 2 ? "heldout" : "candidate",
-      });
+      const r = summarize(C, members);
+      runs.push(Object.assign({ kind: "run", region: R.id, id: `${R.id}:run:${members[0]}`, rid, members, name: r.river || "Unnamed creek" }, r));
     }
     const layers = paretoLayers(runs.map((r) => [Math.log10(Math.max(r.maf, 1e-3)), r.effG, r.ha]));
-    runs.forEach((r, i) => { r.layer = layers[i]; if (rankBy === "pareto" || rankBy === "wsum") r.score = 100 * r.ws; });
+    runs.forEach((r, i) => { r.layer = layers[i]; });
     return rankBy === "pareto" ? runs.sort((a, b) => a.layer - b.layer || b.ws - a.ws) : runs.sort((a, b) => b.score - a.score);
+  }
+
+  let memo = null;
+  /**
+   * The numbers find() gives a run (len, grad, s50, aTop, aBot, maf, ha, score, acc, falls, ...) for any set of
+   * reaches, such as a known section, scored with the same parameters and model. A section placed by river
+   * name can be several separate pieces: `pieces` says how many (see summarize). Null when no reaches.
+   * opts as find().
+   */
+  function measure(R, members, opts = {}) {
+    const S = R?.segments, ms = S ? [...new Set(members || [])].filter((m) => m >= 0 && m < S.g.length) : [];
+    if (!ms.length) return null;
+    const p = opts.params || RF.state.runParams || defaults(), model = opts.model || null, rankBy = opts.rankBy || (model ? "model" : "pareto");
+    if (!memo || memo.R !== R || memo.p !== p || memo.model !== model || memo.rankBy !== rankBy) memo = context(R, { params: p, model, rankBy });
+    return summarize(memo, ms);
   }
 
   /** Two Chaikin passes: softens the 5-8 m grid staircase; keeps both end points. */
@@ -201,5 +251,5 @@
     return mask;
   }
 
-  RF.runs = { defaults, find, path, chains, smooth, upstream, segmentScores, percentiles, paretoLayers };
+  RF.runs = { defaults, find, measure, pieces, path, chains, smooth, upstream, segmentScores, percentiles, paretoLayers };
 })();
