@@ -28,6 +28,7 @@ uv run river-finder nz score     # pooled model; runs and candidates per river-g
 uv run river-finder nz export    # data/nz/gis/: GeoPackage (runs, reaches, regions) + VRT rasters for QGIS
 uv run river-finder nz viewer    # data/viewer_nz/index.html (serve the folder over HTTP; ~30 min)
 uv run river-finder models import|split|train|evaluate|viewer   # versioned models (models/*.json), see PLAN
+uv run river-finder external fetch|attach   # OSM waterfalls, rapids, roads, tracks per reach (Overture Maps)
 ```
 
 Each region's GIS export is in `data/<region>/gis/`. Drag the `.tif` files and the `.gpkg` into

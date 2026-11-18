@@ -73,6 +73,7 @@ layer 105690. The BOPRC ImageServer also serves the BoP DEM.
 | NZ Local River Names (REC2) — [data.govt.nz](https://catalogue.data.govt.nz/dataset/nz-local-river-names-rec2-layer) | Names for the REC2 reaches. |
 | LINZ Topo50 river centrelines, river polygons, **waterfall points**, contours (data.linz.govt.nz) | Mapped waterfalls work well as a check for knickpoint detection. |
 | LINZ Topo50 road centrelines / NZ Roads (Addressing) | Access cost: distance from road to put-in and take-out. |
+| **In use:** OpenStreetMap via [Overture Maps](https://docs.overturemaps.org/) GeoParquet on public S3 (`s3://overturemaps-us-west-2/release/2026-10-21.0/`, anonymous, bbox row-group pruning; `river-finder external fetch`) | Stands in for Topo50 until we have an LDS key. Waterfalls (`base/water`, class `waterfall`: 2,095 in NZ, 997 with `height`, most from the LINZ Topo50 import), 252 rapids, and 760k road/track/path segments (`transportation/segment`). ODbL: credit "© OpenStreetMap contributors". Geofabrik and Overpass are not reachable from the cloud container. |
 | DOC Public Conservation Land | Access and land-tenure flags. |
 
 ## 5. Known kayaking runs (the "already paddled" set)

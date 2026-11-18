@@ -15,6 +15,7 @@ dependencies = [
   "pyogrio>=0.10",
   "shapely>=2.0",
   "scipy>=1.13",
+  "pyarrow>=17",
 ]
 
 [project.scripts]

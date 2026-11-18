@@ -202,8 +202,8 @@ are chained downstream into runs, allowing one-segment gaps. Optionally the mini
 scaled by (MAF/20)^-0.5 so big rivers count at lower gradients. The same logic runs live in the
 viewer with sliders.
 
-**Not done yet:** road/access distance (OSM and LINZ hosts unreachable), the NZRCA guide as the
-"known" layer (needs the guide or your list), North Island scaling.
+**Not done yet:** the NZRCA guide as the "known" layer (needs the guide or your list), North Island
+scaling. Road/access distance: done on 2026-11-18, see "Waterfalls and access".
 
 ## Phase 9: three-parameter runnability model (2026-11-11)
 
@@ -405,6 +405,40 @@ Models tab shows every model on each test set, per-river and per-region tables a
 
 Workflow for a new model: `models train --name v3 --split guides-v1 [--variant sourced]`, then
 `models evaluate`, then `models viewer`, then publish the new `*_m_v3.txt` files and the page.
+
+## Waterfalls and access (2026-11-18)
+
+`river-finder external fetch` reads OpenStreetMap waterfalls, rapids, roads and tracks for NZ from
+the Overture Maps GeoParquet release on S3 (no key; ~30 s). `river-finder external attach` (~9 min)
+gives every reach (1.1 M national + the three 5 m areas):
+
+- `d_road_m`: distance to the nearest public road (OSM motorway to service; capped at 20 km);
+- `d_track_m`: nearest 4WD track or road closed to motor vehicles (`access=private`/`no`);
+- `d_foot_m`: nearest path, footway, bridleway or cycleway (most DOC tracks);
+- `falls_n`, `falls_max_h_m`: waterfalls within 100 m of the reach line, tallest mapped height.
+
+National values go to `data/nz/external.pkl` (`national_table` row order), viewer files to
+`<region>_x.txt` and `<region>_falls.json`. In the viewer a run shows road distance at the put-in
+and take-out (and the closest point along it), 4WD and foot-track distance, and its mapped waterfalls;
+the map has a waterfall/rapids layer.
+
+**Knickpoint check** (`data/nz/waterfall_check.json`): 1,634 reaches hold a mapped waterfall. How
+well each terrain feature separates them from other reaches (AUC; size-matched = within catchment-area
+deciles):
+
+| feature | AUC | size-matched | falls ≥ 5 m | median with / without falls |
+|---|---|---|---|---|
+| steepest 50 m | 0.86 | 0.89 | 0.92 | 380 / 32 m/km |
+| smoothed gradient | 0.82 | 0.86 | 0.87 | 140 / 25 m/km |
+| knick ratio | 0.72 | 0.71 | 0.73 | 1.7 / 0.86 |
+
+So the 8 m DEM's steepest-50 m window does find real falls; the k_sn jump is a weaker signal.
+OSM's waterfall coverage is patchy (Topo50 import plus volunteers), so "no mapped waterfall" is
+not "no waterfall".
+
+Not used in the models yet: access is not runnability, and a waterfall feature would need care
+(falls are both the attraction and the portage). Candidates for v3 (rf-gz6): `falls_max_h_m` as a
+"likely unrunnable drop" flag.
 
 ## Open questions
 

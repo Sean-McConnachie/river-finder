@@ -91,6 +91,7 @@ uv run river-finder run kaimai karangahake tutamoe  # fetch (8 m + 5 m LiDAR, RE
                                           # validate, reaches, export, pooled score, viewer (~15 min)
 uv run river-finder score kaimai karangahake tutamoe  # re-score only (regression is pooled across the regions given)
 uv run river-finder nz fetch|tiles|score|viewer   # national 8 m scan in 64 km tiles (data/nz/, ~4 h)
+uv run river-finder external fetch|attach   # OSM waterfalls/roads/tracks per reach via Overture S3 (~10 min)
 ```
 
 National tiles peak at ~12 GB: never run another heavy job (reference viewer build, 5 m

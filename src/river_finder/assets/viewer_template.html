@@ -13,7 +13,7 @@
   --bg: #f4f5f2;          /* panel ground, faint green-grey (bush and paper) */
   --surface: #ffffff;
   --fg: #1c201e;
-  --muted: #5a635e;
+  --muted: #5a635e; --falls: #0e7c86;
   --line: #d9ded9;
   --accent: #2a78d6;      /* UI accent = heat-map blue */
   --unlisted: #eb6834;    /* runs missing from the guides */
@@ -35,7 +35,7 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #151716; --surface: #1d201f; --fg: #e6eae7; --muted: #9aa39e; --line: #2d3230;
+    --bg: #151716; --surface: #1d201f; --fg: #e6eae7; --muted: #9aa39e; --falls: #4fc3cf; --line: #2d3230;
     --accent: #3987e5; --unlisted: #d95926; --water: #18202a;
     --cand: #f08a5d; --cand-arrow: #2a0e04; --score-lo: #5a2a17; --score-hi: #ffb48c;
     --ok: #0ca30c; --unk: #fab219; --no: #d03b3b; --catch: #3ddc66;
@@ -43,7 +43,7 @@
   }
 }
 :root[data-theme="dark"] {
-  --bg: #151716; --surface: #1d201f; --fg: #e6eae7; --muted: #9aa39e; --line: #2d3230;
+  --bg: #151716; --surface: #1d201f; --fg: #e6eae7; --muted: #9aa39e; --falls: #4fc3cf; --line: #2d3230;
   --accent: #3987e5; --unlisted: #d95926; --water: #18202a;
     --cand: #f08a5d; --cand-arrow: #2a0e04; --score-lo: #5a2a17; --score-hi: #ffb48c;
     --ok: #0ca30c; --unk: #fab219; --no: #d03b3b; --catch: #3ddc66;
@@ -324,6 +324,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
       <label><input type="checkbox" id="showScores"> Colour every reach by its score</label>
       <label><input type="checkbox" id="showRec2"> NIWA REC2 river lines (order 3+)</label>
       <label><input type="checkbox" id="showRuns" checked> Reference rivers</label>
+      <label id="fallsBox" hidden><input type="checkbox" id="showFalls" checked> Waterfalls and rapids (OpenStreetMap)</label>
       <label><input type="checkbox" id="dimTrunc" checked> Fade catchments cut off by the box edge</label>
     </section>
 
@@ -345,7 +346,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
       <p class="note" style="margin-top:6px">Reaches over 5 km² whose whole catchment is inside the box. "Within 10%" uses a search radius of up to 256 m, because REC2 lines and our channels can sit apart on flat valley floors.</p>
     </section>
 
-    <p class="note">Elevation: LINZ LiDAR DEM (CC BY 4.0). Rivers and flood statistics: NIWA. Geology: GNS Science 1:250k. Known sections: adapted from the NZ RiverGuide (Whitewater NZ; WWNZ and Graham Charles, NZ Whitewater), CC BY-SA 3.0 NZ, with summaries of packraftingtrips.nz and other sources (see <span class="num">labels/guide_research.json</span>). Built by river-finder. Candidates are leads from terrain data only: check access, land ownership, hazards and local knowledge before going anywhere.</p>
+    <p class="note">Elevation: LINZ LiDAR DEM (CC BY 4.0). Rivers and flood statistics: NIWA. Geology: GNS Science 1:250k. Waterfalls, rapids, roads and tracks: © OpenStreetMap contributors (ODbL), via Overture Maps. Known sections: adapted from the NZ RiverGuide (Whitewater NZ; WWNZ and Graham Charles, NZ Whitewater), CC BY-SA 3.0 NZ, with summaries of packraftingtrips.nz and other sources (see <span class="num">labels/guide_research.json</span>). Built by river-finder. Candidates are leads from terrain data only: check access, land ownership, hazards and local knowledge before going anywhere.</p>
   </aside>
 
   <main class="mapwrap">
@@ -518,9 +519,9 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
   L.control.scale({ imperial: false, position: "bottomright" }).addTo(map);
 
   const state = { region: null, minLog: sliderToLog(+$("minArea").value), opacity: +$("opacity").value / 100,
-                  showRec2: $("showRec2").checked, showRuns: $("showRuns").checked, dimTrunc: $("dimTrunc").checked };
+                  showRec2: $("showRec2").checked, showRuns: $("showRuns").checked, showFalls: $("showFalls").checked, dimTrunc: $("dimTrunc").checked };
   const cache = {};
-  let overlay = null, rec2Layer = null, runsLayer = null, clickMarker = null, frame = 0;
+  let overlay = null, rec2Layer = null, runsLayer = null, fallsLayer = null, clickMarker = null, frame = 0;
 
   // Multi-file build: a region entry may only hold {id, title, group, src, bounds}. Its data
   // (and packed segments) are fetched the first time it is opened.
@@ -590,6 +591,26 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     }
     S.reg = M.reg; S.role = M.role;
   }
+
+  // Waterfalls, rapids and access, from OpenStreetMap via Overture Maps (river_finder.external):
+  // <region>_x.txt = base64 of uint16 distances in 10 m to the nearest road, 4WD track or road closed
+  // to the public, and foot track; then uint8 mapped waterfalls and uint8 tallest height (m) per reach.
+  // <region>_falls.json = [lon, lat, name, height m or null, reach index or -1, kind (r = rapids)].
+  async function applyExternal(R) {
+    const S = R.segments; if (!S || R.extTried) return;
+    R.extTried = true;
+    try {
+      const [xr, fr] = await Promise.all([fetch(`${R.id}_x.txt`), fetch(`${R.id}_falls.json`)]);
+      if (!xr.ok) return;
+      const txt = atob((await xr.text()).trim()), n = S.g.length, buf = new ArrayBuffer(txt.length), b = new Uint8Array(buf);
+      for (let i = 0; i < txt.length; i++) b[i] = txt.charCodeAt(i);
+      const d = (k) => Array.from(new Uint16Array(buf, 2 * n * k, n), (v) => v * 10);
+      S.dRoad = d(0); S.dTrack = d(1); S.dFoot = d(2);
+      S.fallsN = new Uint8Array(buf, 6 * n, n); S.fallsH = new Uint8Array(buf, 7 * n, n);
+      R.falls = fr.ok ? await fr.json() : [];
+    } catch (e) { /* optional layer: the page works without it */ }
+  }
+  const fmtDist = (m) => m >= 20000 ? "over 20 km" : m < 50 ? "on it" : m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`;
 
   function setHash() {
     const h = "#" + state.region + (state.model && MODELS.length ? "/" + state.model : "");
@@ -698,7 +719,25 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
       ll: line.map(([x, y]) => [y, x]), color: muted, size: 3.5, spacing: 120 }))));
     if (state.showRec2) rec2Layer.addTo(map);
     if (state.showRuns) runsLayer.addTo(map);
+    if (fallsLayer) map.removeLayer(fallsLayer);
+    fallsLayer = null;
+    $("fallsBox").hidden = !R.falls;
+    if (R.falls) {
+      fallsLayer = L.layerGroup(R.falls.map(([lon, lat, name, h, , kind]) => L.circleMarker([lat, lon], {
+        renderer: vec, radius: kind === "r" ? 3.5 : 4.5, baseRadius: kind === "r" ? 3.5 : 4.5, weight: 1.5, color: css("--surface"),
+        fillColor: kind === "r" ? css("--muted") : css("--falls"), fillOpacity: 1,
+      }).bindTooltip(`${name || (kind === "r" ? "Rapids" : "Waterfall")}${h ? ` · ${h} m` : ""}${kind === "r" ? "" : name ? " · waterfall" : ""}`)));
+      sizeFalls();
+      if (state.showFalls) fallsLayer.addTo(map);
+    }
   }
+  // Small dots when zoomed out (a region has a few hundred), full size from zoom 11.
+  function sizeFalls() {
+    if (!fallsLayer) return;
+    const k = map.getZoom() >= 11 ? 1 : map.getZoom() >= 9 ? 0.7 : 0.45;
+    fallsLayer.eachLayer((l) => l.setRadius(l.options.baseRadius * k));
+  }
+  map.on("zoomend", sizeFalls);
 
 
   // ---------- run finder (mirrors river_finder.scoring: desirability, assemble_runs, pareto_layers) ----------
@@ -803,9 +842,15 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
       const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
       const river = top ? S.rivers[+top[0]] : "";
       const first = members[0], last = members[members.length - 1], drop = S.zt[first] - S.zb[last];
+      let acc = null, falls = 0, fallsH = 0;
+      if (S.dRoad) {
+        const near = (A) => members.reduce((t, m) => Math.min(t, A[m]), Infinity);
+        acc = { putIn: S.dRoad[first], takeOut: S.dRoad[last], road: near(S.dRoad), track: near(S.dTrack), foot: near(S.dFoot) };
+        members.forEach((m) => { falls += S.fallsN[m]; fallsH = Math.max(fallsH, S.fallsH[m]); });
+      }
       runs.push({ rid, members, len, drop, grad: drop / (len * 1000) * 1000, effG: eg / (len * 1000), s50,
                   aTop: S.a[first], aBot: S.a[last], maf: S.maf[last], ha: has[has.length >> 1], ws: wsc / (len * 1000),
-                  river, score, role, guide: guide || listed.has(river),
+                  river, score, role, guide: guide || listed.has(river), acc, falls, fallsH,
                   status: listed.has(river) || guide ? "listed" : role === 2 ? "heldout" : "candidate" });
     }
     const layers = paretoLayers(runs.map((r) => [Math.log10(Math.max(r.maf, 1e-3)), r.effG, r.ha]));
@@ -855,7 +900,11 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
   function runSummary(r) {
     return `<b>${r.river || "Unnamed creek"}</b> · ${r.guide ? "in guides" : "not in guides"} · ${ROLE_TEXT[r.role]}${r.layer === 1 ? " · Pareto frontier" : ""}<br>`
       + `<span class="num">${r.len.toFixed(1)} km · ${r.grad.toFixed(0)} m/km · drop ${r.drop.toFixed(0)} m · steepest 50 m ${r.s50.toFixed(0)} m/km<br>`
-      + `${fmtKm2(r.aBot)} km² · flood ${r.maf.toFixed(0)} m³/s · height-to-area ${r.ha.toFixed(3)} · score ${r.score.toFixed(0)}</span>`;
+      + `${fmtKm2(r.aBot)} km² · flood ${r.maf.toFixed(0)} m³/s · height-to-area ${r.ha.toFixed(3)} · score ${r.score.toFixed(0)}</span>`
+      + (r.acc ? `<br><span class="num">Road: ${fmtDist(r.acc.putIn)} from the put-in, ${fmtDist(r.acc.takeOut)} from the take-out`
+        + `${r.acc.road < Math.min(r.acc.putIn, r.acc.takeOut) - 50 ? `, ${fmtDist(r.acc.road)} at the closest` : ""}`
+        + ` · 4WD or private road ${fmtDist(r.acc.track)} · foot track ${fmtDist(r.acc.foot)}<br>`
+        + `${r.falls ? `${r.falls} mapped waterfall${r.falls > 1 ? "s" : ""}${r.fallsH ? `, tallest ${r.fallsH} m` : ""}` : "No mapped waterfalls"}</span>` : "");
   }
 
   // ---------- selected catchment ----------
@@ -1038,8 +1087,9 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
       const pill = ROLE_PILL[r.role] + (r.guide ? ' <span class="pill guide">In guides</span>' : "");
       const front = r.layer === 1 ? ' <span class="pill">Frontier</span>' : "";
       b.innerHTML = `<span class="rank">#${k + 1}</span><span class="nm">${r.river || "Unnamed creek"} ${pill}${front}</span><span class="sc">${r.score.toFixed(0)}</span>`
-        + `<span class="meta">${r.len.toFixed(1)} km · ${r.grad.toFixed(0)} m/km · flood ${r.maf.toFixed(0)} m³/s · h/a ${r.ha.toFixed(3)}</span>`;
-      b.addEventListener("click", () => flyToRun(S, r));
+        + `<span class="meta">${r.len.toFixed(1)} km · ${r.grad.toFixed(0)} m/km · flood ${r.maf.toFixed(0)} m³/s · h/a ${r.ha.toFixed(3)}`
+        + `${r.acc ? ` · road ${fmtDist(Math.min(r.acc.putIn, r.acc.takeOut))}` : ""}${r.falls ? ` · ${r.falls} waterfall${r.falls > 1 ? "s" : ""}` : ""}</span>`;
+      b.addEventListener("click", () => { flyToRun(S, r); showRun(S, r); });
       box.appendChild(b);
     });
     if (!cands.length) box.innerHTML = '<p class="note">No runs match these settings.</p>';
@@ -1110,7 +1160,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
     setHash();
     if (!cache[R.id]) $("region-desc").textContent = `Loading ${R.title}…`;
     let D;
-    try { D = await loadRegion(R); await applyModel(R); } catch (e) { $("region-desc").textContent = e.message; return; }
+    try { D = await loadRegion(R); await Promise.all([applyModel(R), applyExternal(R)]); } catch (e) { $("region-desc").textContent = e.message; return; }
     if (state.region !== R.id) return;   // another region was picked while this one loaded
     map.setMaxBounds(null);
     map.fitBounds(R.bounds);   // set the view first: Leaflet only adds layers once the map has one
@@ -1149,6 +1199,7 @@ details .wrow output { font-family: var(--font-data); text-align: right; }
   $("opacity").addEventListener("input", (e) => { state.opacity = +e.target.value / 100; syncOutputs(); schedule(); });
   $("dimTrunc").addEventListener("change", (e) => { state.dimTrunc = e.target.checked; schedule(); });
   $("showRec2").addEventListener("change", (e) => { state.showRec2 = e.target.checked; e.target.checked ? rec2Layer.addTo(map) : map.removeLayer(rec2Layer); scheduleArrows(); });
+  $("showFalls").addEventListener("change", (e) => { state.showFalls = e.target.checked; if (fallsLayer) e.target.checked ? fallsLayer.addTo(map) : map.removeLayer(fallsLayer); });
   $("showRuns").addEventListener("change", (e) => { state.showRuns = e.target.checked; e.target.checked ? runsLayer.addTo(map) : map.removeLayer(runsLayer); });
   syncOutputs();
 

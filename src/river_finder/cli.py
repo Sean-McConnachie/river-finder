@@ -131,6 +131,18 @@ def _models(args):
         log(f"viewer page -> {build(args.out, page_only=True)}")
 
 
+def _external(args):
+    import json
+
+    from . import external as X
+
+    if args.step in ("fetch", "all"):
+        X.fetch(log=print)
+    if args.step in ("attach", "all"):
+        out = args.out if args.out.exists() else None
+        print(json.dumps(X.attach(out, log=print), indent=1))
+
+
 STEPS = {"fetch": _fetch, "route": _route, "validate": _validate, "reaches": _reaches, "export": _export}
 
 
@@ -159,6 +171,11 @@ def main(argv: list[str] | None = None) -> None:
     pm.add_argument("--seed", type=int, default=20261113)
     pm.add_argument("--test-frac", type=float, default=0.25)
     pm.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz")
+    px = sub.add_parser("external", help="waterfalls, rapids, roads and tracks from OpenStreetMap via Overture "
+                                         "Maps: fetch | attach | all (see src/river_finder/external.py)")
+    px.add_argument("step", choices=["fetch", "attach", "all"])
+    px.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz",
+                    help="attach: viewer directory to write <region>_x.txt / _falls.json into")
     pv = sub.add_parser("viewer", help="build the browser viewer for the given regions")
     pv.add_argument("regions", nargs="*")
     pv.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer")
@@ -169,6 +186,9 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.cmd == "models":
         _models(args)
+        return
+    if args.cmd == "external":
+        _external(args)
         return
     regions = [load_region(n) for n in (args.regions or list_regions())]
 
