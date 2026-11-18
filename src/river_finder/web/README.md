@@ -45,13 +45,16 @@ Publishing:
 - claude.ai artifact (private to the owner until shared): https://claude.ai/artifact/EhgWyCEjHYFHAY5235CHcu.
   Publish `data/web/artifact.html` with every other file in `data/web/` (not `index.html`) as
   supporting files at the same relative paths.
-- Standalone site (GitHub Pages): `uv run river-finder web pages` stages `data/web_pages/` (a single
-  orphan commit); `--push` force-pushes it to the `gh-pages` branch. Pages must be enabled for the
-  repository (Settings → Pages → branch `gh-pages`); a private repository needs a paid GitHub plan
-  and the site itself is public. The satellite base map is Sentinel-2 cloudless 2025 (EOX, CC BY-NC-SA 4.0): live tiles
-  on the site, `<region>_sat.jpg` (from `web data`) on the artifact. The topographic base map needs a LINZ Basemaps API key at
-  build time (`--basemaps-key` or `$LINZ_BASEMAPS_KEY`); without one, tiles outside LINZ's CDN cache
-  fail (HTTP 400). With no data the app still builds and every
+- Standalone site (GitHub Pages): https://sean-mcconnachie.github.io/river-finder/ (public repository,
+  Settings → Pages → Deploy from a branch → `gh-pages` / root). Deploy from a machine with the data:
+  `uv run river-finder models viewer` (per-model scores), `web build`, then `web pages --push`. That
+  stages `data/web_pages/` (`index.html`, data files, glyphs, `.nojekyll`; not the artifact files or
+  `<region>_sat.jpg`) as a single orphan commit and force-pushes it to `gh-pages`, which only ever
+  holds the latest build. The satellite base map is Sentinel-2 cloudless 2025 (EOX, CC BY-NC-SA 4.0):
+  live tiles on the site, `<region>_sat.jpg` (from `web data`) on the artifact. The topographic base
+  map needs a LINZ Basemaps API key at build time (`--basemaps-key` or `$LINZ_BASEMAPS_KEY`; Basemaps
+  keys are public by design and end up in the page). Without one the option is left out, because LINZ
+  answers HTTP 400 for tiles outside its CDN cache. With no data the app still builds and every
 page shows its empty state. Run `uv run pytest -q tests/test_webapp.py` before pushing.
 
 ## Writing a page
