@@ -267,3 +267,82 @@ def write_gauges(data_dir: Path, refresh: bool = False, log=print) -> int:
         cache.write_text(json.dumps(fetch_gauges(log), ensure_ascii=False, separators=(",", ":")))
     (data_dir / "gauges.json").write_text(cache.read_text())
     return len(json.loads(cache.read_text())["flow"])
+
+
+# ---------------------------------------------------------------------------- satellite
+# EOxCloudless (Sentinel-2 cloudless) by EOX: the 2016 and 2017 editions are CC BY 4.0 (later years are
+# CC BY-NC-SA), and 2017 has no imagery over New Zealand, so the map uses 2016. Tiles are Web Mercator,
+# {z}/{row}/{col}; ~10 m (zoom 14).
+S2_LAYER = "s2cloudless_3857"
+S2_TILES = "https://tiles.maps.eox.at/wmts/1.0.0/{layer}/default/g/{z}/{y}/{x}.jpg"
+S2_ATTRIBUTION = ("EOxCloudless 2016 (https://cloudless.eox.at) by EOX IT Services GmbH, contains modified "
+                  "Copernicus Sentinel data 2016, CC BY 4.0")
+_ORIGIN = 20037508.342789244
+
+
+def _tile(z: int, x: int, y: int, layer: str, cache: Path):
+    import urllib.request
+
+    from PIL import Image
+
+    p = cache / layer / str(z) / str(x) / f"{y}.jpg"
+    if not p.exists():
+        p.parent.mkdir(parents=True, exist_ok=True)
+        url = S2_TILES.format(layer=layer, z=z, x=x, y=y)
+        req = urllib.request.Request(url, headers={"User-Agent": "river-finder"})
+        for k in range(4):
+            try:
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    p.write_bytes(r.read())
+                break
+            except Exception:  # noqa: BLE001 (retry, then leave the tile blank)
+                if k == 3:
+                    return None
+    try:
+        return Image.open(p).convert("RGB")
+    except OSError:
+        return None
+
+
+def satellite_image(merc, max_px: int = 4000, layer: str = S2_LAYER, max_zoom: int = 14, cache: Path | None = None,
+                    workers: int = 6):
+    """A satellite mosaic exactly covering a Web-Mercator box ``(x0, y0, x1, y1)``, at most ``max_px``
+    on its long side (tiles at the zoom whose pixels are just finer than the output's)."""
+    import math
+    from concurrent.futures import ThreadPoolExecutor
+
+    from PIL import Image
+
+    from .national import nz_dir
+
+    cache = cache or nz_dir() / "s2tiles"
+    x0, y0, x1, y1 = merc
+    scale = max(x1 - x0, y1 - y0) / max_px
+    out = (max(1, round((x1 - x0) / scale)), max(1, round((y1 - y0) / scale)))
+    z = int(min(max_zoom, max(0, math.ceil(math.log2(2 * _ORIGIN / 256 / scale)))))
+    ts = 2 * _ORIGIN / 2 ** z
+    tx0, tx1 = int((x0 + _ORIGIN) // ts), int((x1 + _ORIGIN) // ts)
+    ty0, ty1 = int((_ORIGIN - y1) // ts), int((_ORIGIN - y0) // ts)
+    mosaic = Image.new("RGB", ((tx1 - tx0 + 1) * 256, (ty1 - ty0 + 1) * 256))
+    jobs = [(x, y) for x in range(tx0, tx1 + 1) for y in range(ty0, ty1 + 1)]
+    with ThreadPoolExecutor(workers) as ex:
+        for (x, y), im in zip(jobs, ex.map(lambda j: _tile(z, j[0], j[1], layer, cache), jobs), strict=True):
+            if im is not None:
+                mosaic.paste(im, ((x - tx0) * 256, (y - ty0) * 256))
+    px = 256 / ts
+    box = ((x0 + _ORIGIN) * px - tx0 * 256, (_ORIGIN - y1) * px - ty0 * 256,
+           (x1 + _ORIGIN) * px - tx0 * 256, (_ORIGIN - y0) * px - ty0 * 256)
+    return mosaic.resize(out, Image.Resampling.LANCZOS, box=box), z, len(jobs)
+
+
+def write_satellite(data_dir: Path, max_px: int = 4000, log=print) -> dict:
+    """``<vid>_sat.jpg`` per region: the satellite base map for hosts that block tile servers (the
+    claude.ai artifact), on the same Web-Mercator box as the region's terrain images."""
+    counts = {}
+    for e in json.loads((data_dir / "regions_index.json").read_text()):
+        meta = json.loads((data_dir / e.get("src", f"{e['id']}.json")).read_text())
+        img, z, n = satellite_image(meta["merc"], max_px)
+        img.save(data_dir / f"{e['id']}_sat.jpg", format="JPEG", quality=80, optimize=True, progressive=True)
+        counts[e["id"]] = img.size
+        log(f"satellite: {e['id']} {img.size[0]}x{img.size[1]} px from {n} tiles at zoom {z}")
+    return counts

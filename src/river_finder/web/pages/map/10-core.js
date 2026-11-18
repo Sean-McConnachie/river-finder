@@ -44,6 +44,7 @@
   // ---------- preferences (per browser) ----------
   const PREF_KEY = "map-prefs";
   M.prefs = Object.assign({ basemap: "terrain", layers: {}, colors: {}, catch: {} }, RF.store.get(PREF_KEY, {}) || {});
+  if (M.prefs.basemap === "aerial") M.prefs.basemap = "satellite"; // renamed when LINZ aerial gave way to Sentinel-2
   M.savePrefs = RF.util.debounce(() => RF.store.set(PREF_KEY, M.prefs), 300);
 
   // ---------- label glyphs, served from glyphs/<Font_Name>__<range>.txt (base64) ----------

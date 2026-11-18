@@ -71,7 +71,7 @@
       list.append(btn);
     });
     const parts = [list];
-    if (!M.basemapAvailable({ site: true })) parts.push(el("p", { class: "rf-note", text: "Topographic and aerial maps need the standalone site: this host blocks map tile servers." }));
+    if (!M.basemapAvailable({ site: true })) parts.push(el("p", { class: "rf-note", text: "Topographic maps need the standalone site: this host blocks map tile servers. Satellite here is a pre-rendered image of the region." }));
     if (cur.startsWith("catch")) {
       const s = M.catchSettings();
       // smallest coloured area: 2e-5 km² (every cell) to 100 km², log slider

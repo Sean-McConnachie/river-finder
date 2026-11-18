@@ -1,6 +1,7 @@
-/* Base maps: none, terrain (own LINZ-DEM hillshade), NZ Topo50 and aerial (LINZ Basemaps; standalone
-   site only, the artifact host blocks tile servers), catchment area (linear) and catchment area (log),
-   plus region outlines. Owner: map agent. */
+/* Base maps: none, terrain (own LINZ-DEM hillshade), NZ Topo50 (LINZ Basemaps; standalone site only,
+   needs a Basemaps key), satellite (open Sentinel-2 cloudless 2016 by EOX, CC BY 4.0: live tiles on the
+   standalone site, a pre-rendered image per region on the artifact host, which blocks tile servers),
+   catchment area (linear) and catchment area (log), plus region outlines. Owner: map agent. */
 (() => {
   "use strict";
   const RF = window.RF, M = RF.mapkit;
@@ -8,12 +9,15 @@
   const KEY = RF.config.basemapsKey || "";
   const linz = (set) => `https://basemaps.linz.govt.nz/v1/tiles/${set}/WebMercatorQuad/{z}/{x}/{y}.webp${KEY ? `?api=${encodeURIComponent(KEY)}` : ""}`;
   const LINZ_ATTR = '<a href="https://basemaps.linz.govt.nz/" target="_blank" rel="noopener">LINZ Basemaps</a> CC BY 4.0';
+  // EOxCloudless (Sentinel-2 cloudless): 2016 is CC BY 4.0 and covers NZ (2017 does not; 2018+ are non-commercial)
+  const S2_TILES = "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless_3857/default/g/{z}/{y}/{x}.jpg";
+  M.S2_ATTR = 'Satellite <a href="https://cloudless.eox.at" target="_blank" rel="noopener">EOxCloudless 2016</a> by EOX (modified Copernicus Sentinel data 2016) CC BY 4.0';
 
   M.BASEMAPS = [
     { id: "none", label: "None", note: "Plain background" },
     { id: "terrain", label: "Terrain", note: "Shaded relief from the LINZ elevation model" },
     { id: "topo", label: "Topographic", note: "NZ Topo50 maps (LINZ)", site: true },
-    { id: "aerial", label: "Aerial", note: "LINZ aerial imagery", site: true },
+    { id: "satellite", label: "Satellite", note: "Sentinel-2 cloudless 2016 (EOX, CC BY 4.0), 10 m pixels" },
     { id: "catch", label: "Catchment area", note: "Upstream area at every point, linear colour scale" },
     { id: "catch-log", label: "Catchment area (log)", note: "Upstream area, logarithmic colour scale" },
   ];
@@ -42,14 +46,14 @@
     const map = M.map;
     if (SITE) {
       map.addSource("bm-topo", { type: "raster", tiles: [linz("topo-raster")], tileSize: 256, maxzoom: 17, attribution: LINZ_ATTR });
-      map.addSource("bm-aerial", { type: "raster", tiles: [linz("aerial")], tileSize: 256, maxzoom: 19, attribution: LINZ_ATTR });
+      map.addSource("bm-sat", { type: "raster", tiles: [S2_TILES], tileSize: 256, maxzoom: 14 });
       M.addLayer({ id: "bm-topo", type: "raster", source: "bm-topo", layout: { visibility: "none" }, paint: { "raster-fade-duration": 150 } }, "base");
-      M.addLayer({ id: "bm-aerial", type: "raster", source: "bm-aerial", layout: { visibility: "none" }, paint: { "raster-fade-duration": 150 } }, "base");
+      M.addLayer({ id: "bm-sat", type: "raster", source: "bm-sat", layout: { visibility: "none" }, paint: { "raster-fade-duration": 150 } }, "base");
     }
     let warned = false;
     map.on("error", (e) => {
       if (e?.sourceId && String(e.sourceId).startsWith("bm-")) {
-        if (!warned) { warned = true; RF.util.toast("LINZ Basemaps tiles did not load. Check the connection or the API key."); }
+        if (!warned) { warned = true; RF.util.toast(e.sourceId === "bm-sat" ? "Satellite tiles did not load. Check the connection." : "LINZ Basemaps tiles did not load. Check the connection or the API key."); }
         return;
       }
       console.warn("map:", e?.error?.message || e);
@@ -136,6 +140,12 @@
     M.drawCatchLegend?.();
   }
   M.onRegion((R) => loadRegionImages(R).catch((e) => { console.error(e); RF.util.toast("Could not draw the terrain for this region."); }));
+  // Artifact host: no tile servers, so the satellite base map is the region's pre-rendered image (webdata.write_satellite).
+  M.onRegion((R) => {
+    if (SITE) return;
+    M.setSource("sat-img", { type: "image", url: `${R.id}_sat.jpg`, coordinates: M.corners(R) });
+    M.addLayer({ id: "sat-img", type: "raster", source: "sat-img", layout: { visibility: M.prefs.basemap === "satellite" ? "visible" : "none" }, paint: { "raster-fade-duration": 0 } }, "base");
+  });
 
   /** Colour lookup per area code (256 entries, RGBA packed little-endian). */
   function lut(R, s, mode, dark) {
@@ -214,7 +224,8 @@
     const b = M.BASEMAPS.find((x) => x.id === id);
     const use = b && M.basemapAvailable(b) ? id : "terrain";
     M.vis("bm-topo", use === "topo");
-    M.vis("bm-aerial", use === "aerial");
+    M.vis("bm-sat", use === "satellite");
+    M.vis("sat-img", use === "satellite");
     M.vis("terrain", use === "terrain" || use.startsWith("catch"));
     M.vis("catch", use.startsWith("catch"));
     paintHillshade();

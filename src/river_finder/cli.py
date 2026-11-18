@@ -178,8 +178,9 @@ def main(argv: list[str] | None = None) -> None:
                     help="attach: viewer directory to write <region>_x.txt / _falls.json into")
     pw = sub.add_parser("web", help="web app (Map, Top rivers, Models, Info): build | serve (see web/README.md)")
     pw.add_argument("step", choices=["data", "build", "serve", "pages"],
-                    help="data: per-region extras (known sections, roads, tracks, gauges) into --data; build: the "
-                         "pages; serve: localhost; pages: stage the site for GitHub Pages (--push to publish)")
+                    help="data: per-region extras (sections, roads, tracks, gauges, LINZ rivers, satellite) into "
+                         "--data; build: the pages; serve: localhost; pages: stage the site for GitHub Pages "
+                         "(--push to publish)")
     pw.add_argument("--push", action="store_true", help="pages: force-push the staged site to the gh-pages branch")
     pw.add_argument("--data", type=Path, default=REPO_ROOT / "data" / "viewer_nz",
                     help="region data files (from nz viewer / models viewer / external attach)")
@@ -206,12 +207,13 @@ def main(argv: list[str] | None = None) -> None:
 
         if args.step == "data":
             from .linz import write_linz
-            from .webdata import write_access, write_gauges, write_sections
+            from .webdata import write_access, write_gauges, write_satellite, write_sections
 
             write_sections(args.data)
             write_access(args.data)
             write_gauges(args.data)
             write_linz(args.data)
+            write_satellite(args.data)
         elif args.step == "build":
             out = webapp.build(args.out, args.data if args.data.exists() else None, args.basemaps_key)
             print(f"web -> {out['site']} and {out['artifact'].name} ({out['regions']} regions, "

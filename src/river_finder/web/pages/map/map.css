@@ -34,7 +34,7 @@
 .map-thumb-none { background: var(--surface-2); }
 .map-thumb-terrain { background: linear-gradient(135deg, #f2f3ef 0%, #b9bdb8 45%, #e7e9e4 55%, #8f958f 100%); }
 .map-thumb-topo { background: repeating-radial-gradient(circle at 70% 60%, #f3eedc 0 5px, #d9b98a 5px 6px), #f3eedc; }
-.map-thumb-aerial { background: linear-gradient(160deg, #5b6e3c 0%, #34472a 40%, #7d7a5a 70%, #2c4b5c 100%); }
+.map-thumb-satellite { background: linear-gradient(160deg, #5b6e3c 0%, #34472a 40%, #7d7a5a 70%, #2c4b5c 100%); }
 .map-thumb-catch { background: linear-gradient(90deg, #d7e6fa, #2a78d6 70%, #0d366b); }
 .map-thumb-catch-log { background: linear-gradient(90deg, #86b6ef, #2a78d6 40%, #0d366b); }
 .map-catch-ctl { display: grid; gap: var(--sp-3); padding: var(--sp-3); background: var(--surface-2); border-radius: var(--radius); }
