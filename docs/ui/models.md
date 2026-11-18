@@ -24,6 +24,18 @@ Key finding to surface honestly (from `.beads/memories.jsonl`, `model-registry`)
 held-out guide rivers (AUC 0.53); flood size alone gets 0.92, so the size-matched AUC matters
 (v2 0.69, baseline 0.55).
 
+Done so far (rf-qiw, 2026-11-18):
+
+- an "Open the ML page" link (shown when `ml.html` is in the build, which `river-finder ml page`
+  writes into the data folder);
+- a held-out evaluation table with test-set and test-section selectors, including the style-matched
+  and style × size AUC;
+- the cross-validated model recipes, from `RF.payload.registry.cv` (built by
+  `models.viewer_models` -> `cv_summary`).
+
+v3 (LightGBM, kind `gbm`, no coefficients but `importance`) is now the default model. Still to do:
+run-finder tuning, feature weights and the separation views.
+
 ## What you can use
 
 Read `src/river_finder/web/README.md` (the `RF` contract). Most relevant:
