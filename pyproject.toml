@@ -16,6 +16,7 @@ dependencies = [
   "shapely>=2.0",
   "scipy>=1.13",
   "pyarrow>=17",
+  "lightgbm>=4.7.0",
 ]
 
 [project.scripts]
@@ -34,6 +35,8 @@ packages = ["src/river_finder"]
 [tool.ruff]
 line-length = 120
 target-version = "py312"
+# verbatim copy of the MB1997 spec's reference implementation (docs/MB1997_reach_classification_spec.pdf)
+extend-exclude = ["tests/mb_classifier_ref.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

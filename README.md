@@ -9,6 +9,7 @@ height-to-area, and find runs that are not in the guides.
 - Plan: [`docs/PLAN.md`](docs/PLAN.md)
 - Data sources: [`docs/data-sources.md`](docs/data-sources.md)
 - Flow-routing algorithms: [`docs/flow-routing-algorithms.md`](docs/flow-routing-algorithms.md)
+- Reach types for style-matched evaluation: [`docs/MB1997_reach_classification_spec.pdf`](docs/MB1997_reach_classification_spec.pdf)
 - Reference regions: [`regions/`](regions/)
 
 ## Quick start
@@ -29,6 +30,7 @@ uv run river-finder nz export    # data/nz/gis/: GeoPackage (runs, reaches, regi
 uv run river-finder nz viewer    # data/viewer_nz/index.html (serve the folder over HTTP; ~30 min)
 uv run river-finder models import|split|train|evaluate|viewer   # versioned models (models/*.json), see PLAN
 uv run river-finder external fetch|attach   # OSM waterfalls, rapids, roads, tracks per reach (Overture Maps)
+uv run river-finder ml table|explore|cv|page   # ML evaluation (grouped CV + LORO) and the ML page
 ```
 
 Each region's GIS export is in `data/<region>/gis/`. Drag the `.tif` files and the `.gpkg` into

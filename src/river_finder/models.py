@@ -94,7 +94,7 @@ def national_table(rebuild: bool = False, log=print) -> pd.DataFrame:
     if cache.exists() and not rebuild:
         return pd.read_pickle(cache)
     cols = ["seg_id", "gid", "down_gid", "river", "area_km2", "length_m", "score_regression", "label", "holdout",
-            *_RAW]
+            *_RAW, "valley_width_m"]
     parts, xs, ys = [], [], []
     for name in FILTER_ORDER:
         p = nz_dir() / "regions" / _rslug(name) / "segments_scored.gpkg"
@@ -128,7 +128,8 @@ def reference_frame(rid: str) -> pd.DataFrame:
 
     reg = load_region(rid)
     g = pyogrio.read_dataframe(reg.data_dir() / "segments_scored.gpkg",
-                               columns=["seg_id", "down_seg", "river", "area_km2", "length_m", *_RAW])
+                               columns=["seg_id", "down_seg", "river", "area_km2", "length_m", *_RAW,
+                                        "valley_width_m"])
     mid = g.geometry.interpolate(0.5, normalized=True)
     f = pd.DataFrame(g.drop(columns="geometry"))
     f["down"] = f["down_seg"].astype(np.int64)
@@ -642,6 +643,18 @@ def evaluate(card: dict, table: pd.DataFrame, mapped: list[Mapped], split: dict,
         ref = np.sort(lg[bg & (bins == b)])
         sel = bins == b
         mpct[sel] = 100.0 * np.searchsorted(ref, lg[sel], side="right") / max(len(ref), 1)
+    # style-matched: rank each reach among background reaches of the same paddling style
+    # (Montgomery & Buffington reach type from slope and confinement, see reachtype.py)
+    spct = None
+    if "valley_width_m" in table:
+        from .reachtype import classify_frame
+
+        style = classify_frame(table)["style"].cat.codes.to_numpy()
+        spct = np.zeros(len(table))
+        for b in np.unique(style):
+            ref = np.sort(lg[bg & (style == b)])
+            sel = style == b
+            spct[sel] = 100.0 * np.searchsorted(ref, lg[sel], side="right") / max(len(ref), 1)
     test = set(split["test"])
     # a test river is left out for this card if any of its reaches were in the card's training data
     # (v1 trained on rivers that the guide research lists again, under other region names)
@@ -680,6 +693,7 @@ def evaluate(card: dict, table: pd.DataFrame, mapped: list[Mapped], split: dict,
         "auc": round(_auc(lg[P], bg_sorted), 4),
         "median_pct": round(float(np.median(p)), 1),
         "auc_size_matched": round(float(np.mean(mpct[P]) / 100.0), 4),
+        **({"auc_style_matched": round(float(np.mean(spct[P]) / 100.0), 4)} if spct is not None else {}),
         "recall_top10": round(float((p >= 90).mean()), 3),
         "recall_top5": round(float((p >= 95).mean()), 3),
         "lift_top10": round(float((p >= 90).mean() / 0.10), 2),
@@ -697,6 +711,8 @@ def evaluate(card: dict, table: pd.DataFrame, mapped: list[Mapped], split: dict,
                        "reaches": int(len(rows)), "best_pct": round(float(rp.max()), 1),
                        "median_pct": round(float(np.median(rp)), 1),
                        "median_pct_size_matched": round(float(np.median(mpct[rows])), 1),
+                       **({"median_pct_style_matched": round(float(np.median(spct[rows])), 1)}
+                          if spct is not None else {}),
                        "share_top10": round(float((rp >= 90).mean()), 2),
                        "coords": "/".join(sorted(r["coords"])), "extent": "/".join(sorted(r["method"]))})
     out["rivers"] = sorted(rivers, key=lambda r: -r["median_pct"])

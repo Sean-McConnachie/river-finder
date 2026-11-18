@@ -143,6 +143,25 @@ def _external(args):
         print(json.dumps(X.attach(out, log=print), indent=1))
 
 
+def _ml(args):
+    from . import ml, mlpage
+
+    t0 = time.time()
+
+    def log(m):
+        print(f"[{(time.time() - t0) / 60:6.1f} min] {m}", flush=True)
+
+    if args.step in ("table", "all"):
+        ml.ml_table(rebuild=True, log=log)
+    if args.step in ("explore", "all"):
+        mlpage.write_explore(log=log)
+    if args.step in ("cv", "all"):
+        specs = [s for s in ml.ZOO if not args.models or s.id in args.models]
+        ml.run(log=log, specs=specs, repeats=args.repeats)
+    if args.step in ("page", "all"):
+        mlpage.build(args.out, log=log)
+
+
 STEPS = {"fetch": _fetch, "route": _route, "validate": _validate, "reaches": _reaches, "export": _export}
 
 
@@ -176,6 +195,12 @@ def main(argv: list[str] | None = None) -> None:
     px.add_argument("step", choices=["fetch", "attach", "all"])
     px.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz",
                     help="attach: viewer directory to write <region>_x.txt / _falls.json into")
+    pl = sub.add_parser("ml", help="ML evaluation and page: table | explore | cv | page | all "
+                                   "(see src/river_finder/ml.py, mlpage.py)")
+    pl.add_argument("step", choices=["table", "explore", "cv", "page", "all"])
+    pl.add_argument("--models", nargs="*", help="cv: only these model ids (default: the whole zoo)")
+    pl.add_argument("--repeats", type=int, default=5, help="cv: repeats of the 5-fold split")
+    pl.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz")
     pv = sub.add_parser("viewer", help="build the browser viewer for the given regions")
     pv.add_argument("regions", nargs="*")
     pv.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer")
@@ -189,6 +214,9 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.cmd == "external":
         _external(args)
+        return
+    if args.cmd == "ml":
+        _ml(args)
         return
     regions = [load_region(n) for n in (args.regions or list_regions())]
 
