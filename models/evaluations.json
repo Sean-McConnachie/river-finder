@@ -1,5 +1,5 @@
 {
- "created": "2026-11-18T05:44",
+ "created": "2026-11-18T19:05",
  "evaluations": [
   {
    "model": "baseline-flow",
@@ -13,6 +13,7 @@
    "median_pct": 95.3,
    "auc_size_matched": 0.5482,
    "auc_style_matched": 0.9052,
+   "auc_style_size_matched": 0.7107,
    "recall_top10": 0.813,
    "recall_top5": 0.522,
    "lift_top10": 8.13,
@@ -27,6 +28,7 @@
      "median_pct": 99.0,
      "median_pct_size_matched": 89.7,
      "median_pct_style_matched": 97.9,
+     "median_pct_style_size_matched": 92.8,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -41,6 +43,7 @@
      "median_pct": 98.5,
      "median_pct_size_matched": 85.5,
      "median_pct_style_matched": 97.6,
+     "median_pct_style_size_matched": 90.9,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -55,6 +58,7 @@
      "median_pct": 97.6,
      "median_pct_size_matched": 76.4,
      "median_pct_style_matched": 96.7,
+     "median_pct_style_size_matched": 88.0,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -69,6 +73,7 @@
      "median_pct": 97.2,
      "median_pct_size_matched": 71.8,
      "median_pct_style_matched": 94.6,
+     "median_pct_style_size_matched": 81.3,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -83,6 +88,7 @@
      "median_pct": 97.1,
      "median_pct_size_matched": 71.4,
      "median_pct_style_matched": 94.7,
+     "median_pct_style_size_matched": 81.7,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -97,6 +103,7 @@
      "median_pct": 96.8,
      "median_pct_size_matched": 68.5,
      "median_pct_style_matched": 94.2,
+     "median_pct_style_size_matched": 80.0,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -111,6 +118,7 @@
      "median_pct": 96.6,
      "median_pct_size_matched": 67.8,
      "median_pct_style_matched": 94.0,
+     "median_pct_style_size_matched": 78.8,
      "share_top10": 0.86,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -125,6 +133,7 @@
      "median_pct": 96.5,
      "median_pct_size_matched": 64.7,
      "median_pct_style_matched": 97.4,
+     "median_pct_style_size_matched": 88.7,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -139,6 +148,7 @@
      "median_pct": 96.1,
      "median_pct_size_matched": 60.9,
      "median_pct_style_matched": 93.2,
+     "median_pct_style_size_matched": 76.3,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -153,6 +163,7 @@
      "median_pct": 96.0,
      "median_pct_size_matched": 59.9,
      "median_pct_style_matched": 96.8,
+     "median_pct_style_size_matched": 86.4,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -167,6 +178,7 @@
      "median_pct": 95.6,
      "median_pct_size_matched": 55.7,
      "median_pct_style_matched": 92.2,
+     "median_pct_style_size_matched": 72.9,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in towards take-out"
@@ -181,6 +193,7 @@
      "median_pct": 95.5,
      "median_pct_size_matched": 55.5,
      "median_pct_style_matched": 96.5,
+     "median_pct_style_size_matched": 85.5,
      "share_top10": 0.98,
      "coords": "inferred",
      "extent": "put-in to take-out/put-in towards take-out"
@@ -195,6 +208,7 @@
      "median_pct": 95.4,
      "median_pct_size_matched": 54.2,
      "median_pct_style_matched": 92.8,
+     "median_pct_style_size_matched": 74.3,
      "share_top10": 0.96,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -209,6 +223,7 @@
      "median_pct": 95.3,
      "median_pct_size_matched": 53.1,
      "median_pct_style_matched": 96.8,
+     "median_pct_style_size_matched": 85.2,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -223,6 +238,7 @@
      "median_pct": 95.1,
      "median_pct_size_matched": 51.5,
      "median_pct_style_matched": 94.7,
+     "median_pct_style_size_matched": 77.3,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in towards take-out"
@@ -237,6 +253,7 @@
      "median_pct": 94.9,
      "median_pct_size_matched": 49.5,
      "median_pct_style_matched": 95.9,
+     "median_pct_style_size_matched": 82.5,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in to take-out"
@@ -251,6 +268,7 @@
      "median_pct": 94.6,
      "median_pct_size_matched": 46.4,
      "median_pct_style_matched": 91.0,
+     "median_pct_style_size_matched": 69.5,
      "share_top10": 0.86,
      "coords": "inferred",
      "extent": "put-in + length"
@@ -265,6 +283,7 @@
      "median_pct": 94.5,
      "median_pct_size_matched": 63.1,
      "median_pct_style_matched": 94.7,
+     "median_pct_style_size_matched": 78.4,
      "share_top10": 0.88,
      "coords": "inferred",
      "extent": "put-in + length/put-in to take-out/put-in towards take-out"
@@ -279,6 +298,7 @@
      "median_pct": 94.3,
      "median_pct_size_matched": 50.1,
      "median_pct_style_matched": 95.8,
+     "median_pct_style_size_matched": 82.1,
      "share_top10": 0.58,
      "coords": "inferred",
      "extent": "name near the coordinates (path did not join)"
@@ -293,6 +313,7 @@
      "median_pct": 94.3,
      "median_pct_size_matched": 43.0,
      "median_pct_style_matched": 89.8,
+     "median_pct_style_size_matched": 64.5,
      "share_top10": 1.0,
      "coords": "inferred/sourced",
      "extent": "put-in to take-out"
@@ -307,6 +328,7 @@
      "median_pct": 94.1,
      "median_pct_size_matched": 40.9,
      "median_pct_style_matched": 93.9,
+     "median_pct_style_size_matched": 73.8,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out/put-in towards take-out"
@@ -321,6 +343,7 @@
      "median_pct": 93.6,
      "median_pct_size_matched": 36.0,
      "median_pct_style_matched": 88.7,
+     "median_pct_style_size_matched": 60.8,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -335,6 +358,7 @@
      "median_pct": 93.3,
      "median_pct_size_matched": 33.0,
      "median_pct_style_matched": 88.7,
+     "median_pct_style_size_matched": 60.7,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in towards take-out"
@@ -349,6 +373,7 @@
      "median_pct": 93.1,
      "median_pct_size_matched": 31.1,
      "median_pct_style_matched": 88.0,
+     "median_pct_style_size_matched": 58.2,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in + length"
@@ -363,6 +388,7 @@
      "median_pct": 92.6,
      "median_pct_size_matched": 26.2,
      "median_pct_style_matched": 91.5,
+     "median_pct_style_size_matched": 70.4,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in + length"
@@ -377,6 +403,7 @@
      "median_pct": 92.5,
      "median_pct_size_matched": 24.8,
      "median_pct_style_matched": 97.9,
+     "median_pct_style_size_matched": 86.4,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -391,6 +418,7 @@
      "median_pct": 92.4,
      "median_pct_size_matched": 23.7,
      "median_pct_style_matched": 87.1,
+     "median_pct_style_size_matched": 58.0,
      "share_top10": 0.87,
      "coords": "inferred",
      "extent": "put-in towards take-out"
@@ -405,6 +433,7 @@
      "median_pct": 92.2,
      "median_pct_size_matched": 21.9,
      "median_pct_style_matched": 92.7,
+     "median_pct_style_size_matched": 68.7,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -419,6 +448,7 @@
      "median_pct": 91.4,
      "median_pct_size_matched": 14.1,
      "median_pct_style_matched": 97.3,
+     "median_pct_style_size_matched": 82.7,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "name near the coordinates (path did not join)"
@@ -433,6 +463,7 @@
      "median_pct": 91.3,
      "median_pct_size_matched": 23.0,
      "median_pct_style_matched": 95.3,
+     "median_pct_style_size_matched": 73.1,
      "share_top10": 0.76,
      "coords": "inferred",
      "extent": "name near the coordinates (path did not join)"
@@ -447,6 +478,7 @@
      "median_pct": 91.1,
      "median_pct_size_matched": 22.5,
      "median_pct_style_matched": 86.9,
+     "median_pct_style_size_matched": 53.7,
      "share_top10": 0.72,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -461,6 +493,7 @@
      "median_pct": 90.6,
      "median_pct_size_matched": 5.5,
      "median_pct_style_matched": 84.3,
+     "median_pct_style_size_matched": 45.5,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -475,6 +508,7 @@
      "median_pct": 90.5,
      "median_pct_size_matched": 31.6,
      "median_pct_style_matched": 90.8,
+     "median_pct_style_size_matched": 60.6,
      "share_top10": 0.57,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -489,6 +523,7 @@
      "median_pct": 90.3,
      "median_pct_size_matched": 24.9,
      "median_pct_style_matched": 90.4,
+     "median_pct_style_size_matched": 57.1,
      "share_top10": 0.58,
      "coords": "inferred",
      "extent": "put-in + length"
@@ -503,6 +538,7 @@
      "median_pct": 90.0,
      "median_pct_size_matched": 47.6,
      "median_pct_style_matched": 91.0,
+     "median_pct_style_size_matched": 63.6,
      "share_top10": 0.52,
      "coords": "inferred/none",
      "extent": "name/put-in to take-out"
@@ -517,6 +553,7 @@
      "median_pct": 88.6,
      "median_pct_size_matched": 85.8,
      "median_pct_style_matched": 88.7,
+     "median_pct_style_size_matched": 43.4,
      "share_top10": 0.03,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -531,6 +568,7 @@
      "median_pct": 88.3,
      "median_pct_size_matched": 82.5,
      "median_pct_style_matched": 88.2,
+     "median_pct_style_size_matched": 49.3,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -545,6 +583,7 @@
      "median_pct": 87.0,
      "median_pct_size_matched": 70.2,
      "median_pct_style_matched": 80.5,
+     "median_pct_style_size_matched": 42.5,
      "share_top10": 0.0,
      "coords": "inferred/sourced",
      "extent": "put-in to take-out"
@@ -559,6 +598,7 @@
      "median_pct": 85.0,
      "median_pct_size_matched": 50.2,
      "median_pct_style_matched": 79.7,
+     "median_pct_style_size_matched": 28.0,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -573,6 +613,7 @@
      "median_pct": 82.9,
      "median_pct_size_matched": 29.2,
      "median_pct_style_matched": 80.3,
+     "median_pct_style_size_matched": 15.6,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -587,6 +628,7 @@
      "median_pct": 82.0,
      "median_pct_size_matched": 23.1,
      "median_pct_style_matched": 73.8,
+     "median_pct_style_size_matched": 19.3,
      "share_top10": 0.0,
      "coords": "inferred/none",
      "extent": "name/put-in to take-out"
@@ -601,6 +643,7 @@
      "median_pct": 77.4,
      "median_pct_size_matched": 74.1,
      "median_pct_style_matched": 79.8,
+     "median_pct_style_size_matched": 86.5,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -615,6 +658,7 @@
      "median_pct": 77.2,
      "median_pct_size_matched": 32.6,
      "median_pct_style_matched": 74.8,
+     "median_pct_style_size_matched": 62.2,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "name near the coordinates (path did not join)"
@@ -629,6 +673,7 @@
      "median_pct": 77.1,
      "median_pct_size_matched": 71.3,
      "median_pct_style_matched": 73.0,
+     "median_pct_style_size_matched": 83.7,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -643,6 +688,7 @@
      "median_pct": 60.6,
      "median_pct_size_matched": 40.5,
      "median_pct_style_matched": 55.8,
+     "median_pct_style_size_matched": 24.6,
      "share_top10": 0.0,
      "coords": "none",
      "extent": "name"
@@ -657,6 +703,7 @@
      "median_pct": 57.1,
      "median_pct_size_matched": 61.0,
      "median_pct_style_matched": 56.3,
+     "median_pct_style_size_matched": 59.8,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "name near the coordinates (path did not join)"
@@ -671,6 +718,7 @@
      "median_pct": 54.7,
      "median_pct_size_matched": 58.0,
      "median_pct_style_matched": 53.6,
+     "median_pct_style_size_matched": 53.0,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "name near the coordinates (path did not join)"
@@ -685,6 +733,7 @@
      "median_pct": 54.0,
      "median_pct_size_matched": 40.3,
      "median_pct_style_matched": 46.7,
+     "median_pct_style_size_matched": 69.1,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -699,6 +748,7 @@
      "median_pct": 30.2,
      "median_pct_size_matched": 78.1,
      "median_pct_style_matched": 28.4,
+     "median_pct_style_size_matched": 53.0,
      "share_top10": 0.0,
      "coords": "none",
      "extent": "name"
@@ -839,6 +889,7 @@
    "median_pct": 95.4,
    "auc_size_matched": 0.5461,
    "auc_style_matched": 0.9172,
+   "auc_style_size_matched": 0.7182,
    "recall_top10": 0.849,
    "recall_top5": 0.529,
    "lift_top10": 8.49,
@@ -853,6 +904,7 @@
      "median_pct": 99.0,
      "median_pct_size_matched": 89.7,
      "median_pct_style_matched": 97.9,
+     "median_pct_style_size_matched": 92.8,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -867,6 +919,7 @@
      "median_pct": 98.5,
      "median_pct_size_matched": 85.3,
      "median_pct_style_matched": 97.3,
+     "median_pct_style_size_matched": 90.4,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -881,6 +934,7 @@
      "median_pct": 97.2,
      "median_pct_size_matched": 71.8,
      "median_pct_style_matched": 94.6,
+     "median_pct_style_size_matched": 81.3,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -895,6 +949,7 @@
      "median_pct": 96.9,
      "median_pct_size_matched": 69.0,
      "median_pct_style_matched": 94.4,
+     "median_pct_style_size_matched": 80.4,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -909,6 +964,7 @@
      "median_pct": 96.5,
      "median_pct_size_matched": 64.7,
      "median_pct_style_matched": 97.4,
+     "median_pct_style_size_matched": 88.6,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -923,6 +979,7 @@
      "median_pct": 96.4,
      "median_pct_size_matched": 63.8,
      "median_pct_style_matched": 96.8,
+     "median_pct_style_size_matched": 84.2,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -937,6 +994,7 @@
      "median_pct": 96.1,
      "median_pct_size_matched": 61.0,
      "median_pct_style_matched": 93.2,
+     "median_pct_style_size_matched": 76.3,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -951,6 +1009,7 @@
      "median_pct": 95.9,
      "median_pct_size_matched": 59.4,
      "median_pct_style_matched": 96.8,
+     "median_pct_style_size_matched": 86.1,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -965,6 +1024,7 @@
      "median_pct": 95.6,
      "median_pct_size_matched": 55.7,
      "median_pct_style_matched": 92.2,
+     "median_pct_style_size_matched": 72.9,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in towards take-out"
@@ -979,6 +1039,7 @@
      "median_pct": 95.4,
      "median_pct_size_matched": 54.1,
      "median_pct_style_matched": 96.4,
+     "median_pct_style_size_matched": 84.4,
      "share_top10": 0.98,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -993,6 +1054,7 @@
      "median_pct": 95.4,
      "median_pct_size_matched": 54.2,
      "median_pct_style_matched": 93.4,
+     "median_pct_style_size_matched": 72.9,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -1007,6 +1069,7 @@
      "median_pct": 95.2,
      "median_pct_size_matched": 52.0,
      "median_pct_style_matched": 92.9,
+     "median_pct_style_size_matched": 75.4,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -1021,6 +1084,7 @@
      "median_pct": 94.9,
      "median_pct_size_matched": 49.5,
      "median_pct_style_matched": 95.9,
+     "median_pct_style_size_matched": 82.5,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in to take-out"
@@ -1035,6 +1099,7 @@
      "median_pct": 94.3,
      "median_pct_size_matched": 43.0,
      "median_pct_style_matched": 89.8,
+     "median_pct_style_size_matched": 64.5,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length/put-in to take-out"
@@ -1049,6 +1114,7 @@
      "median_pct": 94.2,
      "median_pct_size_matched": 42.3,
      "median_pct_style_matched": 93.9,
+     "median_pct_style_size_matched": 73.8,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -1063,6 +1129,7 @@
      "median_pct": 94.0,
      "median_pct_size_matched": 39.8,
      "median_pct_style_matched": 94.5,
+     "median_pct_style_size_matched": 76.6,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -1077,6 +1144,7 @@
      "median_pct": 93.6,
      "median_pct_size_matched": 36.0,
      "median_pct_style_matched": 88.7,
+     "median_pct_style_size_matched": 60.8,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -1091,6 +1159,7 @@
      "median_pct": 93.5,
      "median_pct_size_matched": 43.7,
      "median_pct_style_matched": 92.5,
+     "median_pct_style_size_matched": 65.4,
      "share_top10": 0.81,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -1105,6 +1174,7 @@
      "median_pct": 93.1,
      "median_pct_size_matched": 31.1,
      "median_pct_style_matched": 88.0,
+     "median_pct_style_size_matched": 58.2,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -1119,6 +1189,7 @@
      "median_pct": 92.6,
      "median_pct_size_matched": 25.8,
      "median_pct_style_matched": 92.1,
+     "median_pct_style_size_matched": 66.1,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -1133,6 +1204,7 @@
      "median_pct": 92.6,
      "median_pct_size_matched": 26.2,
      "median_pct_style_matched": 91.5,
+     "median_pct_style_size_matched": 70.4,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -1147,6 +1219,7 @@
      "median_pct": 92.4,
      "median_pct_size_matched": 23.7,
      "median_pct_style_matched": 97.9,
+     "median_pct_style_size_matched": 83.4,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -1161,6 +1234,7 @@
      "median_pct": 92.2,
      "median_pct_size_matched": 21.9,
      "median_pct_style_matched": 92.7,
+     "median_pct_style_size_matched": 68.7,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -1175,6 +1249,7 @@
      "median_pct": 91.1,
      "median_pct_size_matched": 21.8,
      "median_pct_style_matched": 86.6,
+     "median_pct_style_size_matched": 53.4,
      "share_top10": 0.76,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -1189,6 +1264,7 @@
      "median_pct": 90.7,
      "median_pct_size_matched": 31.6,
      "median_pct_style_matched": 91.5,
+     "median_pct_style_size_matched": 60.7,
      "share_top10": 0.6,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -1203,6 +1279,7 @@
      "median_pct": 90.5,
      "median_pct_size_matched": 5.5,
      "median_pct_style_matched": 87.4,
+     "median_pct_style_size_matched": 52.3,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -1217,6 +1294,7 @@
      "median_pct": 90.3,
      "median_pct_size_matched": 24.9,
      "median_pct_style_matched": 90.4,
+     "median_pct_style_size_matched": 57.1,
      "share_top10": 0.58,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -1231,6 +1309,7 @@
      "median_pct": 90.0,
      "median_pct_size_matched": 47.6,
      "median_pct_style_matched": 91.0,
+     "median_pct_style_size_matched": 63.6,
      "share_top10": 0.52,
      "coords": "none/sourced",
      "extent": "name/put-in + length"
@@ -1245,6 +1324,7 @@
      "median_pct": 88.5,
      "median_pct_size_matched": 85.1,
      "median_pct_style_matched": 88.9,
+     "median_pct_style_size_matched": 47.6,
      "share_top10": 0.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -1259,6 +1339,7 @@
      "median_pct": 87.0,
      "median_pct_size_matched": 70.2,
      "median_pct_style_matched": 80.5,
+     "median_pct_style_size_matched": 42.5,
      "share_top10": 0.0,
      "coords": "sourced",
      "extent": "put-in + length/put-in to take-out"
@@ -1273,6 +1354,7 @@
      "median_pct": 84.3,
      "median_pct_size_matched": 42.8,
      "median_pct_style_matched": 79.5,
+     "median_pct_style_size_matched": 21.1,
      "share_top10": 0.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -1287,6 +1369,7 @@
      "median_pct": 83.1,
      "median_pct_size_matched": 30.9,
      "median_pct_style_matched": 80.9,
+     "median_pct_style_size_matched": 18.1,
      "share_top10": 0.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -1301,6 +1384,7 @@
      "median_pct": 74.3,
      "median_pct_size_matched": 36.6,
      "median_pct_style_matched": 65.4,
+     "median_pct_style_size_matched": 66.3,
      "share_top10": 0.0,
      "coords": "none/sourced",
      "extent": "name/put-in + length"
@@ -1315,6 +1399,7 @@
      "median_pct": 60.6,
      "median_pct_size_matched": 40.5,
      "median_pct_style_matched": 55.8,
+     "median_pct_style_size_matched": 24.6,
      "share_top10": 0.0,
      "coords": "none",
      "extent": "name"
@@ -1329,6 +1414,7 @@
      "median_pct": 30.2,
      "median_pct_size_matched": 78.1,
      "median_pct_style_matched": 28.4,
+     "median_pct_style_size_matched": 53.0,
      "share_top10": 0.0,
      "coords": "none",
      "extent": "name"
@@ -1461,6 +1547,7 @@
    "median_pct": 80.5,
    "auc_size_matched": 0.1918,
    "auc_style_matched": 0.8004,
+   "auc_style_size_matched": 0.2037,
    "recall_top10": 0.0,
    "recall_top5": 0.0,
    "lift_top10": 0.0,
@@ -1475,6 +1562,7 @@
      "median_pct": 80.5,
      "median_pct_size_matched": 5.1,
      "median_pct_style_matched": 76.3,
+     "median_pct_style_size_matched": 3.9,
      "share_top10": 0.0,
      "coords": "none",
      "extent": "name"
@@ -1503,6 +1591,7 @@
    "median_pct": 80.5,
    "auc_size_matched": 0.1918,
    "auc_style_matched": 0.8004,
+   "auc_style_size_matched": 0.2037,
    "recall_top10": 0.0,
    "recall_top5": 0.0,
    "lift_top10": 0.0,
@@ -1517,6 +1606,7 @@
      "median_pct": 80.5,
      "median_pct_size_matched": 5.1,
      "median_pct_style_matched": 76.3,
+     "median_pct_style_size_matched": 3.9,
      "share_top10": 0.0,
      "coords": "none",
      "extent": "name"
@@ -1548,6 +1638,7 @@
    "median_pct": 58.0,
    "auc_size_matched": 0.4772,
    "auc_style_matched": 0.5489,
+   "auc_style_size_matched": 0.4515,
    "recall_top10": 0.165,
    "recall_top5": 0.101,
    "lift_top10": 1.65,
@@ -1562,6 +1653,7 @@
      "median_pct": 100.0,
      "median_pct_size_matched": 99.8,
      "median_pct_style_matched": 99.9,
+     "median_pct_style_size_matched": 99.6,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "name near the coordinates (path did not join)"
@@ -1576,6 +1668,7 @@
      "median_pct": 98.9,
      "median_pct_size_matched": 99.1,
      "median_pct_style_matched": 97.9,
+     "median_pct_style_size_matched": 98.5,
      "share_top10": 0.85,
      "coords": "none",
      "extent": "name"
@@ -1590,6 +1683,7 @@
      "median_pct": 98.4,
      "median_pct_size_matched": 94.4,
      "median_pct_style_matched": 96.8,
+     "median_pct_style_size_matched": 90.0,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in to take-out"
@@ -1604,6 +1698,7 @@
      "median_pct": 98.3,
      "median_pct_size_matched": 96.4,
      "median_pct_style_matched": 98.1,
+     "median_pct_style_size_matched": 94.0,
      "share_top10": 0.84,
      "coords": "inferred",
      "extent": "name near the coordinates (path did not join)"
@@ -1618,6 +1713,7 @@
      "median_pct": 97.8,
      "median_pct_size_matched": 98.3,
      "median_pct_style_matched": 96.6,
+     "median_pct_style_size_matched": 96.5,
      "share_top10": 0.9,
      "coords": "inferred",
      "extent": "name near the coordinates (path did not join)"
@@ -1632,6 +1728,7 @@
      "median_pct": 97.8,
      "median_pct_size_matched": 97.5,
      "median_pct_style_matched": 95.7,
+     "median_pct_style_size_matched": 97.0,
      "share_top10": 0.89,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -1646,6 +1743,7 @@
      "median_pct": 97.6,
      "median_pct_size_matched": 96.2,
      "median_pct_style_matched": 95.3,
+     "median_pct_style_size_matched": 85.2,
      "share_top10": 0.8,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -1660,6 +1758,7 @@
      "median_pct": 97.3,
      "median_pct_size_matched": 91.3,
      "median_pct_style_matched": 95.1,
+     "median_pct_style_size_matched": 84.6,
      "share_top10": 0.79,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -1674,6 +1773,7 @@
      "median_pct": 96.4,
      "median_pct_size_matched": 89.3,
      "median_pct_style_matched": 96.2,
+     "median_pct_style_size_matched": 89.0,
      "share_top10": 0.66,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -1688,6 +1788,7 @@
      "median_pct": 93.3,
      "median_pct_size_matched": 84.3,
      "median_pct_style_matched": 96.6,
+     "median_pct_style_size_matched": 89.9,
      "share_top10": 0.54,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -1702,6 +1803,7 @@
      "median_pct": 92.9,
      "median_pct_size_matched": 83.8,
      "median_pct_style_matched": 89.3,
+     "median_pct_style_size_matched": 72.4,
      "share_top10": 0.71,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -1716,6 +1818,7 @@
      "median_pct": 92.1,
      "median_pct_size_matched": 82.7,
      "median_pct_style_matched": 85.0,
+     "median_pct_style_size_matched": 67.0,
      "share_top10": 0.85,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -1730,6 +1833,7 @@
      "median_pct": 89.5,
      "median_pct_size_matched": 80.2,
      "median_pct_style_matched": 83.6,
+     "median_pct_style_size_matched": 61.9,
      "share_top10": 0.45,
      "coords": "inferred",
      "extent": "name near the coordinates (path did not join)"
@@ -1744,6 +1848,7 @@
      "median_pct": 84.7,
      "median_pct_size_matched": 74.8,
      "median_pct_style_matched": 88.3,
+     "median_pct_style_size_matched": 79.7,
      "share_top10": 0.37,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -1758,6 +1863,7 @@
      "median_pct": 83.8,
      "median_pct_size_matched": 75.6,
      "median_pct_style_matched": 78.8,
+     "median_pct_style_size_matched": 60.1,
      "share_top10": 0.35,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -1772,6 +1878,7 @@
      "median_pct": 83.8,
      "median_pct_size_matched": 77.8,
      "median_pct_style_matched": 77.0,
+     "median_pct_style_size_matched": 66.1,
      "share_top10": 0.28,
      "coords": "inferred/sourced",
      "extent": "put-in to take-out"
@@ -1786,6 +1893,7 @@
      "median_pct": 83.2,
      "median_pct_size_matched": 76.6,
      "median_pct_style_matched": 92.8,
+     "median_pct_style_size_matched": 88.0,
      "share_top10": 0.48,
      "coords": "inferred/none",
      "extent": "name/put-in to take-out"
@@ -1800,6 +1908,7 @@
      "median_pct": 81.6,
      "median_pct_size_matched": 71.8,
      "median_pct_style_matched": 72.4,
+     "median_pct_style_size_matched": 48.0,
      "share_top10": 0.1,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -1814,6 +1923,7 @@
      "median_pct": 76.9,
      "median_pct_size_matched": 67.4,
      "median_pct_style_matched": 82.0,
+     "median_pct_style_size_matched": 67.3,
      "share_top10": 0.39,
      "coords": "inferred",
      "extent": "put-in towards take-out"
@@ -1828,6 +1938,7 @@
      "median_pct": 71.4,
      "median_pct_size_matched": 62.3,
      "median_pct_style_matched": 59.8,
+     "median_pct_style_size_matched": 37.7,
      "share_top10": 0.09,
      "coords": "inferred",
      "extent": "put-in to take-out/put-in towards take-out"
@@ -1842,6 +1953,7 @@
      "median_pct": 68.6,
      "median_pct_size_matched": 59.3,
      "median_pct_style_matched": 57.8,
+     "median_pct_style_size_matched": 33.1,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -1856,6 +1968,7 @@
      "median_pct": 68.1,
      "median_pct_size_matched": 58.9,
      "median_pct_style_matched": 62.9,
+     "median_pct_style_size_matched": 39.3,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "put-in towards take-out"
@@ -1870,6 +1983,7 @@
      "median_pct": 67.0,
      "median_pct_size_matched": 57.8,
      "median_pct_style_matched": 59.6,
+     "median_pct_style_size_matched": 36.9,
      "share_top10": 0.09,
      "coords": "inferred",
      "extent": "put-in towards take-out"
@@ -1884,6 +1998,7 @@
      "median_pct": 64.3,
      "median_pct_size_matched": 55.2,
      "median_pct_style_matched": 53.2,
+     "median_pct_style_size_matched": 32.0,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "put-in to take-out/put-in towards take-out"
@@ -1898,6 +2013,7 @@
      "median_pct": 63.1,
      "median_pct_size_matched": 54.0,
      "median_pct_style_matched": 75.2,
+     "median_pct_style_size_matched": 52.6,
      "share_top10": 0.11,
      "coords": "inferred",
      "extent": "put-in + length"
@@ -1912,6 +2028,7 @@
      "median_pct": 63.0,
      "median_pct_size_matched": 54.0,
      "median_pct_style_matched": 71.9,
+     "median_pct_style_size_matched": 53.0,
      "share_top10": 0.06,
      "coords": "inferred",
      "extent": "put-in + length"
@@ -1926,6 +2043,7 @@
      "median_pct": 60.6,
      "median_pct_size_matched": 57.1,
      "median_pct_style_matched": 49.7,
+     "median_pct_style_size_matched": 32.4,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "name near the coordinates (path did not join)"
@@ -1940,6 +2058,7 @@
      "median_pct": 59.5,
      "median_pct_size_matched": 50.5,
      "median_pct_style_matched": 70.4,
+     "median_pct_style_size_matched": 59.1,
      "share_top10": 0.22,
      "coords": "inferred/sourced",
      "extent": "put-in to take-out"
@@ -1954,6 +2073,7 @@
      "median_pct": 58.6,
      "median_pct_size_matched": 49.6,
      "median_pct_style_matched": 70.8,
+     "median_pct_style_size_matched": 63.1,
      "share_top10": 0.22,
      "coords": "sourced",
      "extent": "put-in towards take-out"
@@ -1968,6 +2088,7 @@
      "median_pct": 57.4,
      "median_pct_size_matched": 48.6,
      "median_pct_style_matched": 66.9,
+     "median_pct_style_size_matched": 53.3,
      "share_top10": 0.22,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -1982,6 +2103,7 @@
      "median_pct": 56.9,
      "median_pct_size_matched": 46.4,
      "median_pct_style_matched": 46.6,
+     "median_pct_style_size_matched": 24.1,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "put-in + length"
@@ -1996,6 +2118,7 @@
      "median_pct": 55.9,
      "median_pct_size_matched": 43.9,
      "median_pct_style_matched": 42.0,
+     "median_pct_style_size_matched": 16.4,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -2010,6 +2133,7 @@
      "median_pct": 55.1,
      "median_pct_size_matched": 46.4,
      "median_pct_style_matched": 41.2,
+     "median_pct_style_size_matched": 15.6,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -2024,6 +2148,7 @@
      "median_pct": 51.5,
      "median_pct_size_matched": 43.3,
      "median_pct_style_matched": 60.8,
+     "median_pct_style_size_matched": 53.0,
      "share_top10": 0.17,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -2038,6 +2163,7 @@
      "median_pct": 51.2,
      "median_pct_size_matched": 39.4,
      "median_pct_style_matched": 44.8,
+     "median_pct_style_size_matched": 22.3,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -2052,6 +2178,7 @@
      "median_pct": 47.7,
      "median_pct_size_matched": 38.5,
      "median_pct_style_matched": 39.1,
+     "median_pct_style_size_matched": 37.5,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -2066,6 +2193,7 @@
      "median_pct": 47.6,
      "median_pct_size_matched": 39.8,
      "median_pct_style_matched": 59.3,
+     "median_pct_style_size_matched": 52.3,
      "share_top10": 0.13,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -2080,6 +2208,7 @@
      "median_pct": 47.3,
      "median_pct_size_matched": 47.9,
      "median_pct_style_matched": 58.9,
+     "median_pct_style_size_matched": 58.7,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -2094,6 +2223,7 @@
      "median_pct": 45.8,
      "median_pct_size_matched": 38.4,
      "median_pct_style_matched": 55.4,
+     "median_pct_style_size_matched": 44.7,
      "share_top10": 0.14,
      "coords": "inferred",
      "extent": "put-in + length"
@@ -2108,6 +2238,7 @@
      "median_pct": 42.0,
      "median_pct_size_matched": 35.7,
      "median_pct_style_matched": 42.5,
+     "median_pct_style_size_matched": 27.1,
      "share_top10": 0.03,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -2122,6 +2253,7 @@
      "median_pct": 40.2,
      "median_pct_size_matched": 34.4,
      "median_pct_style_matched": 46.7,
+     "median_pct_style_size_matched": 30.4,
      "share_top10": 0.02,
      "coords": "inferred",
      "extent": "put-in + length/put-in to take-out/put-in towards take-out"
@@ -2136,6 +2268,7 @@
      "median_pct": 38.2,
      "median_pct_size_matched": 28.2,
      "median_pct_style_matched": 35.7,
+     "median_pct_style_size_matched": 14.5,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -2150,6 +2283,7 @@
      "median_pct": 36.7,
      "median_pct_size_matched": 32.1,
      "median_pct_style_matched": 48.5,
+     "median_pct_style_size_matched": 42.2,
      "share_top10": 0.17,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -2164,6 +2298,7 @@
      "median_pct": 34.7,
      "median_pct_size_matched": 30.5,
      "median_pct_style_matched": 46.5,
+     "median_pct_style_size_matched": 32.8,
      "share_top10": 0.04,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -2178,6 +2313,7 @@
      "median_pct": 33.7,
      "median_pct_size_matched": 27.5,
      "median_pct_style_matched": 44.3,
+     "median_pct_style_size_matched": 34.3,
      "share_top10": 0.04,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -2192,6 +2328,7 @@
      "median_pct": 24.4,
      "median_pct_size_matched": 22.3,
      "median_pct_style_matched": 15.0,
+     "median_pct_style_size_matched": 10.9,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "name near the coordinates (path did not join)"
@@ -2206,6 +2343,7 @@
      "median_pct": 20.0,
      "median_pct_size_matched": 19.4,
      "median_pct_style_matched": 32.0,
+     "median_pct_style_size_matched": 27.6,
      "share_top10": 0.1,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -2341,6 +2479,7 @@
    "median_pct": 57.4,
    "auc_size_matched": 0.4659,
    "auc_style_matched": 0.5304,
+   "auc_style_size_matched": 0.4224,
    "recall_top10": 0.155,
    "recall_top5": 0.084,
    "lift_top10": 1.55,
@@ -2355,6 +2494,7 @@
      "median_pct": 98.9,
      "median_pct_size_matched": 99.1,
      "median_pct_style_matched": 97.9,
+     "median_pct_style_size_matched": 98.5,
      "share_top10": 0.85,
      "coords": "none",
      "extent": "name"
@@ -2369,6 +2509,7 @@
      "median_pct": 98.4,
      "median_pct_size_matched": 94.4,
      "median_pct_style_matched": 96.8,
+     "median_pct_style_size_matched": 90.0,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in to take-out"
@@ -2383,6 +2524,7 @@
      "median_pct": 98.2,
      "median_pct_size_matched": 93.7,
      "median_pct_style_matched": 96.9,
+     "median_pct_style_size_matched": 90.6,
      "share_top10": 0.69,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2397,6 +2539,7 @@
      "median_pct": 96.9,
      "median_pct_size_matched": 97.7,
      "median_pct_style_matched": 97.8,
+     "median_pct_style_size_matched": 91.8,
      "share_top10": 0.53,
      "coords": "none/sourced",
      "extent": "name/put-in + length"
@@ -2411,6 +2554,7 @@
      "median_pct": 95.3,
      "median_pct_size_matched": 87.3,
      "median_pct_style_matched": 93.6,
+     "median_pct_style_size_matched": 80.4,
      "share_top10": 0.67,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2425,6 +2569,7 @@
      "median_pct": 92.4,
      "median_pct_size_matched": 83.2,
      "median_pct_style_matched": 96.7,
+     "median_pct_style_size_matched": 91.8,
      "share_top10": 0.57,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2439,6 +2584,7 @@
      "median_pct": 92.2,
      "median_pct_size_matched": 82.9,
      "median_pct_style_matched": 86.1,
+     "median_pct_style_size_matched": 67.2,
      "share_top10": 0.91,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2453,6 +2599,7 @@
      "median_pct": 91.6,
      "median_pct_size_matched": 82.1,
      "median_pct_style_matched": 87.5,
+     "median_pct_style_size_matched": 67.8,
      "share_top10": 0.74,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2467,6 +2614,7 @@
      "median_pct": 85.2,
      "median_pct_size_matched": 79.0,
      "median_pct_style_matched": 80.0,
+     "median_pct_style_size_matched": 62.7,
      "share_top10": 0.4,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2481,6 +2629,7 @@
      "median_pct": 84.7,
      "median_pct_size_matched": 74.8,
      "median_pct_style_matched": 86.6,
+     "median_pct_style_size_matched": 71.7,
      "share_top10": 0.4,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2495,6 +2644,7 @@
      "median_pct": 83.8,
      "median_pct_size_matched": 77.8,
      "median_pct_style_matched": 77.0,
+     "median_pct_style_size_matched": 66.1,
      "share_top10": 0.28,
      "coords": "sourced",
      "extent": "put-in + length/put-in to take-out"
@@ -2509,6 +2659,7 @@
      "median_pct": 83.3,
      "median_pct_size_matched": 73.4,
      "median_pct_style_matched": 74.9,
+     "median_pct_style_size_matched": 50.1,
      "share_top10": 0.08,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2523,6 +2674,7 @@
      "median_pct": 82.2,
      "median_pct_size_matched": 72.4,
      "median_pct_style_matched": 74.9,
+     "median_pct_style_size_matched": 60.2,
      "share_top10": 0.31,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2537,6 +2689,7 @@
      "median_pct": 71.4,
      "median_pct_size_matched": 62.3,
      "median_pct_style_matched": 59.8,
+     "median_pct_style_size_matched": 36.7,
      "share_top10": 0.08,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2551,6 +2704,7 @@
      "median_pct": 68.3,
      "median_pct_size_matched": 59.0,
      "median_pct_style_matched": 59.3,
+     "median_pct_style_size_matched": 34.6,
      "share_top10": 0.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2565,6 +2719,7 @@
      "median_pct": 65.3,
      "median_pct_size_matched": 56.1,
      "median_pct_style_matched": 53.7,
+     "median_pct_style_size_matched": 31.3,
      "share_top10": 0.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2579,6 +2734,7 @@
      "median_pct": 63.1,
      "median_pct_size_matched": 54.0,
      "median_pct_style_matched": 75.2,
+     "median_pct_style_size_matched": 52.6,
      "share_top10": 0.11,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2593,6 +2749,7 @@
      "median_pct": 63.0,
      "median_pct_size_matched": 54.0,
      "median_pct_style_matched": 71.9,
+     "median_pct_style_size_matched": 53.0,
      "share_top10": 0.06,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2607,6 +2764,7 @@
      "median_pct": 60.7,
      "median_pct_size_matched": 51.7,
      "median_pct_style_matched": 71.9,
+     "median_pct_style_size_matched": 59.9,
      "share_top10": 0.22,
      "coords": "sourced",
      "extent": "put-in + length/put-in to take-out"
@@ -2621,6 +2779,7 @@
      "median_pct": 58.6,
      "median_pct_size_matched": 49.6,
      "median_pct_style_matched": 70.8,
+     "median_pct_style_size_matched": 63.1,
      "share_top10": 0.22,
      "coords": "sourced",
      "extent": "put-in towards take-out"
@@ -2635,6 +2794,7 @@
      "median_pct": 57.4,
      "median_pct_size_matched": 48.6,
      "median_pct_style_matched": 67.1,
+     "median_pct_style_size_matched": 53.1,
      "share_top10": 0.25,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2649,6 +2809,7 @@
      "median_pct": 56.9,
      "median_pct_size_matched": 46.4,
      "median_pct_style_matched": 46.6,
+     "median_pct_style_size_matched": 24.1,
      "share_top10": 0.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2663,6 +2824,7 @@
      "median_pct": 55.6,
      "median_pct_size_matched": 43.6,
      "median_pct_style_matched": 43.7,
+     "median_pct_style_size_matched": 16.9,
      "share_top10": 0.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2677,6 +2839,7 @@
      "median_pct": 55.1,
      "median_pct_size_matched": 46.4,
      "median_pct_style_matched": 41.2,
+     "median_pct_style_size_matched": 15.1,
      "share_top10": 0.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2691,6 +2854,7 @@
      "median_pct": 53.6,
      "median_pct_size_matched": 45.1,
      "median_pct_style_matched": 52.8,
+     "median_pct_style_size_matched": 30.8,
      "share_top10": 0.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2705,6 +2869,7 @@
      "median_pct": 49.3,
      "median_pct_size_matched": 38.9,
      "median_pct_style_matched": 41.5,
+     "median_pct_style_size_matched": 18.2,
      "share_top10": 0.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2719,6 +2884,7 @@
      "median_pct": 37.2,
      "median_pct_size_matched": 32.0,
      "median_pct_style_matched": 38.8,
+     "median_pct_style_size_matched": 25.5,
      "share_top10": 0.02,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2733,6 +2899,7 @@
      "median_pct": 35.3,
      "median_pct_size_matched": 31.0,
      "median_pct_style_matched": 47.1,
+     "median_pct_style_size_matched": 41.1,
      "share_top10": 0.14,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2747,6 +2914,7 @@
      "median_pct": 34.1,
      "median_pct_size_matched": 30.1,
      "median_pct_style_matched": 45.9,
+     "median_pct_style_size_matched": 35.2,
      "share_top10": 0.03,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2761,6 +2929,7 @@
      "median_pct": 30.7,
      "median_pct_size_matched": 23.5,
      "median_pct_style_matched": 30.3,
+     "median_pct_style_size_matched": 7.7,
      "share_top10": 0.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2775,6 +2944,7 @@
      "median_pct": 27.7,
      "median_pct_size_matched": 25.2,
      "median_pct_style_matched": 38.6,
+     "median_pct_style_size_matched": 32.9,
      "share_top10": 0.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2789,6 +2959,7 @@
      "median_pct": 24.0,
      "median_pct_size_matched": 22.7,
      "median_pct_style_matched": 36.1,
+     "median_pct_style_size_matched": 27.8,
      "share_top10": 0.05,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2803,6 +2974,7 @@
      "median_pct": 21.5,
      "median_pct_size_matched": 20.5,
      "median_pct_style_matched": 33.7,
+     "median_pct_style_size_matched": 29.2,
      "share_top10": 0.12,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -2927,6 +3099,7 @@
    "median_pct": 99.7,
    "auc_size_matched": 0.9907,
    "auc_style_matched": 0.9927,
+   "auc_style_size_matched": 0.9769,
    "recall_top10": 1.0,
    "recall_top5": 1.0,
    "lift_top10": 10.0,
@@ -2941,6 +3114,7 @@
      "median_pct": 99.7,
      "median_pct_size_matched": 99.5,
      "median_pct_style_matched": 99.4,
+     "median_pct_style_size_matched": 98.5,
      "share_top10": 1.0,
      "coords": "none",
      "extent": "name"
@@ -2969,6 +3143,7 @@
    "median_pct": 99.7,
    "auc_size_matched": 0.9907,
    "auc_style_matched": 0.9927,
+   "auc_style_size_matched": 0.9769,
    "recall_top10": 1.0,
    "recall_top5": 1.0,
    "lift_top10": 10.0,
@@ -2983,6 +3158,7 @@
      "median_pct": 99.7,
      "median_pct_size_matched": 99.5,
      "median_pct_style_matched": 99.4,
+     "median_pct_style_size_matched": 98.5,
      "share_top10": 1.0,
      "coords": "none",
      "extent": "name"
@@ -3011,6 +3187,7 @@
    "median_pct": 96.3,
    "auc_size_matched": 0.6949,
    "auc_style_matched": 0.9207,
+   "auc_style_size_matched": 0.7678,
    "recall_top10": 0.806,
    "recall_top5": 0.611,
    "lift_top10": 8.06,
@@ -3025,6 +3202,7 @@
      "median_pct": 99.8,
      "median_pct_size_matched": 98.3,
      "median_pct_style_matched": 99.8,
+     "median_pct_style_size_matched": 99.2,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -3039,6 +3217,7 @@
      "median_pct": 99.6,
      "median_pct_size_matched": 96.2,
      "median_pct_style_matched": 99.4,
+     "median_pct_style_size_matched": 97.8,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -3053,6 +3232,7 @@
      "median_pct": 99.4,
      "median_pct_size_matched": 93.7,
      "median_pct_style_matched": 99.2,
+     "median_pct_style_size_matched": 97.0,
      "share_top10": 1.0,
      "coords": "inferred/sourced",
      "extent": "put-in to take-out"
@@ -3067,6 +3247,7 @@
      "median_pct": 98.8,
      "median_pct_size_matched": 88.2,
      "median_pct_style_matched": 98.3,
+     "median_pct_style_size_matched": 91.7,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in towards take-out"
@@ -3081,6 +3262,7 @@
      "median_pct": 98.6,
      "median_pct_size_matched": 86.6,
      "median_pct_style_matched": 97.8,
+     "median_pct_style_size_matched": 91.6,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -3095,6 +3277,7 @@
      "median_pct": 98.3,
      "median_pct_size_matched": 84.3,
      "median_pct_style_matched": 97.6,
+     "median_pct_style_size_matched": 90.5,
      "share_top10": 0.99,
      "coords": "inferred",
      "extent": "put-in to take-out/put-in towards take-out"
@@ -3109,6 +3292,7 @@
      "median_pct": 98.1,
      "median_pct_size_matched": 82.9,
      "median_pct_style_matched": 97.4,
+     "median_pct_style_size_matched": 89.7,
      "share_top10": 0.98,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -3123,6 +3307,7 @@
      "median_pct": 98.0,
      "median_pct_size_matched": 80.8,
      "median_pct_style_matched": 96.7,
+     "median_pct_style_size_matched": 85.5,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -3137,6 +3322,7 @@
      "median_pct": 97.2,
      "median_pct_size_matched": 74.2,
      "median_pct_style_matched": 95.2,
+     "median_pct_style_size_matched": 79.6,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -3151,6 +3337,7 @@
      "median_pct": 96.9,
      "median_pct_size_matched": 72.0,
      "median_pct_style_matched": 95.1,
+     "median_pct_style_size_matched": 81.6,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -3165,6 +3352,7 @@
      "median_pct": 96.8,
      "median_pct_size_matched": 70.5,
      "median_pct_style_matched": 95.8,
+     "median_pct_style_size_matched": 85.4,
      "share_top10": 0.93,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -3179,6 +3367,7 @@
      "median_pct": 96.6,
      "median_pct_size_matched": 70.3,
      "median_pct_style_matched": 94.9,
+     "median_pct_style_size_matched": 82.8,
      "share_top10": 0.86,
      "coords": "inferred",
      "extent": "put-in + length"
@@ -3193,6 +3382,7 @@
      "median_pct": 96.6,
      "median_pct_size_matched": 71.7,
      "median_pct_style_matched": 94.3,
+     "median_pct_style_size_matched": 78.4,
      "share_top10": 0.65,
      "coords": "inferred",
      "extent": "name near the coordinates (path did not join)"
@@ -3207,6 +3397,7 @@
      "median_pct": 96.6,
      "median_pct_size_matched": 69.4,
      "median_pct_style_matched": 95.3,
+     "median_pct_style_size_matched": 80.3,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in to take-out"
@@ -3221,6 +3412,7 @@
      "median_pct": 96.5,
      "median_pct_size_matched": 68.1,
      "median_pct_style_matched": 95.4,
+     "median_pct_style_size_matched": 84.0,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -3235,6 +3427,7 @@
      "median_pct": 96.5,
      "median_pct_size_matched": 68.0,
      "median_pct_style_matched": 94.2,
+     "median_pct_style_size_matched": 76.9,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out/put-in towards take-out"
@@ -3249,6 +3442,7 @@
      "median_pct": 96.5,
      "median_pct_size_matched": 68.1,
      "median_pct_style_matched": 94.5,
+     "median_pct_style_size_matched": 77.3,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -3263,6 +3457,7 @@
      "median_pct": 96.5,
      "median_pct_size_matched": 70.6,
      "median_pct_style_matched": 95.6,
+     "median_pct_style_size_matched": 83.3,
      "share_top10": 0.83,
      "coords": "inferred",
      "extent": "put-in + length/put-in to take-out/put-in towards take-out"
@@ -3277,6 +3472,7 @@
      "median_pct": 96.3,
      "median_pct_size_matched": 67.2,
      "median_pct_style_matched": 95.3,
+     "median_pct_style_size_matched": 83.7,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -3291,6 +3487,7 @@
      "median_pct": 96.3,
      "median_pct_size_matched": 66.7,
      "median_pct_style_matched": 95.0,
+     "median_pct_style_size_matched": 82.0,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in towards take-out"
@@ -3305,6 +3502,7 @@
      "median_pct": 96.2,
      "median_pct_size_matched": 68.6,
      "median_pct_style_matched": 95.3,
+     "median_pct_style_size_matched": 83.2,
      "share_top10": 0.74,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -3319,6 +3517,7 @@
      "median_pct": 96.1,
      "median_pct_size_matched": 65.0,
      "median_pct_style_matched": 94.5,
+     "median_pct_style_size_matched": 80.7,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -3333,6 +3532,7 @@
      "median_pct": 95.5,
      "median_pct_size_matched": 60.9,
      "median_pct_style_matched": 93.9,
+     "median_pct_style_size_matched": 78.0,
      "share_top10": 0.85,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -3347,6 +3547,7 @@
      "median_pct": 95.1,
      "median_pct_size_matched": 61.9,
      "median_pct_style_matched": 92.8,
+     "median_pct_style_size_matched": 74.4,
      "share_top10": 0.87,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -3361,6 +3562,7 @@
      "median_pct": 94.9,
      "median_pct_size_matched": 56.5,
      "median_pct_style_matched": 91.7,
+     "median_pct_style_size_matched": 65.6,
      "share_top10": 0.75,
      "coords": "inferred",
      "extent": "put-in + length"
@@ -3375,6 +3577,7 @@
      "median_pct": 94.2,
      "median_pct_size_matched": 51.6,
      "median_pct_style_matched": 91.7,
+     "median_pct_style_size_matched": 71.2,
      "share_top10": 0.91,
      "coords": "sourced",
      "extent": "put-in towards take-out"
@@ -3389,6 +3592,7 @@
      "median_pct": 94.1,
      "median_pct_size_matched": 97.1,
      "median_pct_style_matched": 91.0,
+     "median_pct_style_size_matched": 81.1,
      "share_top10": 0.7,
      "coords": "inferred/sourced",
      "extent": "put-in to take-out"
@@ -3403,6 +3607,7 @@
      "median_pct": 94.0,
      "median_pct_size_matched": 91.5,
      "median_pct_style_matched": 91.8,
+     "median_pct_style_size_matched": 63.8,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -3417,6 +3622,7 @@
      "median_pct": 93.8,
      "median_pct_size_matched": 52.5,
      "median_pct_style_matched": 91.8,
+     "median_pct_style_size_matched": 72.7,
      "share_top10": 0.87,
      "coords": "inferred",
      "extent": "put-in towards take-out"
@@ -3431,6 +3637,7 @@
      "median_pct": 93.8,
      "median_pct_size_matched": 98.2,
      "median_pct_style_matched": 88.7,
+     "median_pct_style_size_matched": 97.3,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -3445,6 +3652,7 @@
      "median_pct": 93.6,
      "median_pct_size_matched": 88.9,
      "median_pct_style_matched": 94.6,
+     "median_pct_style_size_matched": 66.5,
      "share_top10": 0.94,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -3459,6 +3667,7 @@
      "median_pct": 92.3,
      "median_pct_size_matched": 41.1,
      "median_pct_style_matched": 89.7,
+     "median_pct_style_size_matched": 51.3,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -3473,6 +3682,7 @@
      "median_pct": 92.0,
      "median_pct_size_matched": 85.0,
      "median_pct_style_matched": 91.2,
+     "median_pct_style_size_matched": 65.7,
      "share_top10": 0.72,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -3487,6 +3697,7 @@
      "median_pct": 91.9,
      "median_pct_size_matched": 39.1,
      "median_pct_style_matched": 87.8,
+     "median_pct_style_size_matched": 57.4,
      "share_top10": 0.59,
      "coords": "inferred",
      "extent": "put-in + length"
@@ -3501,6 +3712,7 @@
      "median_pct": 90.8,
      "median_pct_size_matched": 35.4,
      "median_pct_style_matched": 89.4,
+     "median_pct_style_size_matched": 52.4,
      "share_top10": 0.61,
      "coords": "inferred",
      "extent": "name near the coordinates (path did not join)"
@@ -3515,6 +3727,7 @@
      "median_pct": 90.5,
      "median_pct_size_matched": 32.5,
      "median_pct_style_matched": 86.5,
+     "median_pct_style_size_matched": 48.0,
      "share_top10": 0.5,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -3529,6 +3742,7 @@
      "median_pct": 90.4,
      "median_pct_size_matched": 64.4,
      "median_pct_style_matched": 93.0,
+     "median_pct_style_size_matched": 52.6,
      "share_top10": 0.52,
      "coords": "inferred/none",
      "extent": "name/put-in to take-out"
@@ -3543,6 +3757,7 @@
      "median_pct": 90.4,
      "median_pct_size_matched": 94.4,
      "median_pct_style_matched": 86.1,
+     "median_pct_style_size_matched": 93.6,
      "share_top10": 0.57,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -3557,6 +3772,7 @@
      "median_pct": 89.5,
      "median_pct_size_matched": 63.1,
      "median_pct_style_matched": 82.3,
+     "median_pct_style_size_matched": 33.4,
      "share_top10": 0.43,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -3571,6 +3787,7 @@
      "median_pct": 89.4,
      "median_pct_size_matched": 31.9,
      "median_pct_style_matched": 84.4,
+     "median_pct_style_size_matched": 38.1,
      "share_top10": 0.37,
      "coords": "inferred",
      "extent": "put-in + length"
@@ -3585,6 +3802,7 @@
      "median_pct": 88.2,
      "median_pct_size_matched": 24.0,
      "median_pct_style_matched": 84.9,
+     "median_pct_style_size_matched": 33.1,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "name near the coordinates (path did not join)"
@@ -3599,6 +3817,7 @@
      "median_pct": 86.1,
      "median_pct_size_matched": 70.7,
      "median_pct_style_matched": 83.7,
+     "median_pct_style_size_matched": 63.8,
      "share_top10": 0.35,
      "coords": "inferred/none",
      "extent": "name/put-in to take-out"
@@ -3613,6 +3832,7 @@
      "median_pct": 84.9,
      "median_pct_size_matched": 58.2,
      "median_pct_style_matched": 76.4,
+     "median_pct_style_size_matched": 18.5,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -3627,6 +3847,7 @@
      "median_pct": 76.3,
      "median_pct_size_matched": 84.5,
      "median_pct_style_matched": 67.5,
+     "median_pct_style_size_matched": 59.0,
      "share_top10": 0.0,
      "coords": "none",
      "extent": "name"
@@ -3641,6 +3862,7 @@
      "median_pct": 75.2,
      "median_pct_size_matched": 43.0,
      "median_pct_style_matched": 67.2,
+     "median_pct_style_size_matched": 22.5,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "name near the coordinates (path did not join)"
@@ -3655,6 +3877,7 @@
      "median_pct": 74.6,
      "median_pct_size_matched": 88.0,
      "median_pct_style_matched": 69.7,
+     "median_pct_style_size_matched": 80.7,
      "share_top10": 0.2,
      "coords": "inferred",
      "extent": "name near the coordinates (path did not join)"
@@ -3669,6 +3892,7 @@
      "median_pct": 69.2,
      "median_pct_size_matched": 87.2,
      "median_pct_style_matched": 61.6,
+     "median_pct_style_size_matched": 81.8,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "name near the coordinates (path did not join)"
@@ -3683,6 +3907,7 @@
      "median_pct": 56.1,
      "median_pct_size_matched": 56.2,
      "median_pct_style_matched": 56.4,
+     "median_pct_style_size_matched": 82.3,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -3697,6 +3922,7 @@
      "median_pct": 48.6,
      "median_pct_size_matched": 87.5,
      "median_pct_style_matched": 39.6,
+     "median_pct_style_size_matched": 78.5,
      "share_top10": 0.0,
      "coords": "none",
      "extent": "name"
@@ -3837,6 +4063,7 @@
    "median_pct": 97.0,
    "auc_size_matched": 0.733,
    "auc_style_matched": 0.9373,
+   "auc_style_size_matched": 0.7953,
    "recall_top10": 0.869,
    "recall_top5": 0.694,
    "lift_top10": 8.69,
@@ -3851,6 +4078,7 @@
      "median_pct": 99.8,
      "median_pct_size_matched": 98.3,
      "median_pct_style_matched": 99.8,
+     "median_pct_style_size_matched": 99.2,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -3865,6 +4093,7 @@
      "median_pct": 99.7,
      "median_pct_size_matched": 97.2,
      "median_pct_style_matched": 99.5,
+     "median_pct_style_size_matched": 98.2,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -3879,6 +4108,7 @@
      "median_pct": 99.4,
      "median_pct_size_matched": 94.1,
      "median_pct_style_matched": 99.2,
+     "median_pct_style_size_matched": 97.2,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length/put-in to take-out"
@@ -3893,6 +4123,7 @@
      "median_pct": 99.2,
      "median_pct_size_matched": 92.0,
      "median_pct_style_matched": 98.6,
+     "median_pct_style_size_matched": 93.6,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -3907,6 +4138,7 @@
      "median_pct": 98.8,
      "median_pct_size_matched": 88.4,
      "median_pct_style_matched": 98.2,
+     "median_pct_style_size_matched": 92.4,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -3921,6 +4153,7 @@
      "median_pct": 98.4,
      "median_pct_size_matched": 84.9,
      "median_pct_style_matched": 98.0,
+     "median_pct_style_size_matched": 91.6,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -3935,6 +4168,7 @@
      "median_pct": 98.3,
      "median_pct_size_matched": 84.3,
      "median_pct_style_matched": 97.6,
+     "median_pct_style_size_matched": 89.9,
      "share_top10": 0.99,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -3949,6 +4183,7 @@
      "median_pct": 98.0,
      "median_pct_size_matched": 80.8,
      "median_pct_style_matched": 96.7,
+     "median_pct_style_size_matched": 85.5,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -3963,6 +4198,7 @@
      "median_pct": 97.7,
      "median_pct_size_matched": 78.2,
      "median_pct_style_matched": 96.9,
+     "median_pct_style_size_matched": 89.2,
      "share_top10": 0.96,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -3977,6 +4213,7 @@
      "median_pct": 97.4,
      "median_pct_size_matched": 75.9,
      "median_pct_style_matched": 96.1,
+     "median_pct_style_size_matched": 84.9,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -3991,6 +4228,7 @@
      "median_pct": 97.3,
      "median_pct_size_matched": 75.2,
      "median_pct_style_matched": 95.9,
+     "median_pct_style_size_matched": 85.4,
      "share_top10": 0.96,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -4005,6 +4243,7 @@
      "median_pct": 97.3,
      "median_pct_size_matched": 75.3,
      "median_pct_style_matched": 95.5,
+     "median_pct_style_size_matched": 83.3,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -4019,6 +4258,7 @@
      "median_pct": 96.6,
      "median_pct_size_matched": 69.2,
      "median_pct_style_matched": 95.6,
+     "median_pct_style_size_matched": 84.3,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -4033,6 +4273,7 @@
      "median_pct": 96.6,
      "median_pct_size_matched": 69.4,
      "median_pct_style_matched": 95.3,
+     "median_pct_style_size_matched": 80.3,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in to take-out"
@@ -4047,6 +4288,7 @@
      "median_pct": 96.6,
      "median_pct_size_matched": 69.3,
      "median_pct_style_matched": 94.5,
+     "median_pct_style_size_matched": 76.8,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -4061,6 +4303,7 @@
      "median_pct": 96.5,
      "median_pct_size_matched": 68.7,
      "median_pct_style_matched": 94.7,
+     "median_pct_style_size_matched": 79.7,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -4075,6 +4318,7 @@
      "median_pct": 96.3,
      "median_pct_size_matched": 66.9,
      "median_pct_style_matched": 94.6,
+     "median_pct_style_size_matched": 78.7,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -4089,6 +4333,7 @@
      "median_pct": 95.9,
      "median_pct_size_matched": 63.4,
      "median_pct_style_matched": 94.4,
+     "median_pct_style_size_matched": 80.4,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -4103,6 +4348,7 @@
      "median_pct": 95.1,
      "median_pct_size_matched": 62.6,
      "median_pct_style_matched": 94.1,
+     "median_pct_style_size_matched": 76.9,
      "share_top10": 0.72,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -4117,6 +4363,7 @@
      "median_pct": 95.1,
      "median_pct_size_matched": 60.4,
      "median_pct_style_matched": 92.7,
+     "median_pct_style_size_matched": 74.5,
      "share_top10": 0.87,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -4131,6 +4378,7 @@
      "median_pct": 94.9,
      "median_pct_size_matched": 56.5,
      "median_pct_style_matched": 91.7,
+     "median_pct_style_size_matched": 65.6,
      "share_top10": 0.75,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -4145,6 +4393,7 @@
      "median_pct": 94.3,
      "median_pct_size_matched": 92.1,
      "median_pct_style_matched": 92.5,
+     "median_pct_style_size_matched": 69.4,
      "share_top10": 0.76,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -4159,6 +4408,7 @@
      "median_pct": 94.2,
      "median_pct_size_matched": 51.6,
      "median_pct_style_matched": 91.7,
+     "median_pct_style_size_matched": 71.2,
      "share_top10": 0.91,
      "coords": "sourced",
      "extent": "put-in towards take-out"
@@ -4173,6 +4423,7 @@
      "median_pct": 94.1,
      "median_pct_size_matched": 97.1,
      "median_pct_style_matched": 91.0,
+     "median_pct_style_size_matched": 81.1,
      "share_top10": 0.7,
      "coords": "sourced",
      "extent": "put-in + length/put-in to take-out"
@@ -4187,6 +4438,7 @@
      "median_pct": 93.2,
      "median_pct_size_matched": 88.9,
      "median_pct_style_matched": 95.1,
+     "median_pct_style_size_matched": 64.1,
      "share_top10": 0.93,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -4201,6 +4453,7 @@
      "median_pct": 92.0,
      "median_pct_size_matched": 39.3,
      "median_pct_style_matched": 89.8,
+     "median_pct_style_size_matched": 52.0,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -4215,6 +4468,7 @@
      "median_pct": 91.9,
      "median_pct_size_matched": 39.1,
      "median_pct_style_matched": 87.8,
+     "median_pct_style_size_matched": 57.4,
      "share_top10": 0.59,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -4229,6 +4483,7 @@
      "median_pct": 90.4,
      "median_pct_size_matched": 64.4,
      "median_pct_style_matched": 93.0,
+     "median_pct_style_size_matched": 52.6,
      "share_top10": 0.52,
      "coords": "none/sourced",
      "extent": "name/put-in + length"
@@ -4243,6 +4498,7 @@
      "median_pct": 89.7,
      "median_pct_size_matched": 29.1,
      "median_pct_style_matched": 86.5,
+     "median_pct_style_size_matched": 48.6,
      "share_top10": 0.47,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -4257,6 +4513,7 @@
      "median_pct": 89.6,
      "median_pct_size_matched": 60.4,
      "median_pct_style_matched": 82.4,
+     "median_pct_style_size_matched": 33.8,
      "share_top10": 0.48,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -4271,6 +4528,7 @@
      "median_pct": 89.4,
      "median_pct_size_matched": 31.9,
      "median_pct_style_matched": 84.4,
+     "median_pct_style_size_matched": 38.1,
      "share_top10": 0.37,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -4285,6 +4543,7 @@
      "median_pct": 85.3,
      "median_pct_size_matched": 59.7,
      "median_pct_style_matched": 77.4,
+     "median_pct_style_size_matched": 20.5,
      "share_top10": 0.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -4299,6 +4558,7 @@
      "median_pct": 79.6,
      "median_pct_size_matched": 71.0,
      "median_pct_style_matched": 77.6,
+     "median_pct_style_size_matched": 75.7,
      "share_top10": 0.37,
      "coords": "none/sourced",
      "extent": "name/put-in + length"
@@ -4313,6 +4573,7 @@
      "median_pct": 76.3,
      "median_pct_size_matched": 84.5,
      "median_pct_style_matched": 67.5,
+     "median_pct_style_size_matched": 59.0,
      "share_top10": 0.0,
      "coords": "none",
      "extent": "name"
@@ -4327,6 +4588,7 @@
      "median_pct": 48.6,
      "median_pct_size_matched": 87.5,
      "median_pct_style_matched": 39.6,
+     "median_pct_style_size_matched": 78.5,
      "share_top10": 0.0,
      "coords": "none",
      "extent": "name"
@@ -4459,6 +4721,7 @@
    "median_pct": 90.8,
    "auc_size_matched": 0.81,
    "auc_style_matched": 0.8813,
+   "auc_style_size_matched": 0.5387,
    "recall_top10": 0.6,
    "recall_top5": 0.0,
    "lift_top10": 6.0,
@@ -4473,6 +4736,7 @@
      "median_pct": 90.8,
      "median_pct_size_matched": 82.6,
      "median_pct_style_matched": 86.4,
+     "median_pct_style_size_matched": 49.9,
      "share_top10": 0.6,
      "coords": "none",
      "extent": "name"
@@ -4501,6 +4765,7 @@
    "median_pct": 90.8,
    "auc_size_matched": 0.81,
    "auc_style_matched": 0.8813,
+   "auc_style_size_matched": 0.5387,
    "recall_top10": 0.6,
    "recall_top5": 0.0,
    "lift_top10": 6.0,
@@ -4515,6 +4780,7 @@
      "median_pct": 90.8,
      "median_pct_size_matched": 82.6,
      "median_pct_style_matched": 86.4,
+     "median_pct_style_size_matched": 49.9,
      "share_top10": 0.6,
      "coords": "none",
      "extent": "name"
@@ -4547,6 +4813,7 @@
    "median_pct": 95.9,
    "auc_size_matched": 0.67,
    "auc_style_matched": 0.9147,
+   "auc_style_size_matched": 0.7455,
    "recall_top10": 0.786,
    "recall_top5": 0.565,
    "lift_top10": 7.86,
@@ -4561,6 +4828,7 @@
      "median_pct": 99.8,
      "median_pct_size_matched": 97.9,
      "median_pct_style_matched": 99.7,
+     "median_pct_style_size_matched": 99.1,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -4575,6 +4843,7 @@
      "median_pct": 99.5,
      "median_pct_size_matched": 95.4,
      "median_pct_style_matched": 99.4,
+     "median_pct_style_size_matched": 97.3,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -4589,6 +4858,7 @@
      "median_pct": 99.4,
      "median_pct_size_matched": 93.9,
      "median_pct_style_matched": 99.2,
+     "median_pct_style_size_matched": 97.2,
      "share_top10": 1.0,
      "coords": "inferred/sourced",
      "extent": "put-in to take-out"
@@ -4603,6 +4873,7 @@
      "median_pct": 98.6,
      "median_pct_size_matched": 86.5,
      "median_pct_style_matched": 97.7,
+     "median_pct_style_size_matched": 91.3,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -4617,6 +4888,7 @@
      "median_pct": 98.3,
      "median_pct_size_matched": 83.9,
      "median_pct_style_matched": 97.8,
+     "median_pct_style_size_matched": 92.4,
      "share_top10": 0.94,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -4631,6 +4903,7 @@
      "median_pct": 98.2,
      "median_pct_size_matched": 83.7,
      "median_pct_style_matched": 97.4,
+     "median_pct_style_size_matched": 89.4,
      "share_top10": 0.98,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -4645,6 +4918,7 @@
      "median_pct": 98.0,
      "median_pct_size_matched": 82.3,
      "median_pct_style_matched": 97.1,
+     "median_pct_style_size_matched": 88.5,
      "share_top10": 0.98,
      "coords": "inferred",
      "extent": "put-in to take-out/put-in towards take-out"
@@ -4659,6 +4933,7 @@
      "median_pct": 97.8,
      "median_pct_size_matched": 80.1,
      "median_pct_style_matched": 96.4,
+     "median_pct_style_size_matched": 82.9,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -4673,6 +4948,7 @@
      "median_pct": 97.1,
      "median_pct_size_matched": 74.2,
      "median_pct_style_matched": 95.7,
+     "median_pct_style_size_matched": 84.6,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -4687,6 +4963,7 @@
      "median_pct": 96.7,
      "median_pct_size_matched": 70.9,
      "median_pct_style_matched": 94.1,
+     "median_pct_style_size_matched": 75.5,
      "share_top10": 0.95,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -4701,6 +4978,7 @@
      "median_pct": 96.7,
      "median_pct_size_matched": 70.7,
      "median_pct_style_matched": 95.7,
+     "median_pct_style_size_matched": 83.8,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in towards take-out"
@@ -4715,6 +4993,7 @@
      "median_pct": 96.6,
      "median_pct_size_matched": 69.9,
      "median_pct_style_matched": 94.5,
+     "median_pct_style_size_matched": 79.0,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -4729,6 +5008,7 @@
      "median_pct": 96.3,
      "median_pct_size_matched": 70.3,
      "median_pct_style_matched": 93.6,
+     "median_pct_style_size_matched": 83.4,
      "share_top10": 0.65,
      "coords": "inferred",
      "extent": "name near the coordinates (path did not join)"
@@ -4743,6 +5023,7 @@
      "median_pct": 96.2,
      "median_pct_size_matched": 66.6,
      "median_pct_style_matched": 94.6,
+     "median_pct_style_size_matched": 77.4,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in to take-out"
@@ -4757,6 +5038,7 @@
      "median_pct": 96.1,
      "median_pct_size_matched": 66.5,
      "median_pct_style_matched": 93.4,
+     "median_pct_style_size_matched": 74.5,
      "share_top10": 0.93,
      "coords": "inferred",
      "extent": "put-in to take-out/put-in towards take-out"
@@ -4771,6 +5053,7 @@
      "median_pct": 96.0,
      "median_pct_size_matched": 99.1,
      "median_pct_style_matched": 92.2,
+     "median_pct_style_size_matched": 98.6,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -4785,6 +5068,7 @@
      "median_pct": 95.8,
      "median_pct_size_matched": 63.6,
      "median_pct_style_matched": 94.7,
+     "median_pct_style_size_matched": 81.6,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -4799,6 +5083,7 @@
      "median_pct": 95.8,
      "median_pct_size_matched": 63.7,
      "median_pct_style_matched": 93.3,
+     "median_pct_style_size_matched": 73.2,
      "share_top10": 0.97,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -4813,6 +5098,7 @@
      "median_pct": 95.6,
      "median_pct_size_matched": 64.5,
      "median_pct_style_matched": 94.5,
+     "median_pct_style_size_matched": 80.5,
      "share_top10": 0.71,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -4827,6 +5113,7 @@
      "median_pct": 95.6,
      "median_pct_size_matched": 62.5,
      "median_pct_style_matched": 94.5,
+     "median_pct_style_size_matched": 79.9,
      "share_top10": 0.91,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -4841,6 +5128,7 @@
      "median_pct": 95.6,
      "median_pct_size_matched": 64.2,
      "median_pct_style_matched": 94.5,
+     "median_pct_style_size_matched": 79.1,
      "share_top10": 0.79,
      "coords": "inferred",
      "extent": "put-in + length/put-in to take-out/put-in towards take-out"
@@ -4855,6 +5143,7 @@
      "median_pct": 95.4,
      "median_pct_size_matched": 60.8,
      "median_pct_style_matched": 94.2,
+     "median_pct_style_size_matched": 79.7,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -4869,6 +5158,7 @@
      "median_pct": 95.2,
      "median_pct_size_matched": 97.0,
      "median_pct_style_matched": 92.4,
+     "median_pct_style_size_matched": 83.6,
      "share_top10": 0.75,
      "coords": "inferred/sourced",
      "extent": "put-in to take-out"
@@ -4883,6 +5173,7 @@
      "median_pct": 94.4,
      "median_pct_size_matched": 92.1,
      "median_pct_style_matched": 92.7,
+     "median_pct_style_size_matched": 69.6,
      "share_top10": 1.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -4897,6 +5188,7 @@
      "median_pct": 93.9,
      "median_pct_size_matched": 55.0,
      "median_pct_style_matched": 91.8,
+     "median_pct_style_size_matched": 68.2,
      "share_top10": 0.85,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -4911,6 +5203,7 @@
      "median_pct": 93.7,
      "median_pct_size_matched": 50.1,
      "median_pct_style_matched": 89.1,
+     "median_pct_style_size_matched": 56.6,
      "share_top10": 0.56,
      "coords": "inferred",
      "extent": "put-in + length"
@@ -4925,6 +5218,7 @@
      "median_pct": 93.6,
      "median_pct_size_matched": 49.5,
      "median_pct_style_matched": 90.3,
+     "median_pct_style_size_matched": 66.7,
      "share_top10": 0.71,
      "coords": "sourced",
      "extent": "put-in towards take-out"
@@ -4939,6 +5233,7 @@
      "median_pct": 93.4,
      "median_pct_size_matched": 89.0,
      "median_pct_style_matched": 94.8,
+     "median_pct_style_size_matched": 68.2,
      "share_top10": 0.91,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -4953,6 +5248,7 @@
      "median_pct": 92.5,
      "median_pct_size_matched": 74.0,
      "median_pct_style_matched": 94.4,
+     "median_pct_style_size_matched": 65.6,
      "share_top10": 0.73,
      "coords": "inferred/none",
      "extent": "name/put-in to take-out"
@@ -4967,6 +5263,7 @@
      "median_pct": 92.3,
      "median_pct_size_matched": 44.2,
      "median_pct_style_matched": 89.7,
+     "median_pct_style_size_matched": 63.3,
      "share_top10": 0.77,
      "coords": "inferred",
      "extent": "put-in towards take-out"
@@ -4981,6 +5278,7 @@
      "median_pct": 91.6,
      "median_pct_size_matched": 38.1,
      "median_pct_style_matched": 86.7,
+     "median_pct_style_size_matched": 53.2,
      "share_top10": 0.59,
      "coords": "inferred",
      "extent": "put-in + length"
@@ -4995,6 +5293,7 @@
      "median_pct": 91.3,
      "median_pct_size_matched": 36.7,
      "median_pct_style_matched": 87.1,
+     "median_pct_style_size_matched": 49.6,
      "share_top10": 0.57,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -5009,6 +5308,7 @@
      "median_pct": 90.5,
      "median_pct_size_matched": 33.1,
      "median_pct_style_matched": 86.8,
+     "median_pct_style_size_matched": 44.4,
      "share_top10": 0.62,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -5023,6 +5323,7 @@
      "median_pct": 90.1,
      "median_pct_size_matched": 35.6,
      "median_pct_style_matched": 85.2,
+     "median_pct_style_size_matched": 43.3,
      "share_top10": 0.51,
      "coords": "inferred",
      "extent": "put-in + length"
@@ -5037,6 +5338,7 @@
      "median_pct": 89.9,
      "median_pct_size_matched": 78.5,
      "median_pct_style_matched": 89.7,
+     "median_pct_style_size_matched": 57.6,
      "share_top10": 0.48,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -5051,6 +5353,7 @@
      "median_pct": 88.9,
      "median_pct_size_matched": 26.2,
      "median_pct_style_matched": 86.4,
+     "median_pct_style_size_matched": 46.4,
      "share_top10": 0.42,
      "coords": "inferred",
      "extent": "name near the coordinates (path did not join)"
@@ -5065,6 +5368,7 @@
      "median_pct": 88.9,
      "median_pct_size_matched": 91.9,
      "median_pct_style_matched": 85.8,
+     "median_pct_style_size_matched": 90.7,
      "share_top10": 0.29,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -5079,6 +5383,7 @@
      "median_pct": 88.8,
      "median_pct_size_matched": 80.9,
      "median_pct_style_matched": 86.4,
+     "median_pct_style_size_matched": 77.2,
      "share_top10": 0.48,
      "coords": "inferred/none",
      "extent": "name/put-in to take-out"
@@ -5093,6 +5398,7 @@
      "median_pct": 88.8,
      "median_pct_size_matched": 25.5,
      "median_pct_style_matched": 87.1,
+     "median_pct_style_size_matched": 42.2,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "name near the coordinates (path did not join)"
@@ -5107,6 +5413,7 @@
      "median_pct": 85.7,
      "median_pct_size_matched": 62.3,
      "median_pct_style_matched": 78.2,
+     "median_pct_style_size_matched": 23.0,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -5121,6 +5428,7 @@
      "median_pct": 84.9,
      "median_pct_size_matched": 44.9,
      "median_pct_style_matched": 77.6,
+     "median_pct_style_size_matched": 20.8,
      "share_top10": 0.39,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -5135,6 +5443,7 @@
      "median_pct": 80.2,
      "median_pct_size_matched": 89.7,
      "median_pct_style_matched": 75.1,
+     "median_pct_style_size_matched": 70.5,
      "share_top10": 0.0,
      "coords": "none",
      "extent": "name"
@@ -5149,6 +5458,7 @@
      "median_pct": 75.4,
      "median_pct_size_matched": 45.2,
      "median_pct_style_matched": 68.9,
+     "median_pct_style_size_matched": 21.5,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "name near the coordinates (path did not join)"
@@ -5163,6 +5473,7 @@
      "median_pct": 71.3,
      "median_pct_size_matched": 92.0,
      "median_pct_style_matched": 67.8,
+     "median_pct_style_size_matched": 88.0,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "name near the coordinates (path did not join)"
@@ -5177,6 +5488,7 @@
      "median_pct": 66.9,
      "median_pct_size_matched": 76.5,
      "median_pct_style_matched": 65.3,
+     "median_pct_style_size_matched": 69.0,
      "share_top10": 0.11,
      "coords": "inferred",
      "extent": "name near the coordinates (path did not join)"
@@ -5191,6 +5503,7 @@
      "median_pct": 55.3,
      "median_pct_size_matched": 54.6,
      "median_pct_style_matched": 51.8,
+     "median_pct_style_size_matched": 72.6,
      "share_top10": 0.0,
      "coords": "inferred",
      "extent": "put-in to take-out"
@@ -5327,6 +5640,7 @@
    "median_pct": 96.6,
    "auc_size_matched": 0.7054,
    "auc_style_matched": 0.9326,
+   "auc_style_size_matched": 0.7744,
    "recall_top10": 0.85,
    "recall_top5": 0.634,
    "lift_top10": 8.5,
@@ -5341,6 +5655,7 @@
      "median_pct": 99.8,
      "median_pct_size_matched": 98.0,
      "median_pct_style_matched": 99.8,
+     "median_pct_style_size_matched": 99.1,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -5355,6 +5670,7 @@
      "median_pct": 99.7,
      "median_pct_size_matched": 96.8,
      "median_pct_style_matched": 99.5,
+     "median_pct_style_size_matched": 97.9,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -5369,6 +5685,7 @@
      "median_pct": 99.4,
      "median_pct_size_matched": 94.3,
      "median_pct_style_matched": 99.3,
+     "median_pct_style_size_matched": 97.4,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length/put-in to take-out"
@@ -5383,6 +5700,7 @@
      "median_pct": 99.3,
      "median_pct_size_matched": 93.2,
      "median_pct_style_matched": 98.8,
+     "median_pct_style_size_matched": 95.4,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -5397,6 +5715,7 @@
      "median_pct": 98.5,
      "median_pct_size_matched": 85.5,
      "median_pct_style_matched": 97.8,
+     "median_pct_style_size_matched": 90.9,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -5411,6 +5730,7 @@
      "median_pct": 98.0,
      "median_pct_size_matched": 82.5,
      "median_pct_style_matched": 97.3,
+     "median_pct_style_size_matched": 88.5,
      "share_top10": 0.98,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -5425,6 +5745,7 @@
      "median_pct": 97.6,
      "median_pct_size_matched": 78.4,
      "median_pct_style_matched": 96.4,
+     "median_pct_style_size_matched": 82.9,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -5439,6 +5760,7 @@
      "median_pct": 97.1,
      "median_pct_size_matched": 74.1,
      "median_pct_style_matched": 95.6,
+     "median_pct_style_size_matched": 82.1,
      "share_top10": 0.92,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -5453,6 +5775,7 @@
      "median_pct": 97.0,
      "median_pct_size_matched": 73.1,
      "median_pct_style_matched": 96.2,
+     "median_pct_style_size_matched": 86.2,
      "share_top10": 0.91,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -5467,6 +5790,7 @@
      "median_pct": 97.0,
      "median_pct_size_matched": 72.8,
      "median_pct_style_matched": 95.6,
+     "median_pct_style_size_matched": 84.2,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -5481,6 +5805,7 @@
      "median_pct": 96.9,
      "median_pct_size_matched": 72.3,
      "median_pct_style_matched": 95.9,
+     "median_pct_style_size_matched": 83.5,
      "share_top10": 0.96,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -5495,6 +5820,7 @@
      "median_pct": 96.2,
      "median_pct_size_matched": 66.6,
      "median_pct_style_matched": 94.6,
+     "median_pct_style_size_matched": 77.4,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in to take-out"
@@ -5509,6 +5835,7 @@
      "median_pct": 96.2,
      "median_pct_size_matched": 67.1,
      "median_pct_style_matched": 93.7,
+     "median_pct_style_size_matched": 74.0,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -5523,6 +5850,7 @@
      "median_pct": 96.0,
      "median_pct_size_matched": 65.4,
      "median_pct_style_matched": 94.0,
+     "median_pct_style_size_matched": 77.0,
      "share_top10": 0.94,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -5537,6 +5865,7 @@
      "median_pct": 96.0,
      "median_pct_size_matched": 65.3,
      "median_pct_style_matched": 93.6,
+     "median_pct_style_size_matched": 76.5,
      "share_top10": 0.98,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -5551,6 +5880,7 @@
      "median_pct": 95.7,
      "median_pct_size_matched": 63.2,
      "median_pct_style_matched": 94.6,
+     "median_pct_style_size_matched": 80.6,
      "share_top10": 1.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -5565,6 +5895,7 @@
      "median_pct": 95.2,
      "median_pct_size_matched": 97.0,
      "median_pct_style_matched": 92.4,
+     "median_pct_style_size_matched": 83.6,
      "share_top10": 0.75,
      "coords": "sourced",
      "extent": "put-in + length/put-in to take-out"
@@ -5579,6 +5910,7 @@
      "median_pct": 94.0,
      "median_pct_size_matched": 57.2,
      "median_pct_style_matched": 92.5,
+     "median_pct_style_size_matched": 71.6,
      "share_top10": 0.67,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -5593,6 +5925,7 @@
      "median_pct": 93.9,
      "median_pct_size_matched": 54.5,
      "median_pct_style_matched": 91.4,
+     "median_pct_style_size_matched": 68.9,
      "share_top10": 0.85,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -5607,6 +5940,7 @@
      "median_pct": 93.7,
      "median_pct_size_matched": 50.1,
      "median_pct_style_matched": 89.1,
+     "median_pct_style_size_matched": 56.6,
      "share_top10": 0.56,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -5621,6 +5955,7 @@
      "median_pct": 93.6,
      "median_pct_size_matched": 49.5,
      "median_pct_style_matched": 90.3,
+     "median_pct_style_size_matched": 66.7,
      "share_top10": 0.71,
      "coords": "sourced",
      "extent": "put-in towards take-out"
@@ -5635,6 +5970,7 @@
      "median_pct": 93.4,
      "median_pct_size_matched": 89.6,
      "median_pct_style_matched": 91.1,
+     "median_pct_style_size_matched": 65.0,
      "share_top10": 0.7,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -5649,6 +5985,7 @@
      "median_pct": 93.2,
      "median_pct_size_matched": 89.0,
      "median_pct_style_matched": 95.7,
+     "median_pct_style_size_matched": 66.4,
      "share_top10": 0.9,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -5663,6 +6000,7 @@
      "median_pct": 92.5,
      "median_pct_size_matched": 74.0,
      "median_pct_style_matched": 94.4,
+     "median_pct_style_size_matched": 65.6,
      "share_top10": 0.73,
      "coords": "none/sourced",
      "extent": "name/put-in + length"
@@ -5677,6 +6015,7 @@
      "median_pct": 91.6,
      "median_pct_size_matched": 38.1,
      "median_pct_style_matched": 86.7,
+     "median_pct_style_size_matched": 53.2,
      "share_top10": 0.59,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -5691,6 +6030,7 @@
      "median_pct": 90.6,
      "median_pct_size_matched": 33.2,
      "median_pct_style_matched": 86.7,
+     "median_pct_style_size_matched": 49.6,
      "share_top10": 0.53,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -5705,6 +6045,7 @@
      "median_pct": 90.3,
      "median_pct_size_matched": 31.8,
      "median_pct_style_matched": 87.6,
+     "median_pct_style_size_matched": 46.1,
      "share_top10": 0.78,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -5719,6 +6060,7 @@
      "median_pct": 90.1,
      "median_pct_size_matched": 35.6,
      "median_pct_style_matched": 85.2,
+     "median_pct_style_size_matched": 43.3,
      "share_top10": 0.51,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -5733,6 +6075,7 @@
      "median_pct": 85.7,
      "median_pct_size_matched": 46.2,
      "median_pct_style_matched": 78.1,
+     "median_pct_style_size_matched": 22.9,
      "share_top10": 0.44,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -5747,6 +6090,7 @@
      "median_pct": 85.4,
      "median_pct_size_matched": 61.3,
      "median_pct_style_matched": 78.8,
+     "median_pct_style_size_matched": 24.3,
      "share_top10": 0.0,
      "coords": "sourced",
      "extent": "put-in + length"
@@ -5761,6 +6105,7 @@
      "median_pct": 83.4,
      "median_pct_size_matched": 81.8,
      "median_pct_style_matched": 80.5,
+     "median_pct_style_size_matched": 81.2,
      "share_top10": 0.47,
      "coords": "none/sourced",
      "extent": "name/put-in + length"
@@ -5775,6 +6120,7 @@
      "median_pct": 80.2,
      "median_pct_size_matched": 89.7,
      "median_pct_style_matched": 75.1,
+     "median_pct_style_size_matched": 70.5,
      "share_top10": 0.0,
      "coords": "none",
      "extent": "name"
@@ -5899,6 +6245,7 @@
    "median_pct": 92.5,
    "auc_size_matched": 0.8671,
    "auc_style_matched": 0.8963,
+   "auc_style_size_matched": 0.6255,
    "recall_top10": 0.8,
    "recall_top5": 0.0,
    "lift_top10": 8.0,
@@ -5913,6 +6260,7 @@
      "median_pct": 92.5,
      "median_pct_size_matched": 88.7,
      "median_pct_style_matched": 88.5,
+     "median_pct_style_size_matched": 57.7,
      "share_top10": 0.8,
      "coords": "none",
      "extent": "name"
@@ -5941,6 +6289,7 @@
    "median_pct": 92.5,
    "auc_size_matched": 0.8671,
    "auc_style_matched": 0.8963,
+   "auc_style_size_matched": 0.6255,
    "recall_top10": 0.8,
    "recall_top5": 0.0,
    "lift_top10": 8.0,
@@ -5955,6 +6304,7 @@
      "median_pct": 92.5,
      "median_pct_size_matched": 88.7,
      "median_pct_style_matched": 88.5,
+     "median_pct_style_size_matched": 57.7,
      "share_top10": 0.8,
      "coords": "none",
      "extent": "name"
@@ -5968,6 +6318,1628 @@
      "median_pct": 92.5,
      "recall_top10": 0.8,
      "auc_within_region": 0.9189
+    }
+   ]
+  },
+  {
+   "model": "v3",
+   "split": "guides-v1",
+   "coords": "any",
+   "excluded_trained": [],
+   "background_reaches": 580605,
+   "test_rivers": 49,
+   "test_reaches": 4341,
+   "auc": 0.9522,
+   "median_pct": 98.8,
+   "auc_size_matched": 0.84,
+   "auc_style_matched": 0.9481,
+   "auc_style_size_matched": 0.859,
+   "recall_top10": 0.854,
+   "recall_top5": 0.742,
+   "lift_top10": 8.54,
+   "rivers": [
+    {
+     "key": "Karamea River | West Coast",
+     "river": "Karamea River",
+     "region": "West Coast",
+     "grade": "4",
+     "reaches": 236,
+     "best_pct": 100.0,
+     "median_pct": 100.0,
+     "median_pct_size_matched": 99.6,
+     "median_pct_style_matched": 99.9,
+     "median_pct_style_size_matched": 99.7,
+     "share_top10": 1.0,
+     "coords": "inferred",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Hokitika River | West Coast",
+     "river": "Hokitika River",
+     "region": "West Coast",
+     "grade": "4",
+     "reaches": 184,
+     "best_pct": 100.0,
+     "median_pct": 99.9,
+     "median_pct_size_matched": 99.5,
+     "median_pct_style_matched": 99.9,
+     "median_pct_style_size_matched": 99.7,
+     "share_top10": 0.99,
+     "coords": "inferred",
+     "extent": "put-in to take-out/put-in towards take-out"
+    },
+    {
+     "key": "Otaki | Wellington",
+     "river": "Otaki",
+     "region": "Wellington",
+     "grade": "2",
+     "reaches": 104,
+     "best_pct": 100.0,
+     "median_pct": 99.8,
+     "median_pct_size_matched": 98.7,
+     "median_pct_style_matched": 99.7,
+     "median_pct_style_size_matched": 99.0,
+     "share_top10": 1.0,
+     "coords": "inferred",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Shotover River | Otago",
+     "river": "Shotover River",
+     "region": "Otago",
+     "grade": "4",
+     "reaches": 143,
+     "best_pct": 100.0,
+     "median_pct": 99.7,
+     "median_pct_size_matched": 97.7,
+     "median_pct_style_matched": 99.6,
+     "median_pct_style_size_matched": 98.6,
+     "share_top10": 1.0,
+     "coords": "inferred/sourced",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Fox | West Coast",
+     "river": "Fox",
+     "region": "West Coast",
+     "grade": "4+",
+     "reaches": 19,
+     "best_pct": 99.7,
+     "median_pct": 99.6,
+     "median_pct_size_matched": 96.2,
+     "median_pct_style_matched": 99.0,
+     "median_pct_style_size_matched": 95.8,
+     "share_top10": 1.0,
+     "coords": "inferred",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Taipo | West Coast",
+     "river": "Taipo",
+     "region": "West Coast",
+     "grade": "4+",
+     "reaches": 76,
+     "best_pct": 100.0,
+     "median_pct": 99.6,
+     "median_pct_size_matched": 97.0,
+     "median_pct_style_matched": 99.4,
+     "median_pct_style_size_matched": 97.5,
+     "share_top10": 1.0,
+     "coords": "inferred",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Tongariro | Waikato",
+     "river": "Tongariro",
+     "region": "Waikato",
+     "grade": "3+",
+     "reaches": 136,
+     "best_pct": 100.0,
+     "median_pct": 99.6,
+     "median_pct_size_matched": 97.4,
+     "median_pct_style_matched": 99.5,
+     "median_pct_style_size_matched": 97.8,
+     "share_top10": 0.93,
+     "coords": "inferred",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Waiho River | West Coast",
+     "river": "Waiho River",
+     "region": "West Coast",
+     "grade": "3+",
+     "reaches": 28,
+     "best_pct": 100.0,
+     "median_pct": 99.6,
+     "median_pct_size_matched": 96.6,
+     "median_pct_style_matched": 99.2,
+     "median_pct_style_size_matched": 96.8,
+     "share_top10": 1.0,
+     "coords": "inferred",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Clarence River | Canterbury",
+     "river": "Clarence River",
+     "region": "Canterbury",
+     "grade": "2+",
+     "reaches": 914,
+     "best_pct": 100.0,
+     "median_pct": 99.5,
+     "median_pct_size_matched": 95.4,
+     "median_pct_style_matched": 99.3,
+     "median_pct_style_size_matched": 97.6,
+     "share_top10": 0.84,
+     "coords": "inferred",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Tutoko River | Southland",
+     "river": "Tutoko River",
+     "region": "Southland",
+     "grade": "4+",
+     "reaches": 9,
+     "best_pct": 99.6,
+     "median_pct": 99.4,
+     "median_pct_size_matched": 94.9,
+     "median_pct_style_matched": 98.7,
+     "median_pct_style_size_matched": 93.8,
+     "share_top10": 1.0,
+     "coords": "sourced",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Waingaro | Tasman",
+     "river": "Waingaro",
+     "region": "Tasman",
+     "grade": "4",
+     "reaches": 145,
+     "best_pct": 100.0,
+     "median_pct": 99.2,
+     "median_pct_size_matched": 93.5,
+     "median_pct_style_matched": 98.8,
+     "median_pct_style_size_matched": 95.3,
+     "share_top10": 0.99,
+     "coords": "inferred",
+     "extent": "put-in towards take-out"
+    },
+    {
+     "key": "Manuherikia River | Otago",
+     "river": "Manuherikia River",
+     "region": "Otago",
+     "grade": "4",
+     "reaches": 68,
+     "best_pct": 100.0,
+     "median_pct": 99.0,
+     "median_pct_size_matched": 91.9,
+     "median_pct_style_matched": 98.9,
+     "median_pct_style_size_matched": 96.0,
+     "share_top10": 0.85,
+     "coords": "inferred",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Ruakituri | Hawke's Bay",
+     "river": "Ruakituri",
+     "region": "Hawke's Bay",
+     "grade": "4",
+     "reaches": 45,
+     "best_pct": 99.9,
+     "median_pct": 99.0,
+     "median_pct_size_matched": 91.5,
+     "median_pct_style_matched": 98.3,
+     "median_pct_style_size_matched": 93.2,
+     "share_top10": 0.98,
+     "coords": "inferred",
+     "extent": "put-in to take-out/put-in towards take-out"
+    },
+    {
+     "key": "Waihopai | Marlborough",
+     "river": "Waihopai",
+     "region": "Marlborough",
+     "grade": "2+",
+     "reaches": 28,
+     "best_pct": 100.0,
+     "median_pct": 99.0,
+     "median_pct_size_matched": 91.8,
+     "median_pct_style_matched": 98.7,
+     "median_pct_style_size_matched": 95.1,
+     "share_top10": 0.96,
+     "coords": "inferred",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Buller River | West Coast",
+     "river": "Buller River",
+     "region": "West Coast",
+     "grade": "3",
+     "reaches": 40,
+     "best_pct": 100.0,
+     "median_pct": 98.9,
+     "median_pct_size_matched": 90.9,
+     "median_pct_style_matched": 98.8,
+     "median_pct_style_size_matched": 95.7,
+     "share_top10": 0.85,
+     "coords": "inferred",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Glenroy | Tasman",
+     "river": "Glenroy",
+     "region": "Tasman",
+     "grade": "4",
+     "reaches": 10,
+     "best_pct": 99.4,
+     "median_pct": 98.9,
+     "median_pct_size_matched": 91.3,
+     "median_pct_style_matched": 98.3,
+     "median_pct_style_size_matched": 91.7,
+     "share_top10": 1.0,
+     "coords": "inferred",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Manganui-a-te-ao | Wanganui",
+     "river": "Manganui-a-te-ao",
+     "region": "Wanganui",
+     "grade": "3+",
+     "reaches": 197,
+     "best_pct": 100.0,
+     "median_pct": 98.8,
+     "median_pct_size_matched": 90.2,
+     "median_pct_style_matched": 98.4,
+     "median_pct_style_size_matched": 94.3,
+     "share_top10": 0.87,
+     "coords": "inferred",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Stony | Taranaki",
+     "river": "Stony",
+     "region": "Taranaki",
+     "grade": "4",
+     "reaches": 13,
+     "best_pct": 99.4,
+     "median_pct": 98.8,
+     "median_pct_size_matched": 90.4,
+     "median_pct_style_matched": 98.3,
+     "median_pct_style_size_matched": 90.5,
+     "share_top10": 1.0,
+     "coords": "inferred",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Wainui River | Bay of Plenty",
+     "river": "Wainui River",
+     "region": "Bay of Plenty",
+     "grade": "5",
+     "reaches": 47,
+     "best_pct": 99.9,
+     "median_pct": 98.8,
+     "median_pct_size_matched": 99.9,
+     "median_pct_style_matched": 98.5,
+     "median_pct_style_size_matched": 99.8,
+     "share_top10": 0.79,
+     "coords": "none",
+     "extent": "name"
+    },
+    {
+     "key": "Jackson River | West Coast",
+     "river": "Jackson River",
+     "region": "West Coast",
+     "grade": "2-3",
+     "reaches": 55,
+     "best_pct": 99.9,
+     "median_pct": 98.7,
+     "median_pct_size_matched": 89.8,
+     "median_pct_style_matched": 98.9,
+     "median_pct_style_size_matched": 94.3,
+     "share_top10": 1.0,
+     "coords": "sourced",
+     "extent": "put-in towards take-out"
+    },
+    {
+     "key": "Mangakarengorengo River | Bay of Plenty",
+     "river": "Mangakarengorengo River",
+     "region": "kaimai",
+     "grade": null,
+     "reaches": 23,
+     "best_pct": 99.9,
+     "median_pct": 98.6,
+     "median_pct_size_matched": 98.7,
+     "median_pct_style_matched": 98.6,
+     "median_pct_style_size_matched": 98.4,
+     "share_top10": 0.87,
+     "coords": "inferred/none",
+     "extent": "name/put-in to take-out"
+    },
+    {
+     "key": "Poutu Stream | Waikato",
+     "river": "Poutu Stream",
+     "region": "Waikato",
+     "grade": "4",
+     "reaches": 1,
+     "best_pct": 98.6,
+     "median_pct": 98.6,
+     "median_pct_size_matched": 89.0,
+     "median_pct_style_matched": 98.1,
+     "median_pct_style_size_matched": 89.2,
+     "share_top10": 1.0,
+     "coords": "inferred",
+     "extent": "name near the coordinates (path did not join)"
+    },
+    {
+     "key": "Waiau River | Canterbury",
+     "river": "Waiau River",
+     "region": "Canterbury",
+     "grade": "2",
+     "reaches": 394,
+     "best_pct": 100.0,
+     "median_pct": 98.6,
+     "median_pct_size_matched": 88.8,
+     "median_pct_style_matched": 98.5,
+     "median_pct_style_size_matched": 94.2,
+     "share_top10": 0.95,
+     "coords": "inferred",
+     "extent": "put-in + length/put-in to take-out/put-in towards take-out"
+    },
+    {
+     "key": "Wairau | Marlborough",
+     "river": "Wairau",
+     "region": "Marlborough",
+     "grade": "3",
+     "reaches": 67,
+     "best_pct": 99.9,
+     "median_pct": 98.6,
+     "median_pct_size_matched": 89.8,
+     "median_pct_style_matched": 99.0,
+     "median_pct_style_size_matched": 94.7,
+     "share_top10": 0.99,
+     "coords": "inferred",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Crawford Stream | West Coast",
+     "river": "Crawford Stream",
+     "region": "West Coast",
+     "grade": "5",
+     "reaches": 23,
+     "best_pct": 99.5,
+     "median_pct": 98.1,
+     "median_pct_size_matched": 85.5,
+     "median_pct_style_matched": 95.9,
+     "median_pct_style_size_matched": 83.4,
+     "share_top10": 0.83,
+     "coords": "inferred",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Kaipo River | Southland",
+     "river": "Kaipo River",
+     "region": "Southland",
+     "grade": "2-4",
+     "reaches": 38,
+     "best_pct": 100.0,
+     "median_pct": 98.1,
+     "median_pct_size_matched": 86.7,
+     "median_pct_style_matched": 97.2,
+     "median_pct_style_size_matched": 86.1,
+     "share_top10": 0.84,
+     "coords": "inferred",
+     "extent": "name near the coordinates (path did not join)"
+    },
+    {
+     "key": "Matakitaki | Tasman",
+     "river": "Matakitaki",
+     "region": "Tasman",
+     "grade": "3+",
+     "reaches": 81,
+     "best_pct": 100.0,
+     "median_pct": 98.1,
+     "median_pct_size_matched": 85.4,
+     "median_pct_style_matched": 98.1,
+     "median_pct_style_size_matched": 93.3,
+     "share_top10": 1.0,
+     "coords": "inferred",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Tuakopae Stream | Bay of Plenty",
+     "river": "Tuakopae Stream",
+     "region": "kaimai",
+     "grade": null,
+     "reaches": 11,
+     "best_pct": 99.0,
+     "median_pct": 98.0,
+     "median_pct_size_matched": 99.9,
+     "median_pct_style_matched": 97.2,
+     "median_pct_style_size_matched": 99.9,
+     "share_top10": 1.0,
+     "coords": "none",
+     "extent": "name"
+    },
+    {
+     "key": "Tauwharenikau River | Wellington",
+     "river": "Tauwharenikau River",
+     "region": "Wellington",
+     "grade": "2-3",
+     "reaches": 62,
+     "best_pct": 98.7,
+     "median_pct": 97.3,
+     "median_pct_size_matched": 80.6,
+     "median_pct_style_matched": 96.0,
+     "median_pct_style_size_matched": 84.7,
+     "share_top10": 0.98,
+     "coords": "inferred",
+     "extent": "put-in towards take-out"
+    },
+    {
+     "key": "Mangakahia River | Northland",
+     "river": "Mangakahia River",
+     "region": "tutamoe",
+     "grade": "3",
+     "reaches": 83,
+     "best_pct": 100.0,
+     "median_pct": 97.2,
+     "median_pct_size_matched": 84.7,
+     "median_pct_style_matched": 95.7,
+     "median_pct_style_size_matched": 79.7,
+     "share_top10": 0.95,
+     "coords": "inferred/none",
+     "extent": "name/put-in to take-out"
+    },
+    {
+     "key": "Paringa River | West Coast",
+     "river": "Paringa River",
+     "region": "West Coast",
+     "grade": "2-3+",
+     "reaches": 31,
+     "best_pct": 99.2,
+     "median_pct": 96.9,
+     "median_pct_size_matched": 81.9,
+     "median_pct_style_matched": 94.8,
+     "median_pct_style_size_matched": 79.5,
+     "share_top10": 0.81,
+     "coords": "inferred",
+     "extent": "name near the coordinates (path did not join)"
+    },
+    {
+     "key": "Ngamuwahine River | Bay of Plenty",
+     "river": "Ngamuwahine River",
+     "region": "Bay of Plenty",
+     "grade": "4",
+     "reaches": 41,
+     "best_pct": 99.7,
+     "median_pct": 96.8,
+     "median_pct_size_matched": 99.6,
+     "median_pct_style_matched": 95.9,
+     "median_pct_style_size_matched": 99.5,
+     "share_top10": 0.61,
+     "coords": "inferred",
+     "extent": "name near the coordinates (path did not join)"
+    },
+    {
+     "key": "Gowan | Tasman",
+     "river": "Gowan",
+     "region": "Tasman",
+     "grade": "3",
+     "reaches": 16,
+     "best_pct": 99.2,
+     "median_pct": 95.8,
+     "median_pct_size_matched": 72.7,
+     "median_pct_style_matched": 95.7,
+     "median_pct_style_size_matched": 83.6,
+     "share_top10": 0.94,
+     "coords": "inferred",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Hurunui River | Canterbury",
+     "river": "Hurunui River",
+     "region": "Canterbury",
+     "grade": "2+",
+     "reaches": 413,
+     "best_pct": 100.0,
+     "median_pct": 95.6,
+     "median_pct_size_matched": 71.3,
+     "median_pct_style_matched": 95.5,
+     "median_pct_style_size_matched": 83.6,
+     "share_top10": 0.7,
+     "coords": "inferred",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Motueka | Tasman",
+     "river": "Motueka",
+     "region": "Tasman",
+     "grade": "2",
+     "reaches": 54,
+     "best_pct": 99.0,
+     "median_pct": 95.6,
+     "median_pct_size_matched": 71.6,
+     "median_pct_style_matched": 95.1,
+     "median_pct_style_size_matched": 83.2,
+     "share_top10": 1.0,
+     "coords": "inferred",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Mararoa | Southland",
+     "river": "Mararoa",
+     "region": "Southland",
+     "grade": "2+",
+     "reaches": 27,
+     "best_pct": 98.5,
+     "median_pct": 94.9,
+     "median_pct_size_matched": 68.5,
+     "median_pct_style_matched": 93.8,
+     "median_pct_style_size_matched": 71.9,
+     "share_top10": 0.7,
+     "coords": "inferred",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Lochy River | Otago",
+     "river": "Lochy River",
+     "region": "Otago",
+     "grade": "4",
+     "reaches": 79,
+     "best_pct": 98.8,
+     "median_pct": 94.7,
+     "median_pct_size_matched": 85.3,
+     "median_pct_style_matched": 94.0,
+     "median_pct_style_size_matched": 76.6,
+     "share_top10": 0.95,
+     "coords": "inferred",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Atiwhakatu Stream | Wellington",
+     "river": "Atiwhakatu Stream",
+     "region": "Wellington",
+     "grade": "4",
+     "reaches": 5,
+     "best_pct": 96.7,
+     "median_pct": 94.4,
+     "median_pct_size_matched": 84.5,
+     "median_pct_style_matched": 93.2,
+     "median_pct_style_size_matched": 61.2,
+     "share_top10": 1.0,
+     "coords": "inferred",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Harper River | Canterbury",
+     "river": "Harper River",
+     "region": "Canterbury",
+     "grade": "2-3",
+     "reaches": 60,
+     "best_pct": 98.6,
+     "median_pct": 93.8,
+     "median_pct_size_matched": 68.6,
+     "median_pct_style_matched": 92.8,
+     "median_pct_style_size_matched": 72.7,
+     "share_top10": 0.78,
+     "coords": "inferred",
+     "extent": "put-in towards take-out"
+    },
+    {
+     "key": "Waiari River | Bay of Plenty",
+     "river": "Waiari River",
+     "region": "Bay of Plenty",
+     "grade": "2+",
+     "reaches": 18,
+     "best_pct": 95.4,
+     "median_pct": 93.8,
+     "median_pct_size_matched": 94.8,
+     "median_pct_style_matched": 88.9,
+     "median_pct_style_size_matched": 95.2,
+     "share_top10": 0.94,
+     "coords": "inferred",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Tutaekuri | Hawke's Bay",
+     "river": "Tutaekuri",
+     "region": "Hawke's Bay",
+     "grade": "3+",
+     "reaches": 106,
+     "best_pct": 99.9,
+     "median_pct": 93.6,
+     "median_pct_size_matched": 89.7,
+     "median_pct_style_matched": 90.3,
+     "median_pct_style_size_matched": 86.4,
+     "share_top10": 0.57,
+     "coords": "inferred/sourced",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Pukaki River | Canterbury",
+     "river": "Pukaki River",
+     "region": "Canterbury",
+     "grade": "2",
+     "reaches": 13,
+     "best_pct": 98.3,
+     "median_pct": 92.5,
+     "median_pct_size_matched": 58.7,
+     "median_pct_style_matched": 91.7,
+     "median_pct_style_size_matched": 72.6,
+     "share_top10": 0.92,
+     "coords": "inferred",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Totara | West Coast",
+     "river": "Totara",
+     "region": "West Coast",
+     "grade": "3+",
+     "reaches": 43,
+     "best_pct": 95.8,
+     "median_pct": 86.4,
+     "median_pct_size_matched": 46.6,
+     "median_pct_style_matched": 83.3,
+     "median_pct_style_size_matched": 39.3,
+     "share_top10": 0.23,
+     "coords": "inferred",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Inangahua | West Coast",
+     "river": "Inangahua",
+     "region": "West Coast",
+     "grade": "4",
+     "reaches": 34,
+     "best_pct": 90.7,
+     "median_pct": 84.5,
+     "median_pct_size_matched": 51.8,
+     "median_pct_style_matched": 78.9,
+     "median_pct_style_size_matched": 26.7,
+     "share_top10": 0.03,
+     "coords": "inferred",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Waikawa Stream | Manawatu",
+     "river": "Waikawa Stream",
+     "region": "Manawatu",
+     "grade": "3+",
+     "reaches": 4,
+     "best_pct": 81.2,
+     "median_pct": 78.8,
+     "median_pct_size_matched": 39.0,
+     "median_pct_style_matched": 69.1,
+     "median_pct_style_size_matched": 17.7,
+     "share_top10": 0.0,
+     "coords": "inferred",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "South Temple Stream | Canterbury",
+     "river": "South Temple Stream",
+     "region": "Canterbury",
+     "grade": "2-4",
+     "reaches": 54,
+     "best_pct": 93.6,
+     "median_pct": 76.3,
+     "median_pct_size_matched": 88.7,
+     "median_pct_style_matched": 75.8,
+     "median_pct_style_size_matched": 84.2,
+     "share_top10": 0.15,
+     "coords": "inferred",
+     "extent": "name near the coordinates (path did not join)"
+    },
+    {
+     "key": "Catlins River | Otago",
+     "river": "Catlins River",
+     "region": "Otago",
+     "grade": "2-3",
+     "reaches": 55,
+     "best_pct": 96.2,
+     "median_pct": 75.8,
+     "median_pct_size_matched": 71.2,
+     "median_pct_style_matched": 71.7,
+     "median_pct_style_size_matched": 55.7,
+     "share_top10": 0.31,
+     "coords": "inferred",
+     "extent": "name near the coordinates (path did not join)"
+    },
+    {
+     "key": "Pearse | Tasman",
+     "river": "Pearse",
+     "region": "Tasman",
+     "grade": "4",
+     "reaches": 7,
+     "best_pct": 69.4,
+     "median_pct": 66.2,
+     "median_pct_size_matched": 38.3,
+     "median_pct_style_matched": 55.2,
+     "median_pct_style_size_matched": 34.6,
+     "share_top10": 0.0,
+     "coords": "inferred",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Wairehu Canal | Waikato",
+     "river": "Wairehu Canal",
+     "region": "Waikato",
+     "grade": "2",
+     "reaches": 1,
+     "best_pct": 27.9,
+     "median_pct": 27.9,
+     "median_pct_size_matched": 24.2,
+     "median_pct_style_matched": 41.5,
+     "median_pct_style_size_matched": 56.2,
+     "share_top10": 0.0,
+     "coords": "inferred",
+     "extent": "put-in to take-out"
+    }
+   ],
+   "regions": [
+    {
+     "region": "Bay of Plenty",
+     "rivers": 3,
+     "reaches": 106,
+     "median_pct": 96.9,
+     "recall_top10": 0.745,
+     "auc_within_region": 0.8723
+    },
+    {
+     "region": "Canterbury",
+     "rivers": 6,
+     "reaches": 1848,
+     "median_pct": 98.4,
+     "recall_top10": 0.809,
+     "auc_within_region": null
+    },
+    {
+     "region": "Hawke's Bay",
+     "rivers": 2,
+     "reaches": 151,
+     "median_pct": 97.8,
+     "recall_top10": 0.689,
+     "auc_within_region": 0.9296
+    },
+    {
+     "region": "Manawatu",
+     "rivers": 1,
+     "reaches": 4,
+     "median_pct": 78.8,
+     "recall_top10": 0.0,
+     "auc_within_region": 0.7978
+    },
+    {
+     "region": "Marlborough",
+     "rivers": 2,
+     "reaches": 95,
+     "median_pct": 98.8,
+     "recall_top10": 0.979,
+     "auc_within_region": 0.9772
+    },
+    {
+     "region": "Otago",
+     "rivers": 4,
+     "reaches": 345,
+     "median_pct": 98.8,
+     "recall_top10": 0.849,
+     "auc_within_region": 0.935
+    },
+    {
+     "region": "Southland",
+     "rivers": 3,
+     "reaches": 74,
+     "median_pct": 97.8,
+     "recall_top10": 0.811,
+     "auc_within_region": 0.9369
+    },
+    {
+     "region": "Taranaki",
+     "rivers": 1,
+     "reaches": 13,
+     "median_pct": 98.8,
+     "recall_top10": 1.0,
+     "auc_within_region": 0.9971
+    },
+    {
+     "region": "Tasman",
+     "rivers": 6,
+     "reaches": 313,
+     "median_pct": 98.2,
+     "recall_top10": 0.971,
+     "auc_within_region": 0.936
+    },
+    {
+     "region": "Waikato",
+     "rivers": 3,
+     "reaches": 138,
+     "median_pct": 99.6,
+     "recall_top10": 0.928,
+     "auc_within_region": 0.9878
+    },
+    {
+     "region": "Wanganui",
+     "rivers": 1,
+     "reaches": 197,
+     "median_pct": 98.8,
+     "recall_top10": 0.868,
+     "auc_within_region": 0.9677
+    },
+    {
+     "region": "Wellington",
+     "rivers": 3,
+     "reaches": 171,
+     "median_pct": 98.4,
+     "recall_top10": 0.994,
+     "auc_within_region": 0.9819
+    },
+    {
+     "region": "West Coast",
+     "rivers": 11,
+     "reaches": 769,
+     "median_pct": 99.8,
+     "recall_top10": 0.892,
+     "auc_within_region": 0.927
+    },
+    {
+     "region": "kaimai",
+     "rivers": 2,
+     "reaches": 34,
+     "median_pct": 98.2,
+     "recall_top10": 0.912,
+     "auc_within_region": 0.9657
+    },
+    {
+     "region": "tutamoe",
+     "rivers": 1,
+     "reaches": 83,
+     "median_pct": 97.2,
+     "recall_top10": 0.952,
+     "auc_within_region": 0.9768
+    }
+   ]
+  },
+  {
+   "model": "v3",
+   "split": "guides-v1",
+   "coords": "sourced",
+   "excluded_trained": [],
+   "background_reaches": 580605,
+   "test_rivers": 35,
+   "test_reaches": 2687,
+   "auc": 0.9732,
+   "median_pct": 99.5,
+   "auc_size_matched": 0.8952,
+   "auc_style_matched": 0.9687,
+   "auc_style_size_matched": 0.9043,
+   "recall_top10": 0.924,
+   "recall_top5": 0.856,
+   "lift_top10": 9.24,
+   "rivers": [
+    {
+     "key": "Hokitika River | West Coast",
+     "river": "Hokitika River",
+     "region": "West Coast",
+     "grade": "4",
+     "reaches": 166,
+     "best_pct": 100.0,
+     "median_pct": 100.0,
+     "median_pct_size_matched": 99.6,
+     "median_pct_style_matched": 99.9,
+     "median_pct_style_size_matched": 99.7,
+     "share_top10": 0.99,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Karamea River | West Coast",
+     "river": "Karamea River",
+     "region": "West Coast",
+     "grade": "4",
+     "reaches": 215,
+     "best_pct": 100.0,
+     "median_pct": 100.0,
+     "median_pct_size_matched": 99.7,
+     "median_pct_style_matched": 100.0,
+     "median_pct_style_size_matched": 99.8,
+     "share_top10": 1.0,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Clarence River | Canterbury",
+     "river": "Clarence River",
+     "region": "Canterbury",
+     "grade": "2+",
+     "reaches": 702,
+     "best_pct": 100.0,
+     "median_pct": 99.8,
+     "median_pct_size_matched": 98.1,
+     "median_pct_style_matched": 99.8,
+     "median_pct_style_size_matched": 99.0,
+     "share_top10": 0.98,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Manganui-a-te-ao | Wanganui",
+     "river": "Manganui-a-te-ao",
+     "region": "Wanganui",
+     "grade": "3+",
+     "reaches": 35,
+     "best_pct": 100.0,
+     "median_pct": 99.8,
+     "median_pct_size_matched": 98.0,
+     "median_pct_style_matched": 99.8,
+     "median_pct_style_size_matched": 98.9,
+     "share_top10": 1.0,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Shotover River | Otago",
+     "river": "Shotover River",
+     "region": "Otago",
+     "grade": "4",
+     "reaches": 139,
+     "best_pct": 100.0,
+     "median_pct": 99.7,
+     "median_pct_size_matched": 97.7,
+     "median_pct_style_matched": 99.6,
+     "median_pct_style_size_matched": 98.6,
+     "share_top10": 1.0,
+     "coords": "sourced",
+     "extent": "put-in + length/put-in to take-out"
+    },
+    {
+     "key": "Fox | West Coast",
+     "river": "Fox",
+     "region": "West Coast",
+     "grade": "4+",
+     "reaches": 12,
+     "best_pct": 99.7,
+     "median_pct": 99.6,
+     "median_pct_size_matched": 96.3,
+     "median_pct_style_matched": 99.3,
+     "median_pct_style_size_matched": 96.7,
+     "share_top10": 1.0,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Hurunui River | Canterbury",
+     "river": "Hurunui River",
+     "region": "Canterbury",
+     "grade": "2",
+     "reaches": 54,
+     "best_pct": 100.0,
+     "median_pct": 99.6,
+     "median_pct_size_matched": 96.4,
+     "median_pct_style_matched": 99.6,
+     "median_pct_style_size_matched": 98.3,
+     "share_top10": 1.0,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Manuherikia River | Otago",
+     "river": "Manuherikia River",
+     "region": "Otago",
+     "grade": "4",
+     "reaches": 48,
+     "best_pct": 100.0,
+     "median_pct": 99.6,
+     "median_pct_size_matched": 96.8,
+     "median_pct_style_matched": 99.5,
+     "median_pct_style_size_matched": 98.1,
+     "share_top10": 1.0,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Taipo | West Coast",
+     "river": "Taipo",
+     "region": "West Coast",
+     "grade": "4+",
+     "reaches": 97,
+     "best_pct": 100.0,
+     "median_pct": 99.6,
+     "median_pct_size_matched": 96.8,
+     "median_pct_style_matched": 99.4,
+     "median_pct_style_size_matched": 97.6,
+     "share_top10": 1.0,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Tongariro | Waikato",
+     "river": "Tongariro",
+     "region": "Waikato",
+     "grade": "3+",
+     "reaches": 78,
+     "best_pct": 100.0,
+     "median_pct": 99.6,
+     "median_pct_size_matched": 97.0,
+     "median_pct_style_matched": 99.5,
+     "median_pct_style_size_matched": 97.9,
+     "share_top10": 0.99,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Waingaro | Tasman",
+     "river": "Waingaro",
+     "region": "Tasman",
+     "grade": "4",
+     "reaches": 83,
+     "best_pct": 100.0,
+     "median_pct": 99.6,
+     "median_pct_size_matched": 96.4,
+     "median_pct_style_matched": 99.3,
+     "median_pct_style_size_matched": 97.4,
+     "share_top10": 1.0,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Waiho River | West Coast",
+     "river": "Waiho River",
+     "region": "West Coast",
+     "grade": "3+",
+     "reaches": 19,
+     "best_pct": 99.8,
+     "median_pct": 99.5,
+     "median_pct_size_matched": 96.1,
+     "median_pct_style_matched": 98.9,
+     "median_pct_style_size_matched": 95.3,
+     "share_top10": 1.0,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Tutoko River | Southland",
+     "river": "Tutoko River",
+     "region": "Southland",
+     "grade": "4+",
+     "reaches": 9,
+     "best_pct": 99.6,
+     "median_pct": 99.4,
+     "median_pct_size_matched": 94.9,
+     "median_pct_style_matched": 98.7,
+     "median_pct_style_size_matched": 93.8,
+     "share_top10": 1.0,
+     "coords": "sourced",
+     "extent": "put-in to take-out"
+    },
+    {
+     "key": "Ruakituri | Hawke's Bay",
+     "river": "Ruakituri",
+     "region": "Hawke's Bay",
+     "grade": "4",
+     "reaches": 51,
+     "best_pct": 99.9,
+     "median_pct": 99.1,
+     "median_pct_size_matched": 92.3,
+     "median_pct_style_matched": 98.5,
+     "median_pct_style_size_matched": 94.2,
+     "share_top10": 0.98,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Waihopai | Marlborough",
+     "river": "Waihopai",
+     "region": "Marlborough",
+     "grade": "2+",
+     "reaches": 32,
+     "best_pct": 100.0,
+     "median_pct": 99.0,
+     "median_pct_size_matched": 91.8,
+     "median_pct_style_matched": 98.8,
+     "median_pct_style_size_matched": 95.7,
+     "share_top10": 0.97,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Wairau | Marlborough",
+     "river": "Wairau",
+     "region": "Marlborough",
+     "grade": "3",
+     "reaches": 54,
+     "best_pct": 99.9,
+     "median_pct": 99.0,
+     "median_pct_size_matched": 91.9,
+     "median_pct_style_matched": 99.0,
+     "median_pct_style_size_matched": 95.5,
+     "share_top10": 1.0,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Buller River | West Coast",
+     "river": "Buller River",
+     "region": "West Coast",
+     "grade": "3",
+     "reaches": 42,
+     "best_pct": 100.0,
+     "median_pct": 98.8,
+     "median_pct_size_matched": 90.1,
+     "median_pct_style_matched": 98.7,
+     "median_pct_style_size_matched": 95.6,
+     "share_top10": 0.83,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Stony | Taranaki",
+     "river": "Stony",
+     "region": "Taranaki",
+     "grade": "4",
+     "reaches": 23,
+     "best_pct": 99.4,
+     "median_pct": 98.8,
+     "median_pct_size_matched": 90.0,
+     "median_pct_style_matched": 98.3,
+     "median_pct_style_size_matched": 90.5,
+     "share_top10": 1.0,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Wainui River | Bay of Plenty",
+     "river": "Wainui River",
+     "region": "Bay of Plenty",
+     "grade": "5",
+     "reaches": 47,
+     "best_pct": 99.9,
+     "median_pct": 98.8,
+     "median_pct_size_matched": 99.9,
+     "median_pct_style_matched": 98.5,
+     "median_pct_style_size_matched": 99.8,
+     "share_top10": 0.79,
+     "coords": "none",
+     "extent": "name"
+    },
+    {
+     "key": "Jackson River | West Coast",
+     "river": "Jackson River",
+     "region": "West Coast",
+     "grade": "2-3",
+     "reaches": 55,
+     "best_pct": 99.9,
+     "median_pct": 98.7,
+     "median_pct_size_matched": 89.8,
+     "median_pct_style_matched": 98.9,
+     "median_pct_style_size_matched": 94.3,
+     "share_top10": 1.0,
+     "coords": "sourced",
+     "extent": "put-in towards take-out"
+    },
+    {
+     "key": "Glenroy | Tasman",
+     "river": "Glenroy",
+     "region": "Tasman",
+     "grade": "4",
+     "reaches": 12,
+     "best_pct": 99.4,
+     "median_pct": 98.6,
+     "median_pct_size_matched": 89.0,
+     "median_pct_style_matched": 98.3,
+     "median_pct_style_size_matched": 91.7,
+     "share_top10": 1.0,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Matakitaki | Tasman",
+     "river": "Matakitaki",
+     "region": "Tasman",
+     "grade": "3+",
+     "reaches": 36,
+     "best_pct": 100.0,
+     "median_pct": 98.6,
+     "median_pct_size_matched": 88.8,
+     "median_pct_style_matched": 98.6,
+     "median_pct_style_size_matched": 94.5,
+     "share_top10": 1.0,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Waiau River | Canterbury",
+     "river": "Waiau River",
+     "region": "Canterbury",
+     "grade": "2",
+     "reaches": 242,
+     "best_pct": 100.0,
+     "median_pct": 98.5,
+     "median_pct_size_matched": 88.8,
+     "median_pct_style_matched": 98.4,
+     "median_pct_style_size_matched": 93.6,
+     "share_top10": 0.92,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Crawford Stream | West Coast",
+     "river": "Crawford Stream",
+     "region": "West Coast",
+     "grade": "5",
+     "reaches": 25,
+     "best_pct": 100.0,
+     "median_pct": 98.1,
+     "median_pct_size_matched": 85.5,
+     "median_pct_style_matched": 96.0,
+     "median_pct_style_size_matched": 83.7,
+     "share_top10": 0.84,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Tuakopae Stream | Bay of Plenty",
+     "river": "Tuakopae Stream",
+     "region": "kaimai",
+     "grade": null,
+     "reaches": 11,
+     "best_pct": 99.0,
+     "median_pct": 98.0,
+     "median_pct_size_matched": 99.9,
+     "median_pct_style_matched": 97.2,
+     "median_pct_style_size_matched": 99.9,
+     "share_top10": 1.0,
+     "coords": "none",
+     "extent": "name"
+    },
+    {
+     "key": "Mangakarengorengo River | Bay of Plenty",
+     "river": "Mangakarengorengo River",
+     "region": "kaimai",
+     "grade": null,
+     "reaches": 19,
+     "best_pct": 99.9,
+     "median_pct": 97.4,
+     "median_pct_size_matched": 97.8,
+     "median_pct_style_matched": 97.4,
+     "median_pct_style_size_matched": 98.5,
+     "share_top10": 0.84,
+     "coords": "none/sourced",
+     "extent": "name/put-in + length"
+    },
+    {
+     "key": "Mangakahia River | Northland",
+     "river": "Mangakahia River",
+     "region": "tutamoe",
+     "grade": "3",
+     "reaches": 83,
+     "best_pct": 100.0,
+     "median_pct": 97.2,
+     "median_pct_size_matched": 84.7,
+     "median_pct_style_matched": 95.7,
+     "median_pct_style_size_matched": 79.7,
+     "share_top10": 0.95,
+     "coords": "none/sourced",
+     "extent": "name/put-in + length"
+    },
+    {
+     "key": "Gowan | Tasman",
+     "river": "Gowan",
+     "region": "Tasman",
+     "grade": "3",
+     "reaches": 16,
+     "best_pct": 99.2,
+     "median_pct": 95.8,
+     "median_pct_size_matched": 72.7,
+     "median_pct_style_matched": 95.7,
+     "median_pct_style_size_matched": 83.6,
+     "share_top10": 0.94,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Lochy River | Otago",
+     "river": "Lochy River",
+     "region": "Otago",
+     "grade": "4",
+     "reaches": 50,
+     "best_pct": 98.8,
+     "median_pct": 95.2,
+     "median_pct_size_matched": 87.3,
+     "median_pct_style_matched": 93.5,
+     "median_pct_style_size_matched": 72.8,
+     "share_top10": 0.92,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Mararoa | Southland",
+     "river": "Mararoa",
+     "region": "Southland",
+     "grade": "2+",
+     "reaches": 27,
+     "best_pct": 98.5,
+     "median_pct": 94.9,
+     "median_pct_size_matched": 68.5,
+     "median_pct_style_matched": 93.8,
+     "median_pct_style_size_matched": 71.9,
+     "share_top10": 0.7,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Tutaekuri | Hawke's Bay",
+     "river": "Tutaekuri",
+     "region": "Hawke's Bay",
+     "grade": "3+",
+     "reaches": 106,
+     "best_pct": 99.9,
+     "median_pct": 93.6,
+     "median_pct_size_matched": 89.7,
+     "median_pct_style_matched": 90.3,
+     "median_pct_style_size_matched": 86.4,
+     "share_top10": 0.57,
+     "coords": "sourced",
+     "extent": "put-in + length/put-in to take-out"
+    },
+    {
+     "key": "Pukaki River | Canterbury",
+     "river": "Pukaki River",
+     "region": "Canterbury",
+     "grade": "2",
+     "reaches": 14,
+     "best_pct": 98.3,
+     "median_pct": 92.1,
+     "median_pct_size_matched": 57.1,
+     "median_pct_style_matched": 91.7,
+     "median_pct_style_size_matched": 72.1,
+     "share_top10": 0.86,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Totara | West Coast",
+     "river": "Totara",
+     "region": "West Coast",
+     "grade": "3+",
+     "reaches": 43,
+     "best_pct": 95.8,
+     "median_pct": 86.4,
+     "median_pct_size_matched": 46.6,
+     "median_pct_style_matched": 83.3,
+     "median_pct_style_size_matched": 39.3,
+     "share_top10": 0.23,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Inangahua | West Coast",
+     "river": "Inangahua",
+     "region": "West Coast",
+     "grade": "4",
+     "reaches": 30,
+     "best_pct": 88.8,
+     "median_pct": 84.8,
+     "median_pct_size_matched": 52.6,
+     "median_pct_style_matched": 80.0,
+     "median_pct_style_size_matched": 26.1,
+     "share_top10": 0.0,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    },
+    {
+     "key": "Waikawa Stream | Manawatu",
+     "river": "Waikawa Stream",
+     "region": "Manawatu",
+     "grade": "3+",
+     "reaches": 12,
+     "best_pct": 84.8,
+     "median_pct": 80.8,
+     "median_pct_size_matched": 43.3,
+     "median_pct_style_matched": 73.6,
+     "median_pct_style_size_matched": 19.7,
+     "share_top10": 0.0,
+     "coords": "sourced",
+     "extent": "put-in + length"
+    }
+   ],
+   "regions": [
+    {
+     "region": "Bay of Plenty",
+     "rivers": 1,
+     "reaches": 47,
+     "median_pct": 98.8,
+     "recall_top10": 0.787,
+     "auc_within_region": 0.8793
+    },
+    {
+     "region": "Canterbury",
+     "rivers": 4,
+     "reaches": 1012,
+     "median_pct": 99.6,
+     "recall_top10": 0.961,
+     "auc_within_region": null
+    },
+    {
+     "region": "Hawke's Bay",
+     "rivers": 2,
+     "reaches": 157,
+     "median_pct": 98.1,
+     "recall_top10": 0.701,
+     "auc_within_region": 0.932
+    },
+    {
+     "region": "Manawatu",
+     "rivers": 1,
+     "reaches": 12,
+     "median_pct": 80.8,
+     "recall_top10": 0.0,
+     "auc_within_region": 0.8157
+    },
+    {
+     "region": "Marlborough",
+     "rivers": 2,
+     "reaches": 86,
+     "median_pct": 99.0,
+     "recall_top10": 0.988,
+     "auc_within_region": 0.9807
+    },
+    {
+     "region": "Otago",
+     "rivers": 3,
+     "reaches": 237,
+     "median_pct": 99.6,
+     "recall_top10": 0.983,
+     "auc_within_region": 0.9865
+    },
+    {
+     "region": "Southland",
+     "rivers": 2,
+     "reaches": 36,
+     "median_pct": 96.2,
+     "recall_top10": 0.778,
+     "auc_within_region": 0.9469
+    },
+    {
+     "region": "Taranaki",
+     "rivers": 1,
+     "reaches": 23,
+     "median_pct": 98.8,
+     "recall_top10": 1.0,
+     "auc_within_region": 0.9962
+    },
+    {
+     "region": "Tasman",
+     "rivers": 4,
+     "reaches": 147,
+     "median_pct": 99.3,
+     "recall_top10": 0.993,
+     "auc_within_region": 0.9685
+    },
+    {
+     "region": "Waikato",
+     "rivers": 1,
+     "reaches": 78,
+     "median_pct": 99.6,
+     "recall_top10": 0.987,
+     "auc_within_region": 0.9969
+    },
+    {
+     "region": "Wanganui",
+     "rivers": 1,
+     "reaches": 35,
+     "median_pct": 99.8,
+     "recall_top10": 1.0,
+     "auc_within_region": 0.9966
+    },
+    {
+     "region": "West Coast",
+     "rivers": 10,
+     "reaches": 704,
+     "median_pct": 99.8,
+     "recall_top10": 0.893,
+     "auc_within_region": 0.931
+    },
+    {
+     "region": "kaimai",
+     "rivers": 2,
+     "reaches": 30,
+     "median_pct": 97.7,
+     "recall_top10": 0.9,
+     "auc_within_region": 0.9623
+    },
+    {
+     "region": "tutamoe",
+     "rivers": 1,
+     "reaches": 83,
+     "median_pct": 97.2,
+     "recall_top10": 0.952,
+     "auc_within_region": 0.9768
+    }
+   ]
+  },
+  {
+   "model": "v3",
+   "split": "reference",
+   "coords": "any",
+   "excluded_trained": [],
+   "background_reaches": 585044,
+   "test_rivers": 1,
+   "test_reaches": 10,
+   "auc": 0.977,
+   "median_pct": 99.4,
+   "auc_size_matched": 0.9871,
+   "auc_style_matched": 0.9769,
+   "auc_style_size_matched": 0.9617,
+   "recall_top10": 0.9,
+   "recall_top5": 0.9,
+   "lift_top10": 9.0,
+   "rivers": [
+    {
+     "key": "Mangakarengorengo River | kaimai",
+     "river": "Mangakarengorengo River",
+     "region": "kaimai",
+     "grade": null,
+     "reaches": 10,
+     "best_pct": 99.9,
+     "median_pct": 99.4,
+     "median_pct_size_matched": 99.4,
+     "median_pct_style_matched": 99.3,
+     "median_pct_style_size_matched": 97.1,
+     "share_top10": 0.9,
+     "coords": "none",
+     "extent": "name"
+    }
+   ],
+   "regions": [
+    {
+     "region": "kaimai",
+     "rivers": 1,
+     "reaches": 10,
+     "median_pct": 99.4,
+     "recall_top10": 0.9,
+     "auc_within_region": 0.9788
+    }
+   ]
+  },
+  {
+   "model": "v3",
+   "split": "reference",
+   "coords": "sourced",
+   "excluded_trained": [],
+   "background_reaches": 585044,
+   "test_rivers": 1,
+   "test_reaches": 10,
+   "auc": 0.977,
+   "median_pct": 99.4,
+   "auc_size_matched": 0.9871,
+   "auc_style_matched": 0.9769,
+   "auc_style_size_matched": 0.9617,
+   "recall_top10": 0.9,
+   "recall_top5": 0.9,
+   "lift_top10": 9.0,
+   "rivers": [
+    {
+     "key": "Mangakarengorengo River | kaimai",
+     "river": "Mangakarengorengo River",
+     "region": "kaimai",
+     "grade": null,
+     "reaches": 10,
+     "best_pct": 99.9,
+     "median_pct": 99.4,
+     "median_pct_size_matched": 99.4,
+     "median_pct_style_matched": 99.3,
+     "median_pct_style_size_matched": 97.1,
+     "share_top10": 0.9,
+     "coords": "none",
+     "extent": "name"
+    }
+   ],
+   "regions": [
+    {
+     "region": "kaimai",
+     "rivers": 1,
+     "reaches": 10,
+     "median_pct": 99.4,
+     "recall_top10": 0.9,
+     "auc_within_region": 0.9788
     }
    ]
   }

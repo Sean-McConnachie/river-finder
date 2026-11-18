@@ -118,10 +118,20 @@ def _models(args):
     elif args.step == "train":
         if not args.name:
             raise SystemExit("models train needs --name (the new model id, e.g. v2)")
-        mapped = M.map_sections(table, M.all_sections(args.labels))
-        card = M.train(table, mapped, M.load_split(args.split), args.name, args.title or args.name,
-                       args.description or "", variant=args.variant)
-        log(f"train -> {M.save_card(card)}: {card['labels']['positives']} positive reaches")
+        if args.kind == "gbm":
+            from . import ml
+
+            t = ml.ml_table(log=log)
+            mapped = M.map_sections(t, M.all_sections(args.labels))
+            card, text = ml.train_card(t, mapped, M.load_split(args.split), args.name, args.title or args.name,
+                                       args.description or "", spec_id=args.recipe)
+            log(f"train -> {ml.save_gbm(card, text)}: {card['labels']['positives']} positive reaches, "
+                f"{card['train_seconds']} s")
+        else:
+            mapped = M.map_sections(table, M.all_sections(args.labels))
+            card = M.train(table, mapped, M.load_split(args.split), args.name, args.title or args.name,
+                           args.description or "", variant=args.variant)
+            log(f"train -> {M.save_card(card)}: {card['labels']['positives']} positive reaches")
     elif args.step == "evaluate":
         M.evaluate_all(table, M.map_sections(table, M.all_sections(args.labels)), log=log)
     elif args.step == "viewer":
@@ -158,6 +168,8 @@ def _ml(args):
     if args.step in ("cv", "all"):
         specs = [s for s in ml.ZOO if not args.models or s.id in args.models]
         ml.run(log=log, specs=specs, repeats=args.repeats)
+    if args.step == "audit":
+        ml.write_audit(args.model, n=args.top, log=log)
     if args.step in ("page", "all"):
         mlpage.build(args.out, log=log)
 
@@ -185,6 +197,10 @@ def main(argv: list[str] | None = None) -> None:
     pm.add_argument("--split", default="guides-v1", help="train: split to use")
     pm.add_argument("--variant", choices=["all", "sourced"], default="all",
                     help="train: 'sourced' drops sections whose coordinates were inferred")
+    pm.add_argument("--kind", choices=["logistic", "gbm"], default="logistic",
+                    help="train: logistic regression on the 13 features, or LightGBM with an ML recipe")
+    pm.add_argument("--recipe", default="gbm_terrain", help="train --kind gbm: model-zoo id whose inputs to use "
+                                                             "(see ml.ZOO)")
     pm.add_argument("--title")
     pm.add_argument("--description")
     pm.add_argument("--seed", type=int, default=20261113)
@@ -207,9 +223,11 @@ def main(argv: list[str] | None = None) -> None:
     pw.add_argument("--basemaps-key", default=None, help="LINZ Basemaps API key for the standalone site "
                                                           "(default: $LINZ_BASEMAPS_KEY)")
     pw.add_argument("--port", type=int, default=8000)
-    pl = sub.add_parser("ml", help="ML evaluation and page: table | explore | cv | page | all "
+    pl = sub.add_parser("ml", help="ML evaluation and page: table | explore | cv | page | audit | all "
                                    "(see src/river_finder/ml.py, mlpage.py)")
-    pl.add_argument("step", choices=["table", "explore", "cv", "page", "all"])
+    pl.add_argument("step", choices=["table", "explore", "cv", "page", "audit", "all"])
+    pl.add_argument("--model", default="v3", help="audit: registry model id")
+    pl.add_argument("--top", type=int, default=60, help="audit: how many rivers")
     pl.add_argument("--models", nargs="*", help="cv: only these model ids (default: the whole zoo)")
     pl.add_argument("--repeats", type=int, default=5, help="cv: repeats of the 5-fold split")
     pl.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz")

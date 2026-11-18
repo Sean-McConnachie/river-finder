@@ -750,14 +750,15 @@ renders.registry = () => {
   const ev = REG.evaluations;
   v.innerHTML = `
   <div><p class="eyebrow">Frozen model cards · models/*.json</p><h2>Registry models on their fixed splits</h2>
-    <p class="note">The versioned cards (v1, v2, …) were trained on the river-level split <code>guides-v1</code> (25% of rivers held out, seed 20261113). This is the older, single-split yardstick, kept so cards stay comparable over time; the cross-validated numbers on the Models tab are the main one. "Sourced" counts only test sections with published coordinates.</p>
+    <p class="note">The versioned cards (v1, v2, …) were trained on the river-level split <code>guides-v1</code> (25% of rivers held out, seed 20261113). This is the older, single-split yardstick, kept so cards stay comparable over time; the cross-validated numbers on the Models tab are the main one. The split holds out whole rivers but not whole catchments, so a test river can share a catchment with training rivers, which flatters flexible models more than the catchment-grouped CV does. <code>v3</code> is the <code>gbm_terrain</code> recipe (LightGBM) frozen as a card and trained on the same training rivers as v2. "Sourced" counts only test sections with published coordinates.</p>
     <div id="r-table"></div></div>
   <div><div class="controls"><label for="r-pick">Evaluation<select id="r-pick"></select></label></div><div id="r-rivers"></div></div>`;
   table($("r-table"), { sort: "auc_style_matched", rows: ev.map((e) => ({ ...e, key: `${e.model} · ${e.split} · ${e.coords}` })), cols: [
     { k: "model", h: "Model", l: true }, { k: "split", h: "Split", l: true }, { k: "coords", h: "Test coords", l: true },
     { k: "test_rivers", h: "Test rivers", f: NZ, mono: true }, { k: "test_reaches", h: "Reaches", f: NZ, mono: true },
     { k: "auc", h: "AUC", f: F3, mono: true }, { k: "auc_size_matched", h: "Size-matched", f: F3, mono: true },
-    { k: "auc_style_matched", h: "Style-matched", f: F3, mono: true }, { k: "recall_top10", h: "Recall @10%", f: P1, mono: true },
+    { k: "auc_style_matched", h: "Style-matched", f: F3, mono: true }, { k: "auc_style_size_matched", h: "Style × size", f: F3, mono: true },
+    { k: "recall_top10", h: "Recall @10%", f: P1, mono: true },
     { k: "median_pct", h: "Median pct", f: F1, mono: true }] });
   select("r-pick", ev.map((e, i) => [String(i), `${e.model} · ${e.split} · ${e.coords}`]), "0").onchange = (e) => drawR(+e.target.value);
   function drawR(i) {
@@ -766,6 +767,7 @@ renders.registry = () => {
       { k: "river", h: "River", l: true }, { k: "region", h: "Region", l: true }, { k: "grade", h: "Grade", l: true },
       { k: "reaches", h: "Reaches", f: NZ, mono: true }, { k: "median_pct", h: "Median pct", f: F1, mono: true },
       { k: "median_pct_size_matched", h: "Size-matched", f: F1, mono: true }, { k: "median_pct_style_matched", h: "Style-matched", f: F1, mono: true },
+      { k: "median_pct_style_size_matched", h: "Style × size", f: F1, mono: true },
       { k: "best_pct", h: "Best", f: F1, mono: true }, { k: "share_top10", h: "In top 10%", f: P1, mono: true },
       { k: "coords", h: "Coords", l: true }, { k: "extent", h: "Extent", l: true, wrap: true }] });
   }
