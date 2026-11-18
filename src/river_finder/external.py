@@ -247,6 +247,8 @@ def attach(out_dir: Path | None = None, log=print) -> dict:
             write_viewer(out_dir, vid, g, x, wf, min_a)
         log(f"external: {vid} {len(g)} reaches, {int((x['falls_n'] > 0).sum())} with waterfalls, "
             f"median road distance {np.median(x['d_road_m']):.0f} m ({time.time() - t0:.0f} s)")
+    if not nat:  # reference areas only (no national scan yet): viewer files are written, nothing to pool
+        return {}
     t = pd.concat(nat, ignore_index=True)
     t.drop(columns=["steepest_50m_m_per_km", "knick_ratio", "grad_s"]).to_pickle(nz_dir() / "external.pkl")
     summary = waterfall_check(pd.concat(checks, ignore_index=True), falls)

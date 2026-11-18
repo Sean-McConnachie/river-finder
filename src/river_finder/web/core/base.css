@@ -1,6 +1,7 @@
 /* Shared layout and components. Owner: core. Class names start with rf-; pages prefix their own
    classes with the page id (map-, top-, models-, info-). */
 html, body { height: 100%; }
+[hidden] { display: none !important; }
 body {
   margin: 0; background: var(--bg); color: var(--fg);
   font: 400 var(--fs-md)/1.5 var(--font-ui); -webkit-font-smoothing: antialiased;

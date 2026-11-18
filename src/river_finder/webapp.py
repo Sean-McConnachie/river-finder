@@ -20,6 +20,7 @@ the shared contract is ``window.RF`` (see ``web/README.md``).
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import shutil
@@ -35,7 +36,8 @@ CORE_JS = ("core/rf.js", "core/data.js", "core/runs.js", "core/detail.js")
 START_JS = "core/start.js"
 PAGES = ("map", "top", "models", "info")
 # External scripts the page loads (artifact CSP: cdnjs and a few other CDNs only; exact versions).
-LIBS: tuple[str, ...] = ()
+# Their stylesheets cannot load from a CDN there, so they are vendored in web/vendor/ and inlined.
+LIBS: tuple[str, ...] = ("https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.js",)
 PAGE_FILES = ("index.html", "artifact.html", "index_fragment.html")
 TARGETS = ("site", "artifact")
 
@@ -124,6 +126,19 @@ def document(body: str) -> str:
             "</head>\n<body>\n" + body + "\n</body>\n</html>\n")
 
 
+def write_static(out_dir: Path) -> int:
+    """Map label glyphs (Noto Sans PBF ranges) as base64 text: the artifact host serves no raw binary,
+    and the page fetches them lazily through a custom MapLibre protocol."""
+    g = out_dir / "glyphs"
+    g.mkdir(exist_ok=True)
+    n = 0
+    for p in web_root().joinpath("vendor/glyphs").iterdir():
+        if p.name.endswith(".pbf"):
+            (g / (p.name[:-4] + ".txt")).write_text(base64.b64encode(p.read_bytes()).decode("ascii"))
+            n += 1
+    return n
+
+
 def _link_data(src: Path, dst: Path) -> int:
     """Hard-link (or copy) the region data files into ``dst``; returns how many."""
     n = 0
@@ -152,6 +167,7 @@ def build(out_dir: Path, data_dir: Path | None = None, basemaps_key: str | None 
         index = json.loads((data_dir / "regions_index.json").read_text())
         if data_dir.resolve() != out_dir.resolve():
             files = _link_data(data_dir, out_dir)
+    write_static(out_dir)
     key = basemaps_key if basemaps_key is not None else os.environ.get("LINZ_BASEMAPS_KEY", "")
     site = out_dir / "index.html"
     site.write_text(document(render(payload(index, "site", key))), encoding="utf-8")
