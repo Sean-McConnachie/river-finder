@@ -178,7 +178,8 @@ def main(argv: list[str] | None = None) -> None:
                     help="attach: viewer directory to write <region>_x.txt / _falls.json into")
     pw = sub.add_parser("web", help="web app (Map, Top rivers, Models, Info): build | serve (see web/README.md)")
     pw.add_argument("step", choices=["data", "build", "serve"],
-                    help="data: per-region extras (known sections) into --data; build: the pages; serve: localhost")
+                    help="data: per-region extras (known sections, roads, tracks) into --data; build: the pages; "
+                         "serve: localhost")
     pw.add_argument("--data", type=Path, default=REPO_ROOT / "data" / "viewer_nz",
                     help="region data files (from nz viewer / models viewer / external attach)")
     pw.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "web")
@@ -203,9 +204,10 @@ def main(argv: list[str] | None = None) -> None:
         from . import webapp
 
         if args.step == "data":
-            from .webdata import write_sections
+            from .webdata import write_access, write_sections
 
             write_sections(args.data)
+            write_access(args.data)
         elif args.step == "build":
             out = webapp.build(args.out, args.data if args.data.exists() else None, args.basemaps_key)
             print(f"web -> {out['site']} and {out['artifact'].name} ({out['regions']} regions, "

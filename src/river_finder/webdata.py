@@ -4,6 +4,7 @@ viewer``, ``external attach``). Written into the viewer data directory (default 
 | file | contents |
 |---|---|
 | ``<vid>_sections.json`` | known whitewater sections placed on the region's viewer reaches |
+| ``<vid>_access.json`` | roads, 4WD/private roads and foot tracks in the region (OpenStreetMap via Overture) |
 
 Sections come from ``labels/known_runs.toml`` (local knowledge) and ``labels/guide_research.json``
 (NZ RiverGuide, packraftingtrips.nz and others), placed with ``models.map_section``. Each record:
@@ -149,4 +150,75 @@ def write_sections(data_dir: Path, log=print) -> dict:
             (data_dir / f"{vid}_sections.json").write_text(json.dumps(recs, ensure_ascii=False, separators=(",", ":")))
             counts[vid] = len(recs)
             log(f"sections: {vid} {len(recs)}")
+    return counts
+
+
+# ---------------------------------------------------------------------------- roads and tracks
+ACCESS_CLASSES = ("road", "track", "foot")
+MAJOR = {"motorway", "trunk", "primary", "secondary"}
+
+
+TRAIL = {"path", "bridleway", "track"}   # OSM classes kept for unnamed foot lines (walking tracks, not footpaths)
+
+
+def access_lines(g, simplify_m: float = 4.0) -> dict:
+    """Compact JSON for the map. Unnamed service roads and unnamed urban footways are dropped;
+    connected lines with the same class and name are merged (longer lines label better). Layout:
+    ``{"classes", "names", "osm", "lines": [[class, name | -1, major 0/1, osm | -1, [lon, lat, ...]]]}``."""
+    import shapely
+    from pyproj import Transformer
+
+    to_ll = Transformer.from_crs("EPSG:2193", "EPSG:4326", always_xy=True)
+    names: list[str] = []
+    nidx: dict[str, int] = {}
+    osm: list[str] = []
+    lines = []
+    g = g.assign(major=g["osm_class"].isin(MAJOR).astype(int), osm=g.get("osm", ""))
+    named = g["name"].astype(bool)
+    service = (g["cls"] == "road") & (g["osm_class"] == "service")
+    footpath = (g["cls"] == "foot") & ~g["osm_class"].isin(TRAIL)
+    drop = ~named & (service | footpath)
+    g = g[~drop]
+    for (cls, name, major), part in g.groupby(["cls", "name", "major"], sort=False):
+        merged = shapely.line_merge(shapely.union_all(part.geometry.to_numpy()))
+        geoms = list(getattr(merged, "geoms", [merged]))
+        first_osm = next((o for o in part["osm"] if o), "")
+        for geom in geoms:
+            if geom is None or geom.is_empty or geom.geom_type != "LineString":
+                continue
+            geom = geom.simplify(simplify_m)
+            x, y = to_ll.transform(*np.asarray(geom.coords).T)
+            flat = np.round(np.column_stack([x, y]).ravel(), 5).tolist()
+            if name and name not in nidx:
+                nidx[name] = len(names)
+                names.append(name)
+            oi = -1
+            if first_osm:
+                oi = len(osm)
+                osm.append(first_osm)
+            lines.append([ACCESS_CLASSES.index(cls), nidx[name] if name else -1, int(major), oi, flat])
+    return {"classes": list(ACCESS_CLASSES), "names": names, "osm": osm, "lines": lines}
+
+
+def write_access(data_dir: Path, log=print) -> dict:
+    """``<vid>_access.json`` for every region in ``regions_index.json`` (needs ``external fetch``)."""
+    import pyogrio
+    from pyproj import Transformer
+
+    from .national import nz_dir
+
+    src = nz_dir() / "access.gpkg"
+    if not src.exists():
+        log("access: data/nz/access.gpkg missing (run river-finder external fetch)")
+        return {}
+    to_m = Transformer.from_crs("EPSG:4326", "EPSG:2193", always_xy=True)
+    counts = {}
+    for e in json.loads((data_dir / "regions_index.json").read_text()):
+        (la0, lo0), (la1, lo1) = e["bounds"]
+        box = to_m.transform_bounds(lo0, la0, lo1, la1, densify_pts=21)
+        g = pyogrio.read_dataframe(src, bbox=box)
+        out = access_lines(g)
+        (data_dir / f"{e['id']}_access.json").write_text(json.dumps(out, ensure_ascii=False, separators=(",", ":")))
+        counts[e["id"]] = len(out["lines"])
+        log(f"access: {e['id']} {len(g)} OSM lines -> {len(out['lines'])} map lines")
     return counts
