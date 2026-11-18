@@ -176,6 +176,14 @@ def main(argv: list[str] | None = None) -> None:
     px.add_argument("step", choices=["fetch", "attach", "all"])
     px.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz",
                     help="attach: viewer directory to write <region>_x.txt / _falls.json into")
+    pw = sub.add_parser("web", help="web app (Map, Top rivers, Models, Info): build | serve (see web/README.md)")
+    pw.add_argument("step", choices=["build", "serve"])
+    pw.add_argument("--data", type=Path, default=REPO_ROOT / "data" / "viewer_nz",
+                    help="region data files (from nz viewer / models viewer / external attach)")
+    pw.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "web")
+    pw.add_argument("--basemaps-key", default=None, help="LINZ Basemaps API key for the standalone site "
+                                                          "(default: $LINZ_BASEMAPS_KEY)")
+    pw.add_argument("--port", type=int, default=8000)
     pv = sub.add_parser("viewer", help="build the browser viewer for the given regions")
     pv.add_argument("regions", nargs="*")
     pv.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer")
@@ -190,7 +198,17 @@ def main(argv: list[str] | None = None) -> None:
     if args.cmd == "external":
         _external(args)
         return
-    regions = [load_region(n) for n in (args.regions or list_regions())]
+    if args.cmd == "web":
+        from . import webapp
+
+        if args.step == "build":
+            out = webapp.build(args.out, args.data if args.data.exists() else None, args.basemaps_key)
+            print(f"web -> {out['site']} and {out['artifact'].name} ({out['regions']} regions, "
+                  f"{out['data_files']} data files)")
+        else:
+            webapp.serve(args.out, args.port)
+        return
+    regions =[load_region(n) for n in (args.regions or list_regions())]
 
     if args.cmd == "viewer":
         from .viewer import build

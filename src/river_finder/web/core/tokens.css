@@ -1,0 +1,72 @@
+/* River Finder design tokens. Shared by every page: use these, never literal colours.
+   Layout concept: one-screen field tool. A slim app bar (bottom tab bar on phones) over full-bleed
+   pages; chrome stays quiet so colour is reserved for data (grades, scores, catchments).
+   Owner: core. Pages may add page-scoped tokens in their own CSS (prefix them, e.g. --top-*). */
+:root {
+  /* type */
+  --font-ui: "Public Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --fs-xs: 0.75rem; --fs-sm: 0.8125rem; --fs-md: 0.9375rem; --fs-lg: 1.125rem; --fs-xl: 1.5rem; --fs-2xl: 2rem;
+  /* space and shape */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px; --sp-7: 48px;
+  --radius: 6px; --radius-lg: 10px;
+  --bar-h: 52px; --tab-h: 58px; --touch: 44px;
+
+  /* neutrals: faint green-grey (bush and paper) */
+  --bg: #f4f5f2;
+  --surface: #ffffff;
+  --surface-2: #eceee9;
+  --fg: #1c201e;
+  --muted: #5a635e;
+  --line: #d9ded9;
+  --line-strong: #b9c0ba;
+  --shadow: 0 1px 2px rgb(20 28 24 / 0.08), 0 4px 16px rgb(20 28 24 / 0.08);
+  --scrim: rgb(16 20 18 / 0.45);
+
+  /* interface accent: the catchment blue */
+  --accent: #2a78d6;
+  --accent-fg: #ffffff;
+  --accent-soft: #e3eefb;
+  --focus: #2a78d6;
+
+  /* semantic status (separate from the accent) */
+  --ok: #18853a; --warn: #b7791f; --crit: #c53030;
+  --ok-soft: #e2f3e7; --warn-soft: #fbf0dc; --crit-soft: #fbe4e4;
+
+  /* data: whitewater grade, II (blue) to VI (violet) */
+  --grade-2: #2f7fe0; --grade-3: #3f63d6; --grade-4: #5a4ccc; --grade-5: #7a3dbd; --grade-6: #9430aa;
+  /* data: model score, low (red) to high (green) through amber */
+  --score-lo: #d43d3d; --score-mid: #e0a419; --score-hi: #1e9a45;
+  /* data: LINZ river network, other map features */
+  --river-linz: #8a9690; --falls: #0e7c86; --road: #6b5a4a; --track: #a0642c; --catch: #0b9a2c;
+  --gauge-rain: #3b6fb6; --gauge-flow: #0f8a8a;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111513; --surface: #181d1a; --surface-2: #212723; --fg: #e6ebe7; --muted: #9aa59f;
+    --line: #2d3530; --line-strong: #46504a;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 20px rgb(0 0 0 / 0.35); --scrim: rgb(0 0 0 / 0.6);
+    --accent: #5b9cec; --accent-fg: #0b1a2c; --accent-soft: #1b2b40; --focus: #86b6ef;
+    --ok: #4cc06e; --warn: #e2a948; --crit: #f07272;
+    --ok-soft: #173322; --warn-soft: #3a2c12; --crit-soft: #3d1a1a;
+    --grade-2: #5a9bf0; --grade-3: #6f86ee; --grade-4: #8a76ea; --grade-5: #a565e0; --grade-6: #c05ad2;
+    --score-lo: #ef5f5f; --score-mid: #f0bb3c; --score-hi: #3fbf68;
+    --river-linz: #c9d1cc; --falls: #3fc1cc; --road: #c8b8a6; --track: #e0a060; --catch: #3fcf62;
+    --gauge-rain: #79a6e8; --gauge-flow: #42c2c2;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111513; --surface: #181d1a; --surface-2: #212723; --fg: #e6ebe7; --muted: #9aa59f;
+  --line: #2d3530; --line-strong: #46504a;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 20px rgb(0 0 0 / 0.35); --scrim: rgb(0 0 0 / 0.6);
+  --accent: #5b9cec; --accent-fg: #0b1a2c; --accent-soft: #1b2b40; --focus: #86b6ef;
+  --ok: #4cc06e; --warn: #e2a948; --crit: #f07272;
+  --ok-soft: #173322; --warn-soft: #3a2c12; --crit-soft: #3d1a1a;
+  --grade-2: #5a9bf0; --grade-3: #6f86ee; --grade-4: #8a76ea; --grade-5: #a565e0; --grade-6: #c05ad2;
+  --score-lo: #ef5f5f; --score-mid: #f0bb3c; --score-hi: #3fbf68;
+  --river-linz: #c9d1cc; --falls: #3fc1cc; --road: #c8b8a6; --track: #e0a060; --catch: #3fcf62;
+  --gauge-rain: #79a6e8; --gauge-flow: #42c2c2;
+  color-scheme: dark;
+}

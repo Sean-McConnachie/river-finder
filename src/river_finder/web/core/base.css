@@ -1,0 +1,141 @@
+/* Shared layout and components. Owner: core. Class names start with rf-; pages prefix their own
+   classes with the page id (map-, top-, models-, info-). */
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 400 var(--fs-md)/1.5 var(--font-ui); -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+*, *::before, *::after { box-sizing: border-box; }
+h1, h2, h3, h4 { margin: 0; line-height: 1.25; text-wrap: balance; font-weight: 650; }
+h1 { font-size: var(--fs-xl); } h2 { font-size: var(--fs-lg); } h3 { font-size: var(--fs-md); }
+p { margin: 0; }
+a { color: var(--accent); text-underline-offset: 2px; }
+a:hover { text-decoration-thickness: 2px; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+.num, .rf-num { font-family: var(--font-data); font-variant-numeric: tabular-nums; font-size: 0.95em; }
+.rf-muted { color: var(--muted); }
+.rf-note { color: var(--muted); font-size: var(--fs-sm); max-width: 70ch; }
+.rf-eyebrow { font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+
+/* ---------- app frame: bar on top (desktop), tab bar at the bottom (phones) ---------- */
+.rf-app { height: 100%; display: grid; grid-template-rows: var(--bar-h) minmax(0, 1fr); }
+.rf-bar {
+  display: flex; align-items: center; gap: var(--sp-4); background: var(--surface);
+  border-bottom: 1px solid var(--line); z-index: 30;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.rf-brand { display: flex; align-items: center; gap: var(--sp-2); font-weight: 700; font-size: var(--fs-md); color: var(--fg); text-decoration: none; white-space: nowrap; }
+.rf-brand svg { width: 22px; height: 22px; flex: none; }
+.rf-nav { display: flex; gap: var(--sp-1); height: 100%; }
+.rf-nav a {
+  display: flex; align-items: center; gap: var(--sp-2); padding: 0 var(--sp-3); height: 100%;
+  color: var(--muted); text-decoration: none; font-weight: 550; font-size: var(--fs-sm);
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.rf-nav a svg { width: 18px; height: 18px; flex: none; }
+.rf-nav a:hover { color: var(--fg); }
+.rf-nav a[aria-current="page"] { color: var(--fg); border-bottom-color: var(--accent); }
+.rf-bar-end { margin-left: auto; display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.rf-pages { position: relative; min-height: 0; }
+.rf-page { position: absolute; inset: 0; overflow: auto; }
+.rf-page[data-scroll="none"] { overflow: hidden; }
+/* Reading pages: centred column with the side gutter */
+.rf-doc {
+  max-width: 1080px; margin: 0 auto; display: grid; gap: var(--sp-5);
+  padding-block: var(--sp-6) var(--sp-7);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+@media (max-width: 720px) {
+  .rf-app { grid-template-rows: minmax(0, 1fr) calc(var(--tab-h) + env(safe-area-inset-bottom, 0px)); }
+  .rf-bar { grid-row: 2; border-bottom: 0; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); padding-left: max(0px, env(safe-area-inset-left, 0px)); padding-right: max(0px, env(safe-area-inset-right, 0px)); }
+  .rf-brand, .rf-bar-end { display: none; }
+  .rf-pages { grid-row: 1; }
+  .rf-nav { width: 100%; gap: 0; }
+  .rf-nav a { flex: 1 1 0; flex-direction: column; justify-content: center; gap: 2px; padding: 0 2px; font-size: 11px; border-bottom: 0; border-top: 2px solid transparent; margin: -1px 0 0; }
+  .rf-nav a svg { width: 22px; height: 22px; }
+  .rf-nav a[aria-current="page"] { border-top-color: var(--accent); color: var(--accent); }
+  .rf-doc { padding-block: var(--sp-5) var(--sp-6); }
+}
+
+/* ---------- components ---------- */
+.rf-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2);
+  min-height: 36px; padding: 0 var(--sp-3); border-radius: var(--radius);
+  border: 1px solid var(--line-strong); background: var(--surface); color: var(--fg);
+  font: 550 var(--fs-sm)/1 var(--font-ui); cursor: pointer; text-decoration: none; white-space: nowrap;
+}
+.rf-btn:hover { border-color: var(--fg); }
+.rf-btn svg { width: 16px; height: 16px; flex: none; }
+.rf-btn--primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.rf-btn--primary:hover { filter: brightness(1.06); border-color: var(--accent); }
+.rf-btn--quiet { border-color: transparent; background: transparent; }
+.rf-btn--quiet:hover { background: var(--surface-2); border-color: transparent; }
+.rf-iconbtn { width: var(--touch); height: var(--touch); padding: 0; border-radius: 50%; }
+@media (pointer: coarse) { .rf-btn { min-height: var(--touch); } }
+
+.rf-pill {
+  display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px;
+  font-size: var(--fs-xs); font-weight: 600; line-height: 1.6; white-space: nowrap;
+  background: var(--surface-2); color: var(--fg); border: 1px solid var(--line);
+}
+.rf-pill--ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.rf-pill--warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.rf-pill--crit { background: var(--crit-soft); color: var(--crit); border-color: transparent; }
+.rf-pill--accent { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.rf-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; flex: none; vertical-align: -1px; }
+
+.rf-panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--sp-4); min-width: 0; }
+.rf-grid { display: grid; gap: var(--sp-4); grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
+.rf-stack { display: grid; gap: var(--sp-3); align-content: start; min-width: 0; }
+.rf-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+
+.rf-tablewrap { overflow-x: auto; max-width: 100%; }
+.rf-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+.rf-table th, .rf-table td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.rf-table th { font-weight: 600; color: var(--muted); font-size: var(--fs-xs); letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
+.rf-table td.n, .rf-table th.n { text-align: right; font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.rf-table tbody tr:last-child td { border-bottom: 0; }
+.rf-kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px var(--sp-4); font-size: var(--fs-sm); }
+.rf-kv dt { color: var(--muted); }
+.rf-kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+
+.rf-select, .rf-input {
+  min-height: 36px; padding: 0 var(--sp-3); border-radius: var(--radius); border: 1px solid var(--line-strong);
+  background: var(--surface); color: var(--fg); font: 400 var(--fs-sm) var(--font-ui); max-width: 100%;
+}
+@media (pointer: coarse) { .rf-select, .rf-input { min-height: var(--touch); font-size: 16px; } }
+
+.rf-empty { display: grid; gap: var(--sp-2); justify-items: start; padding: var(--sp-5); border: 1px dashed var(--line-strong); border-radius: var(--radius-lg); color: var(--muted); }
+.rf-status { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--muted); }
+.rf-status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
+
+/* copy-to-clipboard value */
+.rf-copy { display: inline-flex; align-items: center; gap: var(--sp-2); max-width: 100%; }
+.rf-copy code { font-family: var(--font-data); font-size: var(--fs-sm); background: var(--surface-2); padding: 2px 6px; border-radius: 4px; user-select: all; overflow-wrap: anywhere; }
+.rf-copy button { min-height: 28px; padding: 0 8px; font-size: var(--fs-xs); }
+
+/* ---------- full-screen detail view (RF.detail) and dialogs (RF.dialog) ---------- */
+.rf-detail, .rf-dialog { position: fixed; inset: 0; z-index: 100; display: grid; }
+.rf-detail { background: var(--bg); grid-template-rows: auto minmax(0, 1fr); }
+.rf-detail-head {
+  display: flex; align-items: center; gap: var(--sp-3); background: var(--surface); border-bottom: 1px solid var(--line);
+  padding-top: max(var(--sp-2), env(safe-area-inset-top, 0px)); padding-bottom: var(--sp-2);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px));
+}
+.rf-detail-titles { min-width: 0; flex: 1; display: grid; gap: 2px; }
+.rf-detail-titles h2 { font-size: var(--fs-lg); overflow-wrap: anywhere; }
+.rf-detail-body { overflow: auto; overscroll-behavior: contain; }
+.rf-detail-body > .rf-doc { padding-block: var(--sp-5) calc(var(--sp-7) + env(safe-area-inset-bottom, 0px)); }
+.rf-dialog { background: var(--scrim); place-items: center; padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.rf-dialog-box {
+  width: min(640px, 100%); max-height: 100%; overflow: auto; background: var(--surface); color: var(--fg);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow); display: grid; gap: var(--sp-4); padding: var(--sp-5);
+}
+.rf-toast {
+  position: fixed; left: 50%; transform: translateX(-50%); z-index: 200;
+  bottom: calc(var(--sp-5) + env(safe-area-inset-bottom, 0px)); background: var(--fg); color: var(--bg);
+  padding: var(--sp-2) var(--sp-4); border-radius: 999px; font-size: var(--fs-sm); box-shadow: var(--shadow); pointer-events: none;
+}
+@media (max-width: 720px) { .rf-toast { bottom: calc(var(--tab-h) + var(--sp-3) + env(safe-area-inset-bottom, 0px)); } }

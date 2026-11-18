@@ -93,7 +93,11 @@ uv run river-finder run kaimai karangahake tutamoe  # fetch (8 m + 5 m LiDAR, RE
 uv run river-finder score kaimai karangahake tutamoe  # re-score only (regression is pooled across the regions given)
 uv run river-finder nz fetch|tiles|score|viewer   # national 8 m scan in 64 km tiles (data/nz/, ~4 h)
 uv run river-finder external fetch|attach   # OSM waterfalls/roads/tracks per reach via Overture S3 (~10 min)
+uv run river-finder web build|serve         # web app (Map, Top rivers, Models, Info) -> data/web/
 ```
+
+Web app: `src/river_finder/web/` (contract and ownership in `web/README.md`; page briefs in
+`docs/ui/`). Edit only the page folder you own; `core/` changes go through the core owner.
 
 National tiles peak at ~12 GB: never run another heavy job (reference viewer build, 5 m
 rasters) while `nz tiles` runs, or the OOM killer takes the tile run. It resumes where it
