@@ -3,7 +3,7 @@
 The app is plain CSS and JavaScript with no bundler or npm step. ``render`` concatenates, in order:
 
 - CSS: ``core/tokens.css``, ``core/base.css``, ``vendor/*.css``, then each page's ``pages/<id>/*.css``;
-- JS: ``core/rf.js``, ``core/data.js``, ``core/runs.js``, ``core/detail.js``, each page's
+- JS: ``core/rf.js``, ``core/data.js``, ``core/runs.js``, ``core/detail.js``, ``core/chart.js``, each page's
   ``pages/<id>/*.js`` (files in name order), then ``core/start.js``;
 
 into ``web/shell.html`` together with the build payload (regions index, model registry) as JSON.
@@ -32,7 +32,7 @@ from pathlib import Path
 from .regions import REPO_ROOT
 
 CORE_CSS = ("core/tokens.css", "core/base.css")
-CORE_JS = ("core/rf.js", "core/data.js", "core/runs.js", "core/detail.js")
+CORE_JS = ("core/rf.js", "core/data.js", "core/runs.js", "core/detail.js", "core/chart.js")
 START_JS = "core/start.js"
 PAGES = ("map", "top", "models", "info")
 # External scripts the page loads (artifact CSP: cdnjs and a few other CDNs only; exact versions).

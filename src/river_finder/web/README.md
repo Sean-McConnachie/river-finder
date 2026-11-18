@@ -24,7 +24,7 @@ issue under epic `rf-aq6`) for any change to `core/`, `shell.html` or `webapp.py
 | `pages/top/` | Top-rivers agent | rf-aq6.5, brief `docs/ui/top-rivers.md` |
 
 Build order: `core/tokens.css`, `core/base.css`, `vendor/*.css`, `pages/<id>/*.css`; then
-`core/rf.js`, `core/data.js`, `core/runs.js`, `core/detail.js`, `pages/<id>/*.js` (name order),
+`core/rf.js`, `core/data.js`, `core/runs.js`, `core/detail.js`, `core/chart.js`, `pages/<id>/*.js` (name order),
 `core/start.js`. A page may have several files; they load in name order.
 
 ## Build and preview
@@ -158,6 +158,13 @@ Anything selectable is a plain object with `kind`, `region`, `id` and `name`:
 | `section` | known guide section: `members` (reaches), `section`, `grade`, `src`, `sec` (the full record from `Region.sections`) |
 | `waterfall` | `lon`, `lat`, `height`, `seg` |
 | `gauge-rain`, `gauge-flow`, `road`, `track` | coming (rf-aq6.13, rf-aq6.14) |
+
+### Charts: `RF.chart`
+
+`RF.chart.tracks({x, xLabel, xFmt, label, tracks: [{label, unit, y, color, area, height, fmt, tipFmt, markers: [{x, label}]}]})`
+draws one graph of stacked tracks sharing the x axis and one crosshair (each track its own y scale;
+no dual axes). `RF.chart.placeholder(title, message)`, `RF.chart.ticks(lo, hi, n)`. River detail views
+(kinds `section`, `run`, `reach`) are registered by the map page and work from any page.
 
 ### Utilities: `RF.util`
 

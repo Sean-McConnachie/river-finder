@@ -70,7 +70,7 @@ def section_record(s: Section, members: list[int], how: str, research: dict | No
         "gnum": _num(parse_grade(s.grade)),
         "gmin": _num(ex.get("grade_min")), "gmax": _num(ex.get("grade_max")),
         "src": grp,
-        "srcName": ex.get("primary_source") or ("Local knowledge (labels/known_runs.toml)" if grp == "local" else "Other"),
+        "srcName": ex.get("primary_source") or ("Local knowledge (known_runs.toml)" if grp == "local" else "Other"),
         "desc": ex.get("description") or (s.source if grp == "local" else ""),
         "putIn": latlon(s.put_in), "takeOut": latlon(s.take_out),
         "putInDesc": ex.get("put_in_description") or "", "takeOutDesc": ex.get("take_out_description") or "",

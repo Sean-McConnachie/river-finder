@@ -1,0 +1,32 @@
+/* River detail view (full screen). Owner: map agent. */
+.det-summary { display: grid; gap: var(--sp-3); max-width: 75ch; }
+.det-desc { font-size: var(--fs-md); }
+.det-grade { background: var(--g); color: #fff; border-color: transparent; }
+.det-sec { display: grid; gap: var(--sp-3); min-width: 0; }
+.det-sec > h3 { font-size: var(--fs-md); padding-bottom: var(--sp-2); border-bottom: 1px solid var(--line); }
+.det-stats th[scope="row"] { text-transform: none; letter-spacing: 0; font-size: var(--fs-sm); color: var(--fg); font-weight: 600; white-space: normal; }
+.det-stats td.n { white-space: nowrap; font-size: var(--fs-sm); }
+.det-stats td.rf-muted { font-size: var(--fs-xs); min-width: 160px; }
+.det-data summary { cursor: pointer; font-size: var(--fs-sm); color: var(--muted); }
+.det-data .rf-tablewrap { max-height: 320px; overflow: auto; margin-top: var(--sp-2); }
+.det-coords { display: grid; gap: var(--sp-4); grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+.det-coord { display: grid; gap: var(--sp-2); align-content: start; padding: var(--sp-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); min-width: 0; }
+.det-coord h4 { font-size: var(--fs-sm); }
+.det-coord p { font-size: var(--fs-sm); }
+.det-k { min-width: 56px; font-size: var(--fs-xs); }
+.det-links { display: grid; gap: var(--sp-4); grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+.det-linkgroup { display: grid; gap: var(--sp-2); align-content: start; min-width: 0; }
+.det-linkgroup h4 { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.det-linklist { display: grid; gap: 6px; font-size: var(--fs-sm); }
+.det-link { display: inline-flex; gap: 4px; align-items: center; overflow-wrap: anywhere; }
+.det-link svg { width: 13px; height: 13px; flex: none; }
+.det-gauge { font-size: var(--fs-sm); }
+.det-foot { border-top: 1px solid var(--line); padding-top: var(--sp-3); }
+.det-note-inline { display: none; }
+.det-show span { display: inline-flex; }
+@media (max-width: 720px) {
+  .det-note { display: none; }
+  .det-note-inline { display: block; font-weight: 400; color: var(--muted); font-size: var(--fs-xs); margin-top: 2px; }
+  .det-show { width: var(--touch); padding: 0; }
+  .det-show-label { display: none !important; }
+}

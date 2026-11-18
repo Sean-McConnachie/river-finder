@@ -39,7 +39,7 @@
     if (!opts.noHistory) { try { history.pushState({ rfDetail: true }, "", location.hash || "#"); pushed = true; } catch (e) { pushed = false; } }
     current = { wrap, opener, pushed, feature };
     document.addEventListener("keydown", onKey);
-    closeBtn.focus({ preventScroll: true });
+    closeBtn.focus({ preventScroll: true, focusVisible: false });
     RF.select(feature);
     try {
       const render = renderers[feature.kind] || fallback;
