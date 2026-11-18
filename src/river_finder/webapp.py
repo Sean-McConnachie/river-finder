@@ -40,6 +40,8 @@ PAGES = ("map", "top", "models", "info")
 LIBS: tuple[str, ...] = ("https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.js",)
 PAGE_FILES = ("index.html", "artifact.html", "index_fragment.html")
 TARGETS = ("site", "artifact")
+# Data files only the artifact uses: the site streams satellite tiles instead of a per-region image.
+ARTIFACT_ONLY = ("_sat.jpg",)
 
 
 def web_root():
@@ -188,14 +190,14 @@ def serve(out_dir: Path, port: int = 8000) -> None:
 
 
 def stage_pages(out_dir: Path, stage: Path) -> Path:
-    """Copy the standalone site (``index.html``, data files, glyphs; not ``artifact.html``) into
-    ``stage`` as a GitHub Pages tree (with ``.nojekyll``)."""
+    """Copy the standalone site (``index.html``, data files, glyphs; not ``artifact.html`` or the
+    artifact's satellite images) into ``stage`` as a GitHub Pages tree (with ``.nojekyll``)."""
     if stage.exists():
         shutil.rmtree(stage)
     stage.mkdir(parents=True)
     for p in out_dir.rglob("*"):
         rel = p.relative_to(out_dir)
-        if p.is_dir() or rel.name in ("artifact.html", "index_fragment.html"):
+        if p.is_dir() or rel.name in ("artifact.html", "index_fragment.html") or rel.name.endswith(ARTIFACT_ONLY):
             continue
         q = stage / rel
         q.parent.mkdir(parents=True, exist_ok=True)

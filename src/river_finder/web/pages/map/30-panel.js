@@ -62,7 +62,7 @@
     if (!baseEl) return;
     const cur = M.prefs.basemap;
     const list = el("div", { class: "map-basemaps", role: "radiogroup", "aria-label": "Base map" });
-    M.BASEMAPS.forEach((b) => {
+    M.BASEMAPS.filter((b) => !M.basemapHidden(b)).forEach((b) => {
       const ok = M.basemapAvailable(b);
       const btn = el("button", { type: "button", role: "radio", class: "map-basemap", "aria-checked": String(cur === b.id), disabled: !ok,
         title: ok ? b.note : `${b.note}: available on the standalone site (this host blocks map tiles)`, dataset: { id: b.id } },

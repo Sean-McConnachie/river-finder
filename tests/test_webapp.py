@@ -64,6 +64,16 @@ def test_build_writes_site_and_artifact_and_links_data(tmp_path):
     assert '"basemapsKey":"k123"' in site and "k123" not in art  # keys only in the standalone site
 
 
+def test_stage_pages_keeps_only_the_site(tmp_path):
+    out = tmp_path / "web"
+    (out / "glyphs").mkdir(parents=True)
+    for name in ("index.html", "artifact.html", "index_fragment.html", "r1.json", "r1_sat.jpg", "glyphs/a.txt"):
+        (out / name).write_text("x")
+    stage = webapp.stage_pages(out, tmp_path / "pages")
+    got = sorted(str(p.relative_to(stage)) for p in stage.rglob("*") if p.is_file())
+    assert got == [".nojekyll", "glyphs/a.txt", "index.html", "r1.json"]
+
+
 def test_section_record_shapes_a_research_section():
     from river_finder.labels import Section
     from river_finder.webdata import section_record, source_group

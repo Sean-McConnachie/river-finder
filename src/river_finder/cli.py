@@ -103,6 +103,12 @@ def _models(args):
 
         print(json.dumps(summary(load_research(args.labels)), indent=1, ensure_ascii=False))
         return
+    if args.step == "viewer":   # reference regions need no national table (write_viewer_scores loads it if needed)
+        from .viewer_nz import build
+
+        M.write_viewer_scores(args.out, log=log)
+        log(f"viewer page -> {build(args.out, page_only=True)}")
+        return
     table = M.national_table(rebuild=args.step == "table", log=log)
     if args.step == "table":
         log(f"table: {len(table)} reaches")
@@ -134,11 +140,6 @@ def _models(args):
             log(f"train -> {M.save_card(card)}: {card['labels']['positives']} positive reaches")
     elif args.step == "evaluate":
         M.evaluate_all(table, M.map_sections(table, M.all_sections(args.labels)), log=log)
-    elif args.step == "viewer":
-        from .viewer_nz import build
-
-        M.write_viewer_scores(args.out, table, log=log)
-        log(f"viewer page -> {build(args.out, page_only=True)}")
 
 
 def _external(args):

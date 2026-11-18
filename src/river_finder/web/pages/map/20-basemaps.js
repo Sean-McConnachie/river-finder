@@ -21,7 +21,11 @@
     { id: "catch", label: "Catchment area", note: "Upstream area at every point, linear colour scale" },
     { id: "catch-log", label: "Catchment area (log)", note: "Upstream area, logarithmic colour scale" },
   ];
-  M.basemapAvailable = (b) => !b.site || SITE;
+  // Topographic needs a LINZ Basemaps key built into the site (web build --basemaps-key); without one
+  // LINZ answers 400 for most tiles, so the option is left out.
+  M.basemapAvailable = (b) => (!b.site || SITE) && (b.id !== "topo" || !!KEY);
+  /** Left out of the picker: topographic on a site built without a key (nothing to enable it). */
+  M.basemapHidden = (b) => SITE && b.id === "topo" && !KEY;
   /** Two significant figures, no trailing zeros: 0.05, 0.5, 3.2, 45, 1200. */
   M.nice = (v) => v <= 0 ? "0" : String(+v.toPrecision(2));
 
@@ -45,9 +49,9 @@
   function initBaseSources() {
     const map = M.map;
     if (SITE) {
-      map.addSource("bm-topo", { type: "raster", tiles: [linz("topo-raster")], tileSize: 256, maxzoom: 17, attribution: LINZ_ATTR });
+      if (KEY) map.addSource("bm-topo", { type: "raster", tiles: [linz("topo-raster")], tileSize: 256, maxzoom: 17, attribution: LINZ_ATTR });
       map.addSource("bm-sat", { type: "raster", tiles: [S2_TILES], tileSize: 256, maxzoom: 14 });
-      M.addLayer({ id: "bm-topo", type: "raster", source: "bm-topo", layout: { visibility: "none" }, paint: { "raster-fade-duration": 150 } }, "base");
+      if (KEY) M.addLayer({ id: "bm-topo", type: "raster", source: "bm-topo", layout: { visibility: "none" }, paint: { "raster-fade-duration": 150 } }, "base");
       M.addLayer({ id: "bm-sat", type: "raster", source: "bm-sat", layout: { visibility: "none" }, paint: { "raster-fade-duration": 150 } }, "base");
     }
     let warned = false;

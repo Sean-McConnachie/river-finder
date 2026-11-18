@@ -815,8 +815,11 @@ def write_viewer_scores(out_dir: Path, table: pd.DataFrame | None = None, log=pr
     """``<region>_m_<model>.txt`` for every region in the viewer index and every card."""
     index = json.loads((out_dir / "regions_index.json").read_text())
     cards = list_cards()
-    table = scoring_table(table if table is not None else national_table())
     by_slug = {_rslug(n): n for n in FILTER_ORDER}
+    if table is None and any(e["id"] in by_slug for e in index):
+        table = national_table()   # only national regions need it; reference regions have their own frame
+    if table is not None:
+        table = scoring_table(table)   # ML columns for "gbm" cards (whole-NZ network)
     secs = all_sections()
     for e in index:
         if e["id"] in by_slug:
