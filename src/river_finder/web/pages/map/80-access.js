@@ -24,10 +24,11 @@
     map.addSource("src-access", { type: "geojson", data: EMPTY, tolerance: 0.5 });
     const w = (base) => ["interpolate", ["linear"], ["zoom"], 9, ["*", base, 0.4], 13, base, 16, ["*", base, 2.2]];
     M.addLayer({ id: "acc-road-line", type: "line", source: "src-access", minzoom: 8, filter: ["==", ["get", "k"], 0],
-      layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#6b5a4a", "line-width": w(["case", ["==", ["get", "m"], 1], 2.4, 1.3]), "line-opacity": 0.85 } }, "access");
-    M.addLayer({ id: "acc-track-line", type: "line", source: "src-access", minzoom: 9, filter: ["==", ["get", "k"], 1],
+      layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#6b5a4a", "line-width": w(["case", ["==", ["get", "m"], 1], 2.4, 1.3]),
+        "line-opacity": ["interpolate", ["linear"], ["zoom"], 9.5, ["case", ["==", ["get", "m"], 1], 0.85, 0], 11, 0.85] } }, "access");
+    M.addLayer({ id: "acc-track-line", type: "line", source: "src-access", minzoom: 10.5, filter: ["==", ["get", "k"], 1],
       layout: { "line-join": "round" }, paint: { "line-color": "#6b5a4a", "line-width": w(1.3), "line-dasharray": [3, 2], "line-opacity": 0.85 } }, "access");
-    M.addLayer({ id: "acc-foot-line", type: "line", source: "src-access", minzoom: 9, filter: ["==", ["get", "k"], 2],
+    M.addLayer({ id: "acc-foot-line", type: "line", source: "src-access", minzoom: 10.5, filter: ["==", ["get", "k"], 2],
       layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#a0642c", "line-width": w(1.4), "line-dasharray": [0.6, 1.8], "line-opacity": 0.95 } }, "access");
     M.addLayer({ id: "acc-label", type: "symbol", source: "src-access", minzoom: 13, filter: ["!=", ["get", "n"], ""],
       layout: { "symbol-placement": "line", "text-field": ["get", "n"], "text-font": M.FONT_LABEL, "text-size": ["interpolate", ["linear"], ["zoom"], 13, 10.5, 16, 13],

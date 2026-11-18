@@ -93,6 +93,7 @@ Stable unless noted. Anything not listed here is internal.
 | `RF.data.defaultRegion()` | last-used region id, else the first |
 | `RF.data.region(id)` → `Promise<Region>` | fetch once, then cached |
 | `RF.data.loaded(id)` | the region if already loaded, else null |
+| `RF.data.gauges()` → `Promise<{flow, rain, sources}>` | national river-flow gauges `[site, name, lat, lon, council, operator, funder, area, years, maf, q10, q100]` and rain gauges `[agent, name, lat, lon, owner]` |
 | `RF.data.scores(regionId, modelId)` → `Promise<{pct, role}>` | per-reach percentile (0-100) for a model; `role` bits 0-1: 1 trained on, 2 test river; bit 2: on a guide section |
 
 `Region` has `id, title, description, bounds, segments` (below), `sections` (known whitewater
@@ -157,7 +158,9 @@ Anything selectable is a plain object with `kind`, `region`, `id` and `name`:
 | `reach` | `seg` (reach index) |
 | `section` | known guide section: `members` (reaches), `section`, `grade`, `src`, `sec` (the full record from `Region.sections`) |
 | `waterfall` | `lon`, `lat`, `height`, `seg` |
-| `gauge-rain`, `gauge-flow`, `road`, `track` | coming (rf-aq6.13, rf-aq6.14) |
+| `gauge-flow`, `gauge-rain` | `lat`, `lon`, `g` (the row from `RF.data.gauges()`) |
+| `rapids` | as `waterfall`, plus `grade` |
+| `road`, `track`, `foot` | `lat`, `lon` (where tapped), `osm` (way id), `geometry` |
 
 ### Charts: `RF.chart`
 

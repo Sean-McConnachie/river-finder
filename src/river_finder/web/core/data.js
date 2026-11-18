@@ -117,8 +117,15 @@
       }
       return R.mscore[modelId];
     },
+    /** National gauges (river_finder.webdata): {flow: [[site, name, lat, lon, council, operator, funder,
+     *  area km², years, mean annual flood, Q10, Q100]], rain: [[agent, name, lat, lon, owner]], sources}. */
+    gauges() {
+      if (!gaugesP) gaugesP = fetch("gauges.json").then((r) => (r.ok ? r.json() : { flow: [], rain: [] })).catch(() => ({ flow: [], rain: [] }));
+      return gaugesP;
+    },
     decodeSegments,
   };
+  let gaugesP = null;
   // ---------- model registry (models/*.json cards, models/evaluations.json) ----------
   const REG = P.registry || null, CARDS = REG ? REG.models : [];
   RF.models = {

@@ -5,6 +5,7 @@ viewer``, ``external attach``). Written into the viewer data directory (default 
 |---|---|
 | ``<vid>_sections.json`` | known whitewater sections placed on the region's viewer reaches |
 | ``<vid>_access.json`` | roads, 4WD/private roads and foot tracks in the region (OpenStreetMap via Overture) |
+| ``gauges.json`` | national river-flow gauges (NIWA flood-statistics sites) and rain gauges (NIWA CliFlo) |
 
 Sections come from ``labels/known_runs.toml`` (local knowledge) and ``labels/guide_research.json``
 (NZ RiverGuide, packraftingtrips.nz and others), placed with ``models.map_section``. Each record:
@@ -222,3 +223,47 @@ def write_access(data_dir: Path, log=print) -> dict:
         counts[e["id"]] = len(out["lines"])
         log(f"access: {e['id']} {len(g)} OSM lines -> {len(out['lines'])} map lines")
     return counts
+
+
+# ---------------------------------------------------------------------------- gauges
+ARC = "https://services3.arcgis.com/fp1tibNcN9mbExhG/ArcGIS/rest/services"
+FLOW_GAUGES = f"{ARC}/NZ_Flood_Statistics_Henderson_Collins_V2_FlowGauges_Layer_WFL2/FeatureServer/0"
+RAIN_GAUGES = f"{ARC}/Cliflo_Rain_Stations_WFL1/FeatureServer/0"
+
+
+def fetch_gauges(log=print) -> dict:
+    """River-flow gauges (the 634 sites behind NIWA's Henderson & Collins flood statistics, with
+    operator and flood quantiles) and NIWA CliFlo rain stations, as compact lists.
+
+    ``flow``: ``[site no, name, lat, lon, council, operator, funder, area km2, years, mean annual flood,
+    Q10, Q100]``; ``rain``: ``[agent no, name, lat, lon, owner]``."""
+    from pyproj import Transformer
+
+    from .national import fetch_layer
+
+    to_ll = Transformer.from_crs("EPSG:2193", "EPSG:4326", always_xy=True)
+    flow = []
+    for f in fetch_layer(f"{FLOW_GAUGES}/query", "Siteno,Name,NZTM_E,NZTM_N,Region,Operator,Funder,Area_km2,No_years,"
+                         "Data_2_33y,Data_10y,Data_100y", geometry=False, log=log):
+        a = f["properties"]
+        lon, lat = to_ll.transform(a["NZTM_E"], a["NZTM_N"])
+        flow.append([a["Siteno"], a["Name"], round(lat, 5), round(lon, 5), a["Region"] or "", a["Operator"] or "",
+                     a["Funder"] or "", _num(a["Area_km2"]), a["No_years"], _num(a["Data_2_33y"]), _num(a["Data_10y"]),
+                     _num(a["Data_100y"])])
+    rain = [[a["AGENT_NO"], a["NAME"], round(a["LAT"], 5), round(a["LONGT"], 5), a["OWNER"] or ""]
+            for a in (f["properties"] for f in fetch_layer(f"{RAIN_GAUGES}/query", "AGENT_NO,NAME,LAT,LONGT,OWNER",
+                                                           geometry=False, log=log))]
+    out = {"flow": flow, "rain": rain, "sources": {"flow": FLOW_GAUGES, "rain": RAIN_GAUGES}}
+    log(f"gauges: {len(flow)} river-flow gauges, {len(rain)} rain gauges")
+    return out
+
+
+def write_gauges(data_dir: Path, refresh: bool = False, log=print) -> int:
+    """``gauges.json`` into the viewer data directory (cached in ``data/nz/gauges.json``)."""
+    from .national import nz_dir
+
+    cache = nz_dir() / "gauges.json"
+    if refresh or not cache.exists():
+        cache.write_text(json.dumps(fetch_gauges(log), ensure_ascii=False, separators=(",", ":")))
+    (data_dir / "gauges.json").write_text(cache.read_text())
+    return len(json.loads(cache.read_text())["flow"])

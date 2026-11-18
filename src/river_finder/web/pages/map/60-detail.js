@@ -95,13 +95,17 @@
       note ? el("p", { class: "rf-note", text: note }) : null);
   }
 
-  function linkGroups(name, mid, sec) {
+  function linkGroups(name, mid, sec, near) {
     const [lon, lat] = mid, q = encodeURIComponent;
     const groups = [];
     if (sec?.links?.length) groups.push(["Guides and sources", sec.links.map((l) => ext(l.u, l.t))]);
     const gauges = [];
     if (sec?.gauge) gauges.push(el("span", { class: "det-gauge" }, `Gauge named in the guide: ${sec.gauge}. `, ext(`https://www.google.com/search?q=${q(`${sec.gauge} river flow gauge NZ`)}`, "Look it up")));
-    gauges.push(el("span", { class: "rf-note", text: "Nearby gauges will be listed here once the gauge layers are in (the map's gauge layers link to each source)." }));
+    const gb = ({ feature, km }) => el("button", { type: "button", class: "det-gaugebtn", onclick: () => RF.detail.open(feature) },
+      el("span", { text: feature.name }), el("span", { class: "num rf-muted", text: `${km.toFixed(1)} km` }));
+    if (near?.flow.length) gauges.push(el("div", { class: "det-gaugelist" }, el("span", { class: "rf-muted det-gk", text: "River gauges" }), ...near.flow.map(gb)));
+    if (near?.rain.length) gauges.push(el("div", { class: "det-gaugelist" }, el("span", { class: "rf-muted det-gk", text: "Rain gauges" }), ...near.rain.map(gb)));
+    if (!near?.flow.length && !near?.rain.length) gauges.push(el("span", { class: "rf-note", text: "No gauges within 25 km." }));
     groups.push(["Gauges", gauges]);
     groups.push(["Maps", [
       ext(`https://basemaps.linz.govt.nz/@${lat.toFixed(5)},${lon.toFixed(5)},z14`, "LINZ Basemaps"),
@@ -173,7 +177,8 @@
         sec.deaths ? el("p", { class: "rf-note", text: `Fatalities recorded on or near this section: ${sec.deaths}. See the sources.` }) : null,
         sec.flow ? el("p", { class: "rf-note", text: `Flow notes: ${sec.flow}` }) : null));
     }
-    body.push(section("Links", linkGroups(name, midC, sec)));
+    const near = M.nearGauges ? await M.nearGauges(midC[1], midC[0]).catch(() => null) : null;
+    body.push(section("Links", linkGroups(name, midC, sec, near)));
     body.push(el("p", { class: "rf-note det-foot", text: [
       sec ? `Placed on the river network by: ${sec.how}.` : "",
       f.kind === "run" ? "A run is a stretch of consecutive reaches that pass the run-finder settings (see Models)." : "",
