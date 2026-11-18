@@ -11,3 +11,6 @@ data/
 __pycache__/
 .venv/
 *.tif
+
+# agent git worktrees (temporary)
+.claude/worktrees/
