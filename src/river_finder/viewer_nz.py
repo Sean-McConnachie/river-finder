@@ -33,14 +33,12 @@ from rasterio.transform import from_origin
 from rasterio.warp import reproject
 
 from . import viewer
+from .areacode import CODE_LOG_MIN, CODE_STEP  # shared with nz.encode_area
 from .labels import load_sections
 from .national import FILTER_ORDER, nz_dir, region_filters
 from .nz import Tile
 from .nzscore import region_dir, slug
 from .regions import KnownRun, Region, list_regions, load_region
-
-CODE_LOG_MIN = math.log10(0.05)
-CODE_STEP = (math.log10(30000.0) - CODE_LOG_MIN) / 253.0
 
 # --- segment packing ---------------------------------------------------------------------------
 # kind: "u16" linear (q * scale + off), "u16log" (10 ** (q * scale + off)), "u16null" (0 = null),

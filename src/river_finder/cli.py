@@ -103,6 +103,12 @@ def _models(args):
 
         print(json.dumps(summary(load_research(args.labels)), indent=1, ensure_ascii=False))
         return
+    if args.step == "viewer":   # reference regions need no national table (write_viewer_scores loads it if needed)
+        from .viewer_nz import build
+
+        M.write_viewer_scores(args.out, log=log)
+        log(f"viewer page -> {build(args.out, page_only=True)}")
+        return
     table = M.national_table(rebuild=args.step == "table", log=log)
     if args.step == "table":
         log(f"table: {len(table)} reaches")
@@ -118,17 +124,22 @@ def _models(args):
     elif args.step == "train":
         if not args.name:
             raise SystemExit("models train needs --name (the new model id, e.g. v2)")
-        mapped = M.map_sections(table, M.all_sections(args.labels))
-        card = M.train(table, mapped, M.load_split(args.split), args.name, args.title or args.name,
-                       args.description or "", variant=args.variant)
-        log(f"train -> {M.save_card(card)}: {card['labels']['positives']} positive reaches")
+        if args.kind == "gbm":
+            from . import ml
+
+            t = ml.ml_table(log=log)
+            mapped = M.map_sections(t, M.all_sections(args.labels))
+            card, text = ml.train_card(t, mapped, M.load_split(args.split), args.name, args.title or args.name,
+                                       args.description or "", spec_id=args.recipe)
+            log(f"train -> {ml.save_gbm(card, text)}: {card['labels']['positives']} positive reaches, "
+                f"{card['train_seconds']} s")
+        else:
+            mapped = M.map_sections(table, M.all_sections(args.labels))
+            card = M.train(table, mapped, M.load_split(args.split), args.name, args.title or args.name,
+                           args.description or "", variant=args.variant)
+            log(f"train -> {M.save_card(card)}: {card['labels']['positives']} positive reaches")
     elif args.step == "evaluate":
         M.evaluate_all(table, M.map_sections(table, M.all_sections(args.labels)), log=log)
-    elif args.step == "viewer":
-        from .viewer_nz import build
-
-        M.write_viewer_scores(args.out, table, log=log)
-        log(f"viewer page -> {build(args.out, page_only=True)}")
 
 
 def _external(args):
@@ -141,6 +152,27 @@ def _external(args):
     if args.step in ("attach", "all"):
         out = args.out if args.out.exists() else None
         print(json.dumps(X.attach(out, log=print), indent=1))
+
+
+def _ml(args):
+    from . import ml, mlpage
+
+    t0 = time.time()
+
+    def log(m):
+        print(f"[{(time.time() - t0) / 60:6.1f} min] {m}", flush=True)
+
+    if args.step in ("table", "all"):
+        ml.ml_table(rebuild=True, log=log)
+    if args.step in ("explore", "all"):
+        mlpage.write_explore(log=log)
+    if args.step in ("cv", "all"):
+        specs = [s for s in ml.ZOO if not args.models or s.id in args.models]
+        ml.run(log=log, specs=specs, repeats=args.repeats)
+    if args.step == "audit":
+        ml.write_audit(args.model, n=args.top, log=log)
+    if args.step in ("page", "all"):
+        mlpage.build(args.out, log=log)
 
 
 STEPS = {"fetch": _fetch, "route": _route, "validate": _validate, "reaches": _reaches, "export": _export}
@@ -166,6 +198,10 @@ def main(argv: list[str] | None = None) -> None:
     pm.add_argument("--split", default="guides-v1", help="train: split to use")
     pm.add_argument("--variant", choices=["all", "sourced"], default="all",
                     help="train: 'sourced' drops sections whose coordinates were inferred")
+    pm.add_argument("--kind", choices=["logistic", "gbm"], default="logistic",
+                    help="train: logistic regression on the 13 features, or LightGBM with an ML recipe")
+    pm.add_argument("--recipe", default="gbm_terrain", help="train --kind gbm: model-zoo id whose inputs to use "
+                                                             "(see ml.ZOO)")
     pm.add_argument("--title")
     pm.add_argument("--description")
     pm.add_argument("--seed", type=int, default=20261113)
@@ -176,6 +212,26 @@ def main(argv: list[str] | None = None) -> None:
     px.add_argument("step", choices=["fetch", "attach", "all"])
     px.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz",
                     help="attach: viewer directory to write <region>_x.txt / _falls.json into")
+    pw = sub.add_parser("web", help="web app (Map, Top rivers, Models, Info): build | serve (see web/README.md)")
+    pw.add_argument("step", choices=["data", "build", "serve", "pages"],
+                    help="data: per-region extras (sections, roads, tracks, gauges, LINZ rivers, satellite) into "
+                         "--data; build: the pages; serve: localhost; pages: stage the site for GitHub Pages "
+                         "(--push to publish)")
+    pw.add_argument("--push", action="store_true", help="pages: force-push the staged site to the gh-pages branch")
+    pw.add_argument("--data", type=Path, default=REPO_ROOT / "data" / "viewer_nz",
+                    help="region data files (from nz viewer / models viewer / external attach)")
+    pw.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "web")
+    pw.add_argument("--basemaps-key", default=None, help="LINZ Basemaps API key for the standalone site "
+                                                          "(default: $LINZ_BASEMAPS_KEY)")
+    pw.add_argument("--port", type=int, default=8000)
+    pl = sub.add_parser("ml", help="ML evaluation and page: table | explore | cv | page | audit | all "
+                                   "(see src/river_finder/ml.py, mlpage.py)")
+    pl.add_argument("step", choices=["table", "explore", "cv", "page", "audit", "all"])
+    pl.add_argument("--model", default="v3", help="audit: registry model id")
+    pl.add_argument("--top", type=int, default=60, help="audit: how many rivers")
+    pl.add_argument("--models", nargs="*", help="cv: only these model ids (default: the whole zoo)")
+    pl.add_argument("--repeats", type=int, default=5, help="cv: repeats of the 5-fold split")
+    pl.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz")
     pv = sub.add_parser("viewer", help="build the browser viewer for the given regions")
     pv.add_argument("regions", nargs="*")
     pv.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer")
@@ -189,6 +245,36 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.cmd == "external":
         _external(args)
+        return
+    if args.cmd == "web":
+        from . import webapp
+
+        if args.step == "data":
+            from .linz import write_linz
+            from .webdata import write_access, write_gauges, write_satellite, write_sections
+
+            write_sections(args.data)
+            write_access(args.data)
+            write_gauges(args.data)
+            write_linz(args.data)
+            write_satellite(args.data)
+        elif args.step == "build":
+            out = webapp.build(args.out, args.data if args.data.exists() else None, args.basemaps_key)
+            print(f"web -> {out['site']} and {out['artifact'].name} ({out['regions']} regions, "
+                  f"{out['data_files']} data files)")
+        elif args.step == "pages":
+            import subprocess
+
+            remote = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True,
+                                    text=True).stdout.strip()
+            stage = args.out.parent / "web_pages"
+            sha = webapp.deploy_pages(args.out, stage, remote, push=args.push)
+            print(f"pages: staged {stage} as {sha}", "and pushed" if args.push else "(not pushed; add --push)")
+        else:
+            webapp.serve(args.out, args.port)
+        return
+    if args.cmd == "ml":
+        _ml(args)
         return
     regions = [load_region(n) for n in (args.regions or list_regions())]
 

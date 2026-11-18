@@ -440,6 +440,129 @@ Not used in the models yet: access is not runnability, and a waterfall feature w
 (falls are both the attraction and the portage). Candidates for v3 (rf-gz6): `falls_max_h_m` as a
 "likely unrunnable drop" flag.
 
+## ML evaluation: style-matched, catchment-grouped CV (2026-11-18)
+
+`river-finder ml table|explore|cv|page` (~10 min after the national scan) builds the ML page
+`data/viewer_nz/ml.html`, which holds the data views, all metrics and the full documentation. Code:
+`ml.py` (features, folds, models, metrics), `reachtype.py` (reach types), `mlpage.py` (page).
+
+**Decisions** (from the brainstorm):
+
+- Labels stay positive-unlabelled. Every AUC is a lower bound. There is no two-stage
+  runnable-then-grade model, because there are no reliable negatives.
+- No guide attributes as features: tags, portages, deaths, popularity, commercial rafting, access
+  type, gauge, flow notes, length and the guide gradient are all excluded.
+- Access never enters a ranking. Road and track distances stay information for the person reading
+  the map.
+- Headline metric: **style-matched AUC**. Each reach gets a Montgomery & Buffington (1997) reach
+  type, from spec `mb1997-ops-1.0.0` (`docs/MB1997_reach_classification_spec.pdf`), Track B with
+  slope and confinement only. The type maps to a paddling style, and known runs are compared only
+  with background reaches of the same style. Confinement = valley width / (4.0·MAF^0.5).
+- CV: 5 folds × 5 repeats. Folds are whole sea-outlet catchments, balanced on positive rivers.
+  Leave-one-region-out (LORO) is reported as well. The domain is all reaches with an area of at
+  least 2 km² (594,736). Positives: 14,130 reaches on 195 rivers.
+
+**Styles.** Background and known runs use the same classifier:
+
+| | Pool-riffle | Read-and-run | Bedrock | Pool-drop | Boulder garden | Too small |
+|---|---|---|---|---|---|---|
+| Background (all reaches) | 45% | 27% | 18% | 4% | 4% | 2% |
+| Known-run reaches | 50% | 11% | 35% | 4% | 0.5% | 0.2% |
+
+39% of reaches are transitional (top two types within 0.15), which is expected with two inputs.
+
+**Results** (OOF mean over repeats; the fold-to-fold sd is about 0.03 and the repeat sd about
+0.002):
+
+| model | AUC | style-matched | size-matched | style × size | recall@10% | LORO style |
+|---|---|---|---|---|---|---|
+| flow | 0.905 | 0.896 | 0.540 | 0.679 | 0.73 | 0.885 |
+| logit13 | 0.926 | 0.915 | 0.712 | 0.754 | 0.78 | 0.899 |
+| logit_plus | 0.932 | 0.920 | 0.740 | 0.770 | 0.80 | 0.899 |
+| gbm13 | 0.933 | 0.924 | 0.782 | 0.792 | 0.80 | 0.909 |
+| gbm_terrain | 0.938 | 0.929 | 0.789 | 0.804 | 0.81 | 0.908 |
+| gbm_osm | 0.938 | 0.929 | 0.790 | 0.804 | 0.81 | 0.910 |
+| gbm_xy | 0.936 | 0.930 | 0.800 | 0.812 | 0.81 | 0.907 |
+
+What this says:
+
+- **Style matching alone does not remove size.** Styles come from slope and confinement, so
+  within a style the bigger rivers still win: flood size alone gets 0.896 style-matched but 0.540
+  size-matched. Style × size is the metric that separates the models. The page plots it next to
+  the headline.
+- **Terrain shape beyond size is worth about +0.11 to +0.12 style × size AUC**: flow-only scores
+  0.68, the logistic models 0.75–0.77 and LightGBM 0.79–0.80. The non-linear model gains about
+  0.03 over the logistic one. Geology adds about +0.01 (gbm13 → gbm_terrain), within fold noise.
+- **The OSM waterfall and rapids features add nothing.** Their split gain is about 0 and their
+  univariate AUC is 0.50. Mapped falls touch only 959 domain reaches, so the "a documented river
+  has mapped falls" bias does not show up. The karst bed flag also has zero gain. Karst share
+  upstream has a little (0.03).
+- **Coordinates** (`gbm_xy`) give the best CV numbers (style × size 0.812), but with the largest
+  fold sd (0.043). Under LORO they drop below gbm_terrain and gbm_osm (0.907 vs 0.908–0.910), and
+  CV for Gisborne falls to 0.70. They learn where guide authors paddled, so do not use them for
+  ranking.
+- **LORO ≈ CV on the same rows** for every model (within 0.01), so the catchment-grouped folds are
+  not leaking much. West Coast (0.84–0.86) and Manawatu are the hardest held-out regions.
+- **By style:** LightGBM gets 0.94 in pool-riffle and 0.93 in bedrock, but 0.73–0.76 in the steep
+  styles (boulder garden, too small). Those styles have only 69 and 33 known-run reaches.
+- **By grade:** 4+ sections score highest (0.94 style-matched), ≤3 and 3–4 score 0.92–0.93.
+- **Gain importance** without coordinates: MAF 0.36–0.39, then Melton ruggedness, head, plateau
+  share and resistant rock upstream (0.08–0.13 each). With coordinates, x and y take 0.22 between
+  them.
+- The existing v1/v2 models, re-scored on the rebuilt table, reproduce their earlier AUC to the
+  fourth decimal. v2 gets 0.937 style-matched and 0.733 size-matched on the guide rivers
+  (`models/evaluations.json`).
+
+## v3: LightGBM in the registry, and the first top-runs audit (2026-11-18)
+
+`models/v3.json` is the `gbm_terrain` recipe frozen as a registry card, the first of kind `gbm`. The
+LightGBM model is in `models/v3.lgb.txt` (1.4 MB), checked against `booster_sha256`. Like every
+card it is frozen: `save_gbm` refuses to replace it with a different model.
+
+- **Inputs:** the 13 v2 features plus valley width, confinement, karst bed, karst share upstream, rock
+  age, and GNS rock class and group. No coordinates, no OSM and no access.
+- **Training:** the same split and labels as v2 (`guides-v1` training rivers, every section, held-out
+  rivers left out), with the CV recipe: reaches of 2 km² or more, 30% of background, weighted back
+  up, fixed seed, deterministic LightGBM.
+- **Train it:** `river-finder models train --kind gbm --recipe gbm_terrain --name v3 ...` (3 s).
+- **Scoring:** `models.logits` runs on any reach frame. `ml.enrich` adds geology, karst and reach type
+  to frames that lack them, such as the 5 m reference areas. National reaches are scored from
+  `ml_table`, because karst share needs the whole-NZ network. The viewer files are
+  `<region>_m_v3.txt`, as for v2.
+- **Registry:** v3 is now the default model: the newest card trained on every section. The registry
+  payload also carries the CV summary (`cv`) and v3's gain importance.
+
+Held-out guide rivers (`guides-v1`, 49 rivers; `models/evaluations.json`, which now also has a
+style × size column):
+
+| model | AUC | size-matched | style-matched | style × size | recall@10% |
+|---|---|---|---|---|---|
+| baseline-flow | 0.917 | 0.548 | 0.905 | 0.711 | 0.81 |
+| v2 | 0.931 | 0.695 | 0.921 | 0.768 | 0.81 |
+| v2-published | 0.925 | 0.670 | 0.915 | 0.746 | 0.79 |
+| **v3** | **0.952** | **0.840** | **0.948** | **0.859** | **0.85** |
+
+With published coordinates only, v3 scores 0.973 AUC and 0.904 style × size. v3 also scores 0.977
+AUC on the Mangakarengorengo reference test, against 0.889 for v2.
+
+This split holds out whole rivers but not whole catchments, so it flatters a flexible model. The
+catchment-grouped CV is the more honest comparison: `gbm_terrain` gets 0.804 style × size there,
+against 0.754 for `logit13` (the v2 recipe).
+
+**Audit** (`river-finder ml audit`, `models/audits/v3_top_runs.csv`, notes in
+`docs/audits/v3-top-runs-2026-11-18.md`):
+
+- The candidates are the top 1% of unlisted reaches (the national top 1% is 97% guide reaches),
+  chained into runs. Each run carries an out-of-fold percentile as a stability check.
+- 43 of the top 60 rivers are other stretches of guide rivers, and 11 are flat big-river reaches.
+- Two are DEM flats (0 m/km): the Roaring Lion and the lower Arawhata.
+- Three are hydro-affected, including the Waikaremoana outlet.
+- The plausible new leads are mostly remote South Westland and Fiordland rivers: Mahitahi, Olivine,
+  Mueller, Clarke, Hidden Falls Creek, Moeraki, Mikonui and Esk.
+
+Follow-ups are in beads: a gradient or style floor for discovery ranking, a hydro mask, a section
+mapping fix, and a human check of the leads.
+
 ## Open questions
 
 See the beads issue labelled `question`. Answers get recorded with `bd remember`.

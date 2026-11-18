@@ -1,0 +1,738 @@
+{
+ "text_join_rule": [
+  "Any descriptive text field may be a list of strings; join the elements with a single",
+  "space."
+ ],
+ "spec_version": "mb1997-ops-1.0.0",
+ "title": [
+  "Montgomery & Buffington (1997) channel-reach classification: machine-readable",
+  "operationalisation for probabilistic classification and AUC evaluation"
+ ],
+ "provenance_note": [
+  "Fields tagged with a source id come from that publication. Fields tagged",
+  "'operational' are design choices of this spec."
+ ],
+ "sources": {
+  "MB1997": [
+   "Montgomery, D.R., Buffington, J.M. (1997). Channel-reach morphology in mountain",
+   "drainage basins. GSA Bulletin 109(5): 596-611."
+  ],
+  "BM2022": [
+   "Buffington, J.M., Montgomery, D.R. (2022). Geomorphic classification of rivers: an",
+   "updated review. Treatise on Geomorphology, 2nd ed., vol. 6, from p. 1143.",
+   "doi:10.1016/B978-0-12-818234-5.00077-8"
+  ],
+  "BM2013": [
+   "Buffington, J.M., Montgomery, D.R. (2013). Geomorphic classification of rivers.",
+   "Treatise on Geomorphology, vol. 9, pp. 730-767."
+  ],
+  "B2006": [
+   "Bisson, P.A., Montgomery, D.R., Buffington, J.M. (2006). Valley segments, stream",
+   "reaches, and channel units. In Methods in Stream Ecology, ch. 2."
+  ],
+  "WM2005": [
+   "Wohl, E., Merritt, D.M. (2005). Prediction of mountain stream morphology. Water",
+   "Resources Research 41, W08419."
+  ],
+  "F2006": [
+   "Flores, A.N., Bledsoe, B.P., Cuhaciyan, C.O., Wohl, E.E. (2006). Channel-reach",
+   "morphology dependence on energy, scale, and hydroclimatic processes with",
+   "implications for prediction using geospatial data. Water Resources Research 42,",
+   "W06412."
+  ],
+  "W1922": [
+   "Wentworth, C.K. (1922). A scale of grade and class terms for clastic sediments.",
+   "Journal of Geology 30: 377-392."
+  ],
+  "HT2001": [
+   "Hand, D.J., Till, R.J. (2001). A simple generalisation of the area under the ROC",
+   "curve for multiple class classification problems. Machine Learning 45: 171-186."
+  ]
+ },
+ "classes": [
+  "colluvial",
+  "bedrock",
+  "cascade",
+  "step_pool",
+  "plane_bed",
+  "pool_riffle",
+  "dune_ripple"
+ ],
+ "class_definitions": {
+  "colluvial": [
+   "Small headwater channel at the tips of the network, flowing over colluvial valley",
+   "fill, with weak or ephemeral fluvial transport. Fluvial processes do not control",
+   "deposition or sorting; periodically scoured by debris flows."
+  ],
+  "bedrock": [
+   "No continuous alluvial bed; little or no valley fill; usually confined by valley",
+   "walls; steeper than alluvial channels with similar drainage area. Alluvial pockets",
+   "may occur in scour holes or behind obstructions."
+  ],
+  "cascade": [
+   "Steep, narrowly confined; disorganised cobble-boulder bed; energy dissipated by",
+   "tumbling and jet-and-wake flow over large clasts; small pools spaced less than one",
+   "channel width apart; largest clasts can approach bankfull flow depth and move only",
+   "in roughly 50-100 year events."
+  ],
+  "step_pool": [
+   "Discrete channel-spanning steps (boulder, cobble, wood or bedrock) separating plunge",
+   "pools; pools spaced about 1-4 channel widths apart; step heights comparable to",
+   "annual high-flow depth; steep, confined, small width-to-depth."
+  ],
+  "plane_bed": [
+   "Long stretches of featureless bed without discrete bars or rhythmic pools; low",
+   "width-to-depth ratio and high relative roughness (bar formation unlikely at relative",
+   "roughness ~0.3-1.0); typically armoured; near-bankfull mobility."
+  ],
+  "pool_riffle": [
+   "Laterally oscillating bed: alternating bars, pools and riffles; pools about 5-7",
+   "channel widths apart in self-formed channels; free bar formation limited to",
+   "gradients <= 0.02; typically gravel bed, unconfined, with floodplain."
+  ],
+  "dune_ripple": [
+   "Low-gradient, typically sand-bed channel with mobile, multilayered bedforms",
+   "(ripples, dunes, sand waves, bars) under live-bed transport; low relative roughness;",
+   "unconfined."
+  ]
+ },
+ "class_table1": {
+  "dune_ripple": {
+   "bed_material": "sand",
+   "bedform_pattern": "multilayered",
+   "dominant_roughness": "sinuosity, bedforms (dunes, ripples, bars), grains, banks",
+   "sediment_sources": "fluvial, bank failure",
+   "sediment_storage": "overbank, bedforms",
+   "confinement": "unconfined",
+   "pool_spacing_channel_widths": "5 to 7",
+   "transport_regime": "response",
+   "qr": "qr <= 1"
+  },
+  "pool_riffle": {
+   "bed_material": "gravel",
+   "bedform_pattern": "laterally oscillatory",
+   "dominant_roughness": "bedforms (bars, pools), grains, sinuosity, banks",
+   "sediment_sources": "fluvial, bank failure",
+   "sediment_storage": "overbank, bedforms",
+   "confinement": "unconfined",
+   "pool_spacing_channel_widths": "5 to 7",
+   "transport_regime": "response",
+   "qr": "transitional (qr > 1 to qr ~ 1)"
+  },
+  "plane_bed": {
+   "bed_material": "gravel-cobble",
+   "bedform_pattern": "featureless",
+   "dominant_roughness": "grains, banks",
+   "sediment_sources": "fluvial, bank failure, debris flows",
+   "sediment_storage": "overbank",
+   "confinement": "variable",
+   "pool_spacing_channel_widths": "none",
+   "transport_regime": "response",
+   "qr": "transitional (qr > 1 to qr ~ 1)"
+  },
+  "step_pool": {
+   "bed_material": "cobble-boulder",
+   "bedform_pattern": "vertically oscillatory",
+   "dominant_roughness": "bedforms (steps, pools), grains, banks",
+   "sediment_sources": "fluvial, hillslope, debris flows",
+   "sediment_storage": "bedforms",
+   "confinement": "confined",
+   "pool_spacing_channel_widths": "1 to 4",
+   "transport_regime": "transport",
+   "qr": "high (qr > 1)"
+  },
+  "cascade": {
+   "bed_material": "boulder",
+   "bedform_pattern": "random",
+   "dominant_roughness": "grains, banks",
+   "sediment_sources": "fluvial, hillslope, debris flows",
+   "sediment_storage": "lee and stoss sides of flow obstructions",
+   "confinement": "confined",
+   "pool_spacing_channel_widths": "< 1",
+   "transport_regime": "transport",
+   "qr": "high (qr > 1)"
+  },
+  "bedrock": {
+   "bed_material": "rock",
+   "bedform_pattern": "irregular",
+   "dominant_roughness": "boundaries (bed and banks)",
+   "sediment_sources": "fluvial, hillslope, debris flows",
+   "sediment_storage": "pockets",
+   "confinement": "confined",
+   "pool_spacing_channel_widths": "variable",
+   "transport_regime": "transport",
+   "qr": "qr >> 1 (supply limited)"
+  },
+  "colluvial": {
+   "bed_material": "variable",
+   "bedform_pattern": "variable",
+   "dominant_roughness": "grains",
+   "sediment_sources": "hillslope, debris flows",
+   "sediment_storage": "bed",
+   "confinement": "confined",
+   "pool_spacing_channel_widths": "unknown",
+   "transport_regime": "source",
+   "qr": "qr << 1 (transport limited)"
+  }
+ },
+ "downstream_sequence": [
+  "colluvial",
+  "cascade",
+  "step_pool",
+  "plane_bed",
+  "pool_riffle",
+  "dune_ripple"
+ ],
+ "adjacent_classes": {
+  "source": "operational (from MB1997 downstream sequence)",
+  "map": {
+   "colluvial": ["cascade", "bedrock"],
+   "bedrock": ["cascade", "step_pool", "colluvial"],
+   "cascade": ["colluvial", "step_pool", "bedrock"],
+   "step_pool": ["cascade", "plane_bed", "bedrock"],
+   "plane_bed": ["step_pool", "pool_riffle"],
+   "pool_riffle": ["plane_bed", "dune_ripple"],
+   "dune_ripple": ["pool_riffle"]
+  }
+ },
+ "classification_unit": {
+  "unit": "channel reach",
+  "min_length_channel_widths": 10,
+  "recommended_length_channel_widths": 20,
+  "source": [
+   "MB1997 (reaches of at least 10-20 channel widths); WM2005 (>= 10 widths; slope",
+   "unreliable for reaches shorter than about 500 m)"
+  ]
+ },
+ "slope_core_zones_MB1997": {
+  "source": "MB1997 field data; overlapping, not diagnostic",
+  "pool_riffle": "< 0.015",
+  "plane_bed": "0.015-0.03",
+  "step_pool": "0.03-0.065",
+  "cascade": "> 0.065",
+  "free_bar_formation_limit": "<= 0.02"
+ },
+ "numeric_features": {
+  "slope": {
+   "unit": "m/m",
+   "description": [
+    "Reach-average water-surface or bed slope over >= 10-20 channel widths (prefer >= 500",
+    "m where possible)."
+   ],
+   "weight": 1.0,
+   "range_type": "interquartile",
+   "source": "BM2022 Table 2 (slope %, converted to m/m)",
+   "class_params": {
+    "colluvial": {"q25": 0.17, "q75": 0.59, "log10_mu": -0.49935, "log10_sigma": 0.400595},
+    "bedrock": {"q25": 0.02, "q75": 0.37, "log10_mu": -1.065384, "log10_sigma": 0.939342},
+    "cascade": {"q25": 0.08, "q75": 0.26, "log10_mu": -0.840968, "log10_sigma": 0.379454},
+    "step_pool": {"q25": 0.03, "q75": 0.08, "log10_mu": -1.309894, "log10_sigma": 0.315766},
+    "plane_bed": {"q25": 0.01, "q75": 0.03, "log10_mu": -1.761439, "log10_sigma": 0.353685},
+    "pool_riffle": {"q25": 0.002, "q75": 0.01, "log10_mu": -2.349485, "log10_sigma": 0.518139},
+    "dune_ripple": {"q25": 0.0002, "q75": 0.001, "log10_mu": -3.349485, "log10_sigma": 0.518139}
+   }
+  },
+  "width_depth_ratio": {
+   "unit": "dimensionless",
+   "description": "Bankfull width / bankfull mean depth (w/h).",
+   "weight": 0.4,
+   "range_type": "interquartile",
+   "source": "BM2022 Table 2",
+   "class_params": {
+    "colluvial": null,
+    "bedrock": null,
+    "cascade": {"q25": 6, "q75": 14, "log10_mu": 0.96214, "log10_sigma": 0.272777},
+    "step_pool": {"q25": 9, "q75": 19, "log10_mu": 1.116498, "log10_sigma": 0.240557},
+    "plane_bed": {"q25": 12, "q75": 24, "log10_mu": 1.229696, "log10_sigma": 0.22315},
+    "pool_riffle": {"q25": 15, "q75": 33, "log10_mu": 1.347303, "log10_sigma": 0.253834},
+    "dune_ripple": {"q25": 12, "q75": 47, "log10_mu": 1.37564, "log10_sigma": 0.439523}
+   }
+  },
+  "relative_submergence": {
+   "unit": "dimensionless",
+   "description": "Bankfull mean depth / median grain size (h/D50), same length units for both.",
+   "weight": 0.7,
+   "range_type": "interquartile",
+   "source": "BM2022 Table 2",
+   "class_params": {
+    "colluvial": null,
+    "bedrock": null,
+    "cascade": {"q25": 3, "q75": 7, "log10_mu": 0.66111, "log10_sigma": 0.272777},
+    "step_pool": {"q25": 3, "q75": 7, "log10_mu": 0.66111, "log10_sigma": 0.272777},
+    "plane_bed": {"q25": 5, "q75": 11, "log10_mu": 0.870181, "log10_sigma": 0.253834},
+    "pool_riffle": {"q25": 13, "q75": 40, "log10_mu": 1.358002, "log10_sigma": 0.361836},
+    "dune_ripple": {"q25": 3000, "q75": 32000, "log10_mu": 3.991136, "log10_sigma": 0.762067}
+   }
+  },
+  "excess_shields": {
+   "unit": "dimensionless",
+   "description": [
+    "Bankfull Shields stress for D50 divided by the reference Shields stress (tau*_bf /",
+    "tau*_r50). tau*_bf = h*S / (1.65*D50). Reference stress per BM2022 footnote c",
+    "(Mueller et al. 2005 / Pitlick et al. 2008; Shields curve for sand beds). Omit if it",
+    "cannot be computed that way."
+   ],
+   "weight": 0.3,
+   "range_type": "interquartile",
+   "source": "BM2022 Table 2",
+   "class_params": {
+    "colluvial": null,
+    "bedrock": null,
+    "cascade": {"q25": 1.6, "q75": 2.9, "log10_mu": 0.333259, "log10_sigma": 0.191459},
+    "step_pool": {"q25": 0.9, "q75": 2.2, "log10_mu": 0.148333, "log10_sigma": 0.287754},
+    "plane_bed": {"q25": 1.0, "q75": 1.9, "log10_mu": 0.139377, "log10_sigma": 0.206637},
+    "pool_riffle": {"q25": 1.1, "q75": 2.6, "log10_mu": 0.228183, "log10_sigma": 0.276932},
+    "dune_ripple": {"q25": 26, "q75": 90, "log10_mu": 1.684608, "log10_sigma": 0.399755}
+   }
+  },
+  "pool_spacing": {
+   "unit": "channel widths per pool",
+   "description": [
+    "Mean along-channel distance between successive pools divided by bankfull width. Only",
+    "used when pools_present is true."
+   ],
+   "weight": 1.0,
+   "range_type": "typical range (treated as interquartile)",
+   "source": "MB1997 Table 1; cascade lower bound 0.25 is operational (MB1997 gives '< 1')",
+   "class_params": {
+    "colluvial": null,
+    "bedrock": null,
+    "cascade": {"q25": 0.25, "q75": 1.0, "log10_mu": -0.30103, "log10_sigma": 0.446301},
+    "step_pool": {"q25": 1, "q75": 4, "log10_mu": 0.30103, "log10_sigma": 0.446301},
+    "plane_bed": null,
+    "pool_riffle": {"q25": 5, "q75": 7, "log10_mu": 0.772034, "log10_sigma": 0.15},
+    "dune_ripple": {"q25": 5, "q75": 7, "log10_mu": 0.772034, "log10_sigma": 0.15}
+   }
+  }
+ },
+ "categorical_features": {
+  "substrate_origin": {
+   "weight": 2.0,
+   "values": ["alluvial", "bedrock", "colluvial"],
+   "value_definitions": {
+    "alluvial": "Bed is a continuous cover of fluvially transported and sorted sediment.",
+    "bedrock": "Exposed bedrock forms most of the bed; no continuous alluvial cover.",
+    "colluvial": [
+     "Bed is hillslope-derived valley fill (colluvium) with weak or ephemeral fluvial",
+     "transport."
+    ]
+   },
+   "source": "MB1997 (three channel-reach substrates: bedrock, alluvium, colluvium)",
+   "diagnostic_values": {
+    "colluvial": ["colluvial"],
+    "bedrock": ["bedrock"],
+    "cascade": ["alluvial"],
+    "step_pool": ["alluvial"],
+    "plane_bed": ["alluvial"],
+    "pool_riffle": ["alluvial"],
+    "dune_ripple": ["alluvial"]
+   },
+   "adjacent_values": {
+    "colluvial": ["alluvial"],
+    "bedrock": ["alluvial"],
+    "cascade": ["colluvial", "bedrock"],
+    "step_pool": ["bedrock"],
+    "plane_bed": [],
+    "pool_riffle": [],
+    "dune_ripple": []
+   },
+   "likelihood": {
+    "colluvial": {"alluvial": 0.1, "bedrock": 0.05, "colluvial": 0.85},
+    "bedrock": {"alluvial": 0.1, "bedrock": 0.85, "colluvial": 0.05},
+    "cascade": {"alluvial": 0.85, "bedrock": 0.075, "colluvial": 0.075},
+    "step_pool": {"alluvial": 0.85, "bedrock": 0.1, "colluvial": 0.05},
+    "plane_bed": {"alluvial": 0.85, "bedrock": 0.075, "colluvial": 0.075},
+    "pool_riffle": {"alluvial": 0.85, "bedrock": 0.075, "colluvial": 0.075},
+    "dune_ripple": {"alluvial": 0.85, "bedrock": 0.075, "colluvial": 0.075}
+   }
+  },
+  "bedform_pattern": {
+   "weight": 1.5,
+   "values": [
+    "multilayered",
+    "laterally_oscillatory",
+    "featureless",
+    "vertically_oscillatory",
+    "random",
+    "irregular"
+   ],
+   "value_definitions": {
+    "multilayered": "Superimposed mobile bedforms (ripples on dunes, sand waves, bars) in a sand bed.",
+    "laterally_oscillatory": "Alternating bars and pools across the channel, with riffles between pools.",
+    "featureless": "Planar bed without rhythmic bars, pools or steps over several channel widths.",
+    "vertically_oscillatory": "Channel-spanning steps (abrupt bed drops) separating plunge pools.",
+    "random": [
+     "Disorganised large clasts; no rhythmic bedform; tumbling, jet-and-wake flow; small",
+     "pools less than one width apart."
+    ],
+    "irregular": "Sculpted bedrock surface (ledges, chutes, potholes); no continuous alluvial bed."
+   },
+   "source": "MB1997 Table 1 (bedform pattern row); adjacency is operational",
+   "diagnostic_values": {
+    "dune_ripple": ["multilayered"],
+    "pool_riffle": ["laterally_oscillatory"],
+    "plane_bed": ["featureless"],
+    "step_pool": ["vertically_oscillatory"],
+    "cascade": ["random"],
+    "bedrock": ["irregular"],
+    "colluvial": "uniform"
+   },
+   "adjacent_values": {
+    "dune_ripple": ["laterally_oscillatory"],
+    "pool_riffle": ["featureless", "multilayered"],
+    "plane_bed": ["laterally_oscillatory", "vertically_oscillatory"],
+    "step_pool": ["random", "featureless"],
+    "cascade": ["vertically_oscillatory"],
+    "bedrock": ["vertically_oscillatory", "random"],
+    "colluvial": []
+   },
+   "likelihood": {
+    "colluvial": {
+     "multilayered": 0.166667,
+     "laterally_oscillatory": 0.166667,
+     "featureless": 0.166667,
+     "vertically_oscillatory": 0.166667,
+     "random": 0.166667,
+     "irregular": 0.166667
+    },
+    "bedrock": {
+     "multilayered": 0.016667,
+     "laterally_oscillatory": 0.016667,
+     "featureless": 0.016667,
+     "vertically_oscillatory": 0.05,
+     "random": 0.05,
+     "irregular": 0.85
+    },
+    "cascade": {
+     "multilayered": 0.0125,
+     "laterally_oscillatory": 0.0125,
+     "featureless": 0.0125,
+     "vertically_oscillatory": 0.1,
+     "random": 0.85,
+     "irregular": 0.0125
+    },
+    "step_pool": {
+     "multilayered": 0.016667,
+     "laterally_oscillatory": 0.016667,
+     "featureless": 0.05,
+     "vertically_oscillatory": 0.85,
+     "random": 0.05,
+     "irregular": 0.016667
+    },
+    "plane_bed": {
+     "multilayered": 0.016667,
+     "laterally_oscillatory": 0.05,
+     "featureless": 0.85,
+     "vertically_oscillatory": 0.05,
+     "random": 0.016667,
+     "irregular": 0.016667
+    },
+    "pool_riffle": {
+     "multilayered": 0.05,
+     "laterally_oscillatory": 0.85,
+     "featureless": 0.05,
+     "vertically_oscillatory": 0.016667,
+     "random": 0.016667,
+     "irregular": 0.016667
+    },
+    "dune_ripple": {
+     "multilayered": 0.85,
+     "laterally_oscillatory": 0.1,
+     "featureless": 0.0125,
+     "vertically_oscillatory": 0.0125,
+     "random": 0.0125,
+     "irregular": 0.0125
+    }
+   }
+  },
+  "bed_material_class": {
+   "weight": 0.6,
+   "values": ["sand", "gravel", "cobble", "boulder", "rock"],
+   "value_definitions": {
+    "sand": "0.0625-2 mm",
+    "gravel": "2-64 mm",
+    "cobble": "64-256 mm",
+    "boulder": ">= 256 mm",
+    "rock": "exposed bedrock forms the bed"
+   },
+   "measurement": [
+    "Size class of the framework clasts that form the bed structure. Use the Wentworth",
+    "class of D84 when measured; otherwise the visually dominant class."
+   ],
+   "source": "MB1997 Table 1 (typical bed material); size classes W1922; adjacency operational",
+   "diagnostic_values": {
+    "dune_ripple": ["sand"],
+    "pool_riffle": ["gravel"],
+    "plane_bed": ["gravel", "cobble"],
+    "step_pool": ["cobble", "boulder"],
+    "cascade": ["boulder"],
+    "bedrock": ["rock"],
+    "colluvial": ["sand", "gravel", "cobble", "boulder"]
+   },
+   "adjacent_values": {
+    "dune_ripple": ["gravel"],
+    "pool_riffle": ["sand", "cobble"],
+    "plane_bed": ["boulder", "sand"],
+    "step_pool": ["gravel", "rock"],
+    "cascade": ["cobble", "rock"],
+    "bedrock": ["boulder", "cobble"],
+    "colluvial": ["rock"]
+   },
+   "likelihood": {
+    "colluvial": {
+     "sand": 0.2125,
+     "gravel": 0.2125,
+     "cobble": 0.2125,
+     "boulder": 0.2125,
+     "rock": 0.15
+    },
+    "bedrock": {"sand": 0.025, "gravel": 0.025, "cobble": 0.05, "boulder": 0.05, "rock": 0.85},
+    "cascade": {"sand": 0.025, "gravel": 0.025, "cobble": 0.05, "boulder": 0.85, "rock": 0.05},
+    "step_pool": {"sand": 0.05, "gravel": 0.05, "cobble": 0.425, "boulder": 0.425, "rock": 0.05},
+    "plane_bed": {"sand": 0.05, "gravel": 0.425, "cobble": 0.425, "boulder": 0.05, "rock": 0.05},
+    "pool_riffle": {"sand": 0.05, "gravel": 0.85, "cobble": 0.05, "boulder": 0.025, "rock": 0.025},
+    "dune_ripple": {
+     "sand": 0.85,
+     "gravel": 0.1,
+     "cobble": 0.016667,
+     "boulder": 0.016667,
+     "rock": 0.016667
+    }
+   }
+  },
+  "confinement": {
+   "weight": 0.5,
+   "values": ["confined", "moderately_confined", "unconfined"],
+   "value_definitions": {
+    "confined": "valley floor width / bankfull width < 2",
+    "moderately_confined": "ratio 2-4",
+    "unconfined": "ratio > 4"
+   },
+   "measurement": "Ratio thresholds are operational and may be changed; record the ratio.",
+   "source": "MB1997 Table 1 (typical confinement); ratio thresholds operational",
+   "diagnostic_values": {
+    "dune_ripple": ["unconfined"],
+    "pool_riffle": ["unconfined"],
+    "plane_bed": "uniform",
+    "step_pool": ["confined"],
+    "cascade": ["confined"],
+    "bedrock": ["confined"],
+    "colluvial": ["confined"]
+   },
+   "adjacent_values": {
+    "dune_ripple": ["moderately_confined"],
+    "pool_riffle": ["moderately_confined"],
+    "plane_bed": [],
+    "step_pool": ["moderately_confined"],
+    "cascade": ["moderately_confined"],
+    "bedrock": ["moderately_confined"],
+    "colluvial": ["moderately_confined"]
+   },
+   "likelihood": {
+    "colluvial": {"confined": 0.85, "moderately_confined": 0.1, "unconfined": 0.05},
+    "bedrock": {"confined": 0.85, "moderately_confined": 0.1, "unconfined": 0.05},
+    "cascade": {"confined": 0.85, "moderately_confined": 0.1, "unconfined": 0.05},
+    "step_pool": {"confined": 0.85, "moderately_confined": 0.1, "unconfined": 0.05},
+    "plane_bed": {"confined": 0.333333, "moderately_confined": 0.333333, "unconfined": 0.333333},
+    "pool_riffle": {"confined": 0.05, "moderately_confined": 0.1, "unconfined": 0.85},
+    "dune_ripple": {"confined": 0.05, "moderately_confined": 0.1, "unconfined": 0.85}
+   }
+  },
+  "pools_present": {
+   "weight": 0.8,
+   "values": ["true", "false"],
+   "value_definitions": {
+    "true": [
+     "At least one pool per 10 channel widths: a bed depression spanning at least half the",
+     "channel width with measurable residual depth at low flow."
+    ],
+    "false": "No such pools over the reach."
+   },
+   "source": "MB1997 Table 1 (pool spacing 'none' for plane bed); pool definition operational",
+   "diagnostic_values": {
+    "plane_bed": ["false"],
+    "bedrock": "uniform",
+    "colluvial": "uniform",
+    "cascade": ["true"],
+    "step_pool": ["true"],
+    "pool_riffle": ["true"],
+    "dune_ripple": ["true"]
+   },
+   "adjacent_values": {
+    "colluvial": [],
+    "bedrock": [],
+    "cascade": [],
+    "step_pool": [],
+    "plane_bed": [],
+    "pool_riffle": [],
+    "dune_ripple": []
+   },
+   "likelihood": {
+    "colluvial": {"true": 0.5, "false": 0.5},
+    "bedrock": {"true": 0.5, "false": 0.5},
+    "cascade": {"true": 0.85, "false": 0.15},
+    "step_pool": {"true": 0.85, "false": 0.15},
+    "plane_bed": {"true": 0.15, "false": 0.85},
+    "pool_riffle": {"true": 0.85, "false": 0.15},
+    "dune_ripple": {"true": 0.85, "false": 0.15}
+   }
+  }
+ },
+ "scoring_model": {
+  "source": "operational",
+  "type": "weighted naive-Bayes log score with softmax normalisation",
+  "numeric_membership": [
+   "m = exp(-0.5 * ((log10(x) - log10_mu) / log10_sigma)^2); mu = midpoint of",
+   "log10(q25), log10(q75); sigma = max((log10(q75) - log10(q25)) / 1.349, sigma_min)"
+  ],
+  "sigma_min_log10": 0.15,
+  "neutral_membership_if_class_param_null": 0.3,
+  "categorical_membership": "m = likelihood[feature][class][observed_value]",
+  "missing_feature": "skip the feature for all classes (no contribution)",
+  "log_score": "S_c = ln(prior_c) + sum_f weight_f * ln(m_{c,f})",
+  "probability": "p_c = exp(S_c - max_k S_k) / sum_j exp(S_j - max_k S_k)",
+  "default_prior": "uniform (1/7 each); empirical class frequencies allowed if reported",
+  "forced_pool_riffle_rule": [
+   "If obstruction_forced is true, the slope parameters for pool_riffle use the union",
+   "range q25=0.002, q75=0.03 (MB1997: forced pool-riffle reaches span the slope ranges",
+   "of pool-riffle and plane-bed reaches)."
+  ],
+  "pool_spacing_rule": "pool_spacing is used only when pools_present == 'true'."
+ },
+ "decision_rules": {
+  "source": "operational",
+  "predicted_class": "argmax_c p_c (ties broken by order in 'classes')",
+  "transitional_flag": [
+   "true if p_top1 - p_top2 < 0.15 and the two classes are adjacent in",
+   "adjacent_classes.map"
+  ],
+  "forced_variant": [
+   "if obstruction_forced is true and predicted_class is pool_riffle ->",
+   "'forced_pool_riffle'; if step_pool -> 'forced_step_pool'; else null. Forced variants",
+   "count as their parent class for AUC."
+  ],
+  "out_of_scope": [
+   "if multithread is true -> 'braided' (BM2013/BM2022 add braided as an eighth type;",
+   "not one of the seven MB1997 types). Scores are still produced; exclude these reaches",
+   "from the 7-class AUC by default."
+  ],
+  "low_evidence_flag": "true if the summed weight of features used is < 1.5"
+ },
+ "tracks": {
+  "source": "operational",
+  "A_full": {
+   "description": "All observed features, including morphology.",
+   "features": [
+    "slope",
+    "width_depth_ratio",
+    "relative_submergence",
+    "excess_shields",
+    "pool_spacing",
+    "substrate_origin",
+    "bedform_pattern",
+    "bed_material_class",
+    "confinement",
+    "pools_present"
+   ]
+  },
+  "B_proxy": {
+   "description": [
+    "No bed-morphology observations: quantitative proxies only. Use when the ground-truth",
+    "labels were assigned visually from bed morphology, to avoid label leakage."
+   ],
+   "features": [
+    "slope",
+    "width_depth_ratio",
+    "relative_submergence",
+    "excess_shields",
+    "bed_material_class",
+    "confinement"
+   ]
+  }
+ },
+ "input_schema": {
+  "reach_id": "string, required",
+  "slope": "float m/m or null",
+  "width_depth_ratio": "float or null",
+  "relative_submergence": "float or null",
+  "excess_shields": "float or null",
+  "pool_spacing": "float (channel widths per pool) or null",
+  "pools_present": "'true' | 'false' | null",
+  "substrate_origin": "'alluvial' | 'bedrock' | 'colluvial' | null",
+  "bedform_pattern": "one of categorical_features.bedform_pattern.values or null",
+  "bed_material_class": "'sand' | 'gravel' | 'cobble' | 'boulder' | 'rock' | null",
+  "confinement": "'confined' | 'moderately_confined' | 'unconfined' | null",
+  "obstruction_forced": "bool or null: most pools/steps formed by large wood or other obstructions",
+  "multithread": "bool or null: more than one active channel at bankfull"
+ },
+ "output_schema": {
+  "reach_id": "string",
+  "spec_version": "string",
+  "track": "'A_full' | 'B_proxy'",
+  "probabilities": "object: one float per class in 'classes', sum = 1",
+  "log_scores": "object: S_c per class",
+  "predicted_class": "string",
+  "flags": {
+   "transitional": "bool",
+   "forced_variant": "string | null",
+   "out_of_scope": "string | null",
+   "low_evidence": "bool"
+  },
+  "features_used": "list of feature names that contributed"
+ },
+ "auc_protocol": {
+  "source": "operational; multiclass AUC per HT2001",
+  "score": "probabilities[c] for each class c",
+  "ground_truth": [
+   "one of the seven classes per reach; map forced variants to their parent class;",
+   "exclude braided and unlabelled reaches"
+  ],
+  "primary_metric": [
+   "macro one-vs-rest ROC AUC: mean over classes with at least one positive and one",
+   "negative reach"
+  ],
+  "secondary_metrics": [
+   "prevalence-weighted one-vs-rest AUC",
+   "Hand & Till (2001) M (pairwise multiclass AUC)",
+   "per-class one-vs-rest AUC with n_pos and n_neg"
+  ],
+  "ties": "count tied scores as 0.5 (Mann-Whitney U)",
+  "uncertainty": "stratified bootstrap over reaches, 1000 resamples, 95% percentile CI",
+  "report": [
+   "spec_version",
+   "track",
+   "prior",
+   "features available per reach",
+   "number of reaches per class",
+   "any changed operational parameter"
+  ]
+ },
+ "literature_baselines": {
+  "note": "Reported accuracies (not AUC) for proxy-only classifiers.",
+  "WM2005": [
+   "Three-variable discriminant (S, D84, w) on step-pool, plane-bed and pool-riffle",
+   "reaches: 24% cross-validation error; independent validation 69% correct (step-pool",
+   "~91%, plane-bed ~56%, pool-riffle ~54%)."
+  ],
+  "F2006": [
+   "CART on slope and S*A^0.4 (A in km2) for 270 reaches: 76.3% correct (cascade 86.7%,",
+   "plane-bed 66.7%, pool-riffle 77.1%, step-pool 75.6%); process shift near 2.5% slope."
+  ]
+ },
+ "paddling_style_mapping": {
+  "source": "operational heuristic, NOT part of MB1997; optional",
+  "rule": "style_score = sum of probabilities of the mapped classes",
+  "map": {
+   "too_small_or_unrunnable": ["colluvial"],
+   "bedrock_slides_and_gorges": ["bedrock"],
+   "boulder_garden_creek": ["cascade"],
+   "pool_drop_steep_creek": ["step_pool"],
+   "continuous_read_and_run": ["plane_bed"],
+   "easy_pool_riffle": ["pool_riffle", "dune_ripple"]
+  },
+  "caveat": [
+   "Volume (e.g. 'big water') is not represented: MB1997 types describe bed morphology,",
+   "not discharge."
+  ]
+ }
+}

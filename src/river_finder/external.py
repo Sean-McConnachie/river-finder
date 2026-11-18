@@ -17,7 +17,9 @@ Files in ``data/nz/``:
 
 Viewer files, per region (reach order = the viewer's): ``<id>_x.txt`` (base64 of three uint16
 distances in 10 m units: road, 4WD or private road, foot track; then uint8 waterfall count and
-uint8 tallest mapped height in m) and ``<id>_falls.json`` (points for the map).
+uint8 tallest mapped height in m) and ``<id>_falls.json`` (points for the map: ``[lon, lat, name,
+height m | null, reach | -1, "w" | "r", osm id ("n123"), height from LINZ Topo50 (0/1), rapid grade,
+{c: wikimedia_commons, i: image, w: wikidata, p: wikipedia}]``).
 """
 
 from __future__ import annotations
@@ -71,6 +73,10 @@ def _geoms(t) -> gpd.GeoSeries:
     return gpd.GeoSeries.from_wkb(t["geometry"].to_numpy(zero_copy_only=False), crs=4326).to_crs(2193)
 
 
+# OSM tags that point at photos or articles about a waterfall (kept for the viewer's links)
+PHOTO_TAGS = {"c": "wikimedia_commons", "i": "image", "w": "wikidata", "p": "wikipedia"}
+
+
 def _record(sources) -> str:
     return next((s.get("record_id") or "" for s in (sources or []) if s.get("dataset") == "OpenStreetMap"), "")
 
@@ -100,7 +106,8 @@ def falls_frame(t) -> gpd.GeoDataFrame:
                      "height_m": _height(g["height"]) if "height" in g else np.nan,
                      "grade": g.get("whitewater:rapid_grade") or g.get("rapids") or "",
                      "linz": bool(g.get("ref:linz:place_id") or "LINZ" in g.get("source", "")),
-                     "osm": _record(srcs[i])})
+                     "osm": _record(srcs[i]),
+                     "photo": json.dumps({k: g[t] for k, t in PHOTO_TAGS.items() if g.get(t)}, ensure_ascii=False)})
     return gpd.GeoDataFrame(rows, geometry=geom.to_numpy(), crs=2193)
 
 
@@ -133,8 +140,10 @@ def access_frame(t) -> gpd.GeoDataFrame:
             out.append(None)
     keep = [i for i, c in enumerate(out) if c]
     names = t["names"].to_pylist()
+    srcs = t["sources"].to_pylist() if "sources" in t.column_names else [None] * len(cls)
     g = gpd.GeoDataFrame({"cls": [out[i] for i in keep], "osm_class": [cls[i] for i in keep],
-                          "name": [(names[i] or {}).get("primary") or "" for i in keep]},
+                          "name": [(names[i] or {}).get("primary") or "" for i in keep],
+                          "osm": [_record(srcs[i]).split("@")[0] for i in keep]},
                          geometry=_geoms(t.take(keep)).to_numpy(), crs=2193)
     return g
 
@@ -144,7 +153,7 @@ def fetch(log=print) -> dict:
     w = _read("theme=base/type=water", ["class", "names", "source_tags", "sources", "geometry", "bbox"], log)
     falls = falls_frame(w)
     a = _read("theme=transportation/type=segment",
-              ["subtype", "class", "names", "access_restrictions", "geometry", "bbox"], log)
+              ["subtype", "class", "names", "access_restrictions", "sources", "geometry", "bbox"], log)
     acc = access_frame(a)
     for g, name in ((falls, "waterfalls"), (acc, "access")):
         p = nz_dir() / f"{name}.gpkg"
@@ -247,6 +256,8 @@ def attach(out_dir: Path | None = None, log=print) -> dict:
             write_viewer(out_dir, vid, g, x, wf, min_a)
         log(f"external: {vid} {len(g)} reaches, {int((x['falls_n'] > 0).sum())} with waterfalls, "
             f"median road distance {np.median(x['d_road_m']):.0f} m ({time.time() - t0:.0f} s)")
+    if not nat:  # reference areas only (no national scan yet): viewer files are written, nothing to pool
+        return {}
     t = pd.concat(nat, ignore_index=True)
     t.drop(columns=["steepest_50m_m_per_km", "knick_ratio", "grad_s"]).to_pickle(nz_dir() / "external.pkl")
     summary = waterfall_check(pd.concat(checks, ignore_index=True), falls)
@@ -313,8 +324,12 @@ def write_viewer(out_dir: Path, vid: str, g: gpd.GeoDataFrame, x: pd.DataFrame, 
                      np.clip(np.round(xv["falls_max_h_m"].to_numpy()), 0, 255).astype(np.uint8).tobytes()])
     (out_dir / f"{vid}_x.txt").write_text(base64.b64encode(blob).decode())
     ll = wf.to_crs(4326)
+    def extra(r) -> list:
+        photo = json.loads(r["photo"]) if isinstance(r.get("photo"), str) and r["photo"] else {}
+        return [str(r.get("osm") or "").split("@")[0], int(bool(r.get("linz"))), r.get("grade") or "", photo]
+
     pts = [[round(p.x, 5), round(p.y, 5), r["name"], None if np.isnan(r["height_m"]) else round(float(r["height_m"])),
-            int(vi[r["reach"]]) if r["reach"] >= 0 else -1, "w" if r["kind"] == "waterfall" else "r"]
+            int(vi[r["reach"]]) if r["reach"] >= 0 else -1, "w" if r["kind"] == "waterfall" else "r", *extra(r)]
            for p, (_, r) in zip(ll.geometry, wf.iterrows(), strict=False)]
     (out_dir / f"{vid}_falls.json").write_text(json.dumps(pts, ensure_ascii=False, separators=(",", ":")))
 

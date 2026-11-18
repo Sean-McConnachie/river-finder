@@ -1,0 +1,29 @@
+<title>River Finder</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Find unexplored whitewater in New Zealand from LINZ terrain, NIWA flood statistics and the river guides.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Public+Sans:wght@400;500;600;700&display=swap">
+<style>
+/*%%CSS%%*/
+</style>
+
+<div class="rf-app">
+  <header class="rf-bar">
+    <a class="rf-brand" id="rf-brand" href="#map" aria-label="River Finder home"></a>
+    <nav class="rf-nav" id="rf-nav" aria-label="Pages"></nav>
+    <div class="rf-bar-end" id="rf-bar-end"></div>
+  </header>
+  <main class="rf-pages" id="rf-pages">
+    <section class="rf-page" id="page-map" data-page="map" data-scroll="none" aria-label="Map" hidden></section>
+    <section class="rf-page" id="page-top" data-page="top" aria-label="Top rivers" hidden></section>
+    <section class="rf-page" id="page-models" data-page="models" aria-label="Models" hidden></section>
+    <section class="rf-page" id="page-info" data-page="info" aria-label="Info" hidden></section>
+  </main>
+</div>
+
+<script type="application/json" id="rf-data">%%DATA%%</script>
+<!--%%LIBS%%-->
+<script>
+/*%%JS%%*/
+</script>

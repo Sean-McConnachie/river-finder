@@ -1,0 +1,901 @@
+<title>River Finder ML</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Public+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: a long analyst's notebook. Sticky tab bar; each tab is one column of sections (max 1180px),
+   charts in two-column grids that stack on phones. Same tokens as the River Finder map viewer. */
+:root {
+  --bg: #f4f5f2; --surface: #ffffff; --fg: #1c201e; --muted: #5a635e; --line: #d9ded9; --grid: #eceeeb;
+  --accent: #2a78d6;
+  /* chart roles: background reaches = slot 1 (blue), known runs = slot 2 (orange) */
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948;
+  --bgr: var(--s1); --pos: var(--s2);
+  --seq0: #f4f7fb; --seq1: #cde2fb; --seq2: #86b6ef; --seq3: #3987e5; --seq4: #1c5cab; --seq5: #0d366b;
+  --div-lo: #c62f2e; --div-lo2: #f0a09f; --div-mid: #f0efec; --div-hi2: #9ec5f4; --div-hi: #1c5cab;
+  --good: #0ca30c; --warn: #fab219; --crit: #d03b3b;
+  --code-bg: #eef1ee;
+  --font-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #151716; --surface: #1d201f; --fg: #e6eae7; --muted: #9aa39e; --line: #2d3230; --grid: #262a28;
+    --accent: #3987e5;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #0ca30c; --s7: #9085e9; --s8: #e66767;
+    --seq0: #1f2328; --seq1: #184f95; --seq2: #256abf; --seq3: #3987e5; --seq4: #86b6ef; --seq5: #cde2fb;
+    --div-lo: #e66767; --div-lo2: #7a3533; --div-mid: #383835; --div-hi2: #1c4a80; --div-hi: #86b6ef;
+    --code-bg: #232725; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #151716; --surface: #1d201f; --fg: #e6eae7; --muted: #9aa39e; --line: #2d3230; --grid: #262a28;
+  --accent: #3987e5;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #0ca30c; --s7: #9085e9; --s8: #e66767;
+  --seq0: #1f2328; --seq1: #184f95; --seq2: #256abf; --seq3: #3987e5; --seq4: #86b6ef; --seq5: #cde2fb;
+  --div-lo: #e66767; --div-lo2: #7a3533; --div-mid: #383835; --div-hi2: #1c4a80; --div-hi: #86b6ef;
+  --code-bg: #232725; color-scheme: dark;
+}
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px; line-height: 1.5; margin: 0; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.num, code, .mono { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+code { font-size: 12.5px; background: var(--code-bg); padding: 1px 4px; border-radius: 3px; }
+pre { font-family: var(--font-data); font-size: 12.5px; background: var(--code-bg); padding: 10px 12px; border-radius: 6px; overflow-x: auto; }
+a { color: var(--accent); }
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.toprow { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; padding-block: 12px 0; }
+.toprow h1 { font-size: 18px; margin: 0; letter-spacing: -0.01em; }
+.toprow .meta { color: var(--muted); font-size: 12px; }
+.toprow .back { margin-left: auto; font-size: 13px; }
+nav.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; padding-block: 8px 0; }
+nav.tabs a { text-decoration: none; color: var(--muted); font-weight: 600; font-size: 13px; padding: 7px 12px 9px; border-bottom: 2px solid transparent; white-space: nowrap; }
+nav.tabs a[aria-current="page"] { color: var(--fg); border-bottom-color: var(--accent); }
+nav.tabs a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+main { padding-block: 20px 60px; }
+section.view > * + * { margin-top: 28px; }
+h2 { font-size: 17px; margin: 0 0 6px; text-wrap: balance; letter-spacing: -0.01em; }
+h3 { font-size: 14px; margin: 0 0 4px; }
+p { margin: 0 0 8px; max-width: 78ch; }
+.lede { font-size: 15px; color: var(--fg); max-width: 78ch; }
+.note { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
+.eyebrow { text-transform: uppercase; letter-spacing: 0.06em; font-size: 11px; font-weight: 700; color: var(--muted); }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; min-width: 0; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.mini-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.mini { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px 2px; background: var(--surface); min-width: 0; }
+.mini .t { font-size: 12px; font-weight: 600; display: flex; justify-content: space-between; gap: 6px; }
+.mini .t span { color: var(--muted); font-weight: 400; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
+.stat .v { font-size: 24px; font-weight: 700; font-family: var(--font-data); letter-spacing: -0.02em; }
+.stat .k { color: var(--muted); font-size: 12px; }
+.controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin-bottom: 10px; }
+.controls label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); font-weight: 600; }
+select, input[type="search"] { font: inherit; font-size: 13px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--fg); max-width: 100%; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { font: inherit; font-size: 12.5px; font-weight: 600; padding: 5px 10px; border: 0; background: var(--surface); color: var(--fg); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table.t { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+table.t th, table.t td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+table.t th:first-child, table.t td:first-child, table.t .l { text-align: left; }
+table.t th { font-weight: 600; color: var(--muted); background: var(--surface); position: sticky; top: 0; }
+table.t th.sort { cursor: pointer; user-select: none; }
+table.t th.sort::after { content: " ↕"; opacity: 0.35; }
+table.t th[aria-sort="ascending"]::after { content: " ↑"; opacity: 1; }
+table.t th[aria-sort="descending"]::after { content: " ↓"; opacity: 1; }
+table.t td.wrap { white-space: normal; min-width: 160px; }
+table.t tbody tr:hover td { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+table.heat td.c { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.scroll { max-height: 520px; overflow: auto; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin: 4px 0 6px; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 5px; }
+.legend i.line { height: 3px; border-radius: 2px; vertical-align: 3px; }
+.chart { width: 100%; min-width: 0; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart canvas { display: block; width: 100%; }
+svg text { fill: var(--muted); font-family: var(--font-body); font-size: 11px; }
+svg .ax line, svg .ax path { stroke: var(--line); }
+svg .gl { stroke: var(--grid); }
+svg .lab { fill: var(--fg); font-size: 11.5px; }
+svg .hit { fill: transparent; cursor: crosshair; }
+#tip { position: fixed; z-index: 100; pointer-events: none; background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; font-size: 12px; box-shadow: 0 4px 14px rgb(0 0 0 / 0.14); max-width: 320px; }
+#tip b { font-weight: 600; }
+#tip .r { display: flex; justify-content: space-between; gap: 14px; }
+#tip .r span:last-child { font-family: var(--font-data); }
+#tip i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; }
+.pill { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); }
+.callout { border-left: 3px solid var(--accent); padding: 6px 12px; background: var(--surface); border-radius: 0 6px 6px 0; }
+.empty { color: var(--muted); font-style: italic; padding: 12px 0; }
+.docs h2 { margin-top: 8px; }
+.docs table.t th, .docs table.t td { text-align: left; }
+.docs table.t td.num { text-align: right; }
+.docs h3 { margin-top: 16px; }
+.docs ul, .docs ol { margin: 0 0 8px; padding-left: 20px; max-width: 78ch; }
+.docs li { margin-bottom: 3px; }
+.flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12.5px; }
+.flow span.box { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 5px 9px; }
+.flow span.arr { color: var(--muted); }
+.toc { columns: 2; font-size: 13px; }
+@media (max-width: 860px) {
+  .grid2, .grid3 { grid-template-columns: minmax(0, 1fr); }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .toc { columns: 1; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+<!--BODY-->
+<header class="top">
+  <div class="wrap">
+    <div class="toprow">
+      <h1>River Finder ML</h1>
+      <span class="meta" id="meta"></span>
+      <a class="back" href="index.html">← Map viewer</a>
+    </div>
+    <nav class="tabs" aria-label="Sections">
+      <a href="#overview">Overview</a>
+      <a href="#data">Data</a>
+      <a href="#separation">Separation</a>
+      <a href="#models">Models (CV)</a>
+      <a href="#registry">Registry</a>
+      <a href="#docs">Documentation</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+  <section class="view" id="v-overview"></section>
+  <section class="view" id="v-data" hidden></section>
+  <section class="view" id="v-separation" hidden></section>
+  <section class="view" id="v-models" hidden></section>
+  <section class="view" id="v-registry" hidden></section>
+  <section class="view docs" id="v-docs" hidden></section>
+</main>
+<div id="tip" hidden></div>
+<script>
+const D = %%DATA%%;
+(() => {
+"use strict";
+const E = D.explore, R = D.results, REG = D.registry, ZOO = D.zoo || [];
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const NZ = (v) => v == null ? "–" : Number(v).toLocaleString("en-NZ");
+const F3 = (v) => v == null || Number.isNaN(v) ? "–" : Number(v).toFixed(3);
+const F2 = (v) => v == null || Number.isNaN(v) ? "–" : Number(v).toFixed(2);
+const F1 = (v) => v == null || Number.isNaN(v) ? "–" : Number(v).toFixed(1);
+const P1 = (v) => v == null || Number.isNaN(v) ? "–" : (100 * v).toFixed(1) + "%";
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const SLOT = (i) => `var(--s${(i % 8) + 1})`;
+const STYLE_ORDER = E ? E.styles : [];
+const SL = (s) => (E && E.style_labels[s]) || s;
+const SHORT_STYLE = { too_small_or_unrunnable: "Too small", bedrock_slides_and_gorges: "Bedrock", boulder_garden_creek: "Boulder garden",
+  pool_drop_steep_creek: "Pool-drop", continuous_read_and_run: "Read-and-run", easy_pool_riffle: "Pool-riffle" };
+const FEAT = E ? Object.fromEntries(E.features.map((f) => [f.id, f])) : {};
+
+// ---------------------------------------------------------------- tooltip
+const tip = $("tip");
+function showTip(ev, html) {
+  tip.innerHTML = html; tip.hidden = false;
+  const r = tip.getBoundingClientRect(), pad = 12;
+  let x = ev.clientX + pad, y = ev.clientY + pad;
+  if (x + r.width > innerWidth - 8) x = ev.clientX - r.width - pad;
+  if (y + r.height > innerHeight - 8) y = ev.clientY - r.height - pad;
+  tip.style.left = Math.max(8, x) + "px"; tip.style.top = Math.max(8, y) + "px";
+}
+const hideTip = () => { tip.hidden = true; };
+const tr = (color, label, value) => `<div class="r"><span>${color ? `<i style="background:${color}"></i>` : ""}${esc(label)}</span><span>${value}</span></div>`;
+
+// ---------------------------------------------------------------- svg kit
+const NS = "http://www.w3.org/2000/svg";
+function S(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) if (attrs[k] != null) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function lin(d0, d1, r0, r1) { const k = (r1 - r0) / ((d1 - d0) || 1); const f = (v) => r0 + (v - d0) * k; f.inv = (p) => d0 + (p - r0) / k; return f; }
+function ticks(lo, hi, n = 5) {
+  const span = hi - lo; if (!(span > 0)) return [lo];
+  const s0 = span / n, mag = 10 ** Math.floor(Math.log10(s0)), e = s0 / mag;
+  const step = (e >= 7.5 ? 10 : e >= 3.5 ? 5 : e >= 1.5 ? 2 : 1) * mag, out = [];
+  for (let v = Math.ceil(lo / step - 1e-9) * step; v <= hi + 1e-9 * step; v += step) out.push(+v.toFixed(10));
+  return out;
+}
+const tfmt = (v) => Math.abs(v) >= 1000 ? NZ(Math.round(v)) : Math.abs(v) >= 10 ? String(+v.toFixed(1)) : String(+v.toFixed(2));
+function frame(el, { h = 220, m = {}, xlabel = "", ylabel = "" } = {}) {
+  el.innerHTML = "";
+  const W = Math.max(280, Math.round(el.clientWidth || 600));
+  const M = { t: 10, r: 14, b: xlabel ? 38 : 24, l: ylabel ? 52 : 44, ...m };
+  const svg = S("svg", { viewBox: `0 0 ${W} ${h}`, role: "img" }, el);
+  const iw = W - M.l - M.r, ih = h - M.t - M.b;
+  const g = S("g", { transform: `translate(${M.l},${M.t})` }, svg);
+  if (xlabel) S("text", { x: M.l + iw / 2, y: h - 4, "text-anchor": "middle" }, svg).textContent = xlabel;
+  if (ylabel) { const t = S("text", { transform: `translate(12,${M.t + ih / 2}) rotate(-90)`, "text-anchor": "middle" }, svg); t.textContent = ylabel; }
+  return { svg, g, iw, ih, W, h, M };
+}
+function axes(F, x, y, { xt, yt, xf = tfmt, yf = tfmt, grid = true } = {}) {
+  const ax = S("g", { class: "ax" }, F.g);
+  (yt || []).forEach((v) => {
+    if (grid) S("line", { x1: 0, x2: F.iw, y1: y(v), y2: y(v), class: "gl" }, ax);
+    S("text", { x: -6, y: y(v) + 3.5, "text-anchor": "end" }, ax).textContent = yf(v);
+  });
+  S("line", { x1: 0, x2: F.iw, y1: F.ih, y2: F.ih }, ax);
+  (xt || []).forEach((v) => {
+    S("line", { x1: x(v), x2: x(v), y1: F.ih, y2: F.ih + 4 }, ax);
+    S("text", { x: x(v), y: F.ih + 16, "text-anchor": "middle" }, ax).textContent = xf(v);
+  });
+}
+function legend(el, items) {
+  const d = document.createElement("div"); d.className = "legend";
+  d.innerHTML = items.map((it) => `<span><i class="${it.line ? "line" : ""}" style="background:${it.color}"></i>${esc(it.label)}</span>`).join("");
+  el.prepend(d);
+}
+
+// overlaid histogram (step areas), share or count
+function histChart(el, { edges, series, mode = "share", xlabel = "", h = 220, compact = false }) {
+  const F = frame(el, { h, xlabel: compact ? "" : xlabel, ylabel: compact ? "" : (mode === "share" ? "Share of reaches" : "Reaches"), m: compact ? { l: 30, b: 18, t: 4, r: 6 } : {} });
+  const n = edges.length - 1;
+  const vals = series.map((s) => { const tot = s.counts.reduce((a, b) => a + b, 0) || 1; return s.counts.map((c) => mode === "share" ? c / tot : c); });
+  const ymax = Math.max(1e-9, ...vals.flat()) * 1.08;
+  const x = lin(edges[0], edges[n], 0, F.iw), y = lin(0, ymax, F.ih, 0);
+  axes(F, x, y, { xt: ticks(edges[0], edges[n], compact ? 3 : 6), yt: ticks(0, ymax, compact ? 2 : 4), yf: mode === "share" ? (v) => (100 * v).toFixed(v < 0.1 ? 1 : 0) + "%" : tfmt });
+  series.forEach((s, k) => {
+    const v = vals[k]; let d = `M${x(edges[0])},${y(0)}`;
+    for (let i = 0; i < n; i++) d += `L${x(edges[i])},${y(v[i])}L${x(edges[i + 1])},${y(v[i])}`;
+    d += `L${x(edges[n])},${y(0)}`;
+    S("path", { d: d + "Z", fill: s.color, "fill-opacity": 0.16, stroke: "none" }, F.g);
+    S("path", { d, fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linejoin": "round" }, F.g);
+  });
+  const band = S("rect", { y: 0, height: F.ih, fill: "var(--fg)", "fill-opacity": 0.06, visibility: "hidden" }, F.g);
+  for (let i = 0; i < n; i++) {
+    const r = S("rect", { x: x(edges[i]), y: 0, width: Math.max(1, x(edges[i + 1]) - x(edges[i])), height: F.ih, class: "hit" }, F.g);
+    r.addEventListener("pointermove", (ev) => {
+      band.setAttribute("x", x(edges[i])); band.setAttribute("width", x(edges[i + 1]) - x(edges[i])); band.setAttribute("visibility", "visible");
+      showTip(ev, `<b>${tfmt(edges[i])} – ${tfmt(edges[i + 1])}</b>` + series.map((s, k) => tr(s.color, s.label, `${(100 * (s.counts[i] / (s.counts.reduce((a, b) => a + b, 0) || 1))).toFixed(1)}% · ${NZ(s.counts[i])}`)).join(""));
+    });
+    r.addEventListener("pointerleave", () => { band.setAttribute("visibility", "hidden"); hideTip(); });
+  }
+  return F;
+}
+
+// rows of paired box plots (p5, p25, p50, p75, p95) for background and positives
+function boxRows(el, { rows, xlabel = "", domain }) {
+  const rh = 30, h = rows.length * rh + 44;
+  const F = frame(el, { h, xlabel, m: { l: 130, t: 6 } });
+  const all = rows.flatMap((r) => [r.a, r.b].filter(Boolean).flat());
+  const dom = domain || [Math.min(...all), Math.max(...all)];
+  const x = lin(dom[0], dom[1], 0, F.iw);
+  axes(F, x, null, { xt: ticks(dom[0], dom[1], 6) });
+  ticks(dom[0], dom[1], 6).forEach((v) => S("line", { x1: x(v), x2: x(v), y1: 0, y2: F.ih, class: "gl" }, F.g));
+  rows.forEach((r, i) => {
+    const y0 = i * rh + 4;
+    S("text", { x: -8, y: y0 + 15, "text-anchor": "end", class: "lab" }, F.g).textContent = r.label;
+    [["a", "var(--bgr)", 3], ["b", "var(--pos)", 15]].forEach(([k, c, dy]) => {
+      const q = r[k]; if (!q) return;
+      const yy = y0 + dy;
+      S("line", { x1: x(q[0]), x2: x(q[4]), y1: yy + 4, y2: yy + 4, stroke: c, "stroke-width": 1.5 }, F.g);
+      S("rect", { x: x(q[1]), y: yy, width: Math.max(2, x(q[3]) - x(q[1])), height: 8, rx: 2, fill: c, "fill-opacity": 0.35, stroke: c, "stroke-width": 1 }, F.g);
+      S("line", { x1: x(q[2]), x2: x(q[2]), y1: yy - 1, y2: yy + 9, stroke: c, "stroke-width": 2.5 }, F.g);
+    });
+    const hit = S("rect", { x: -120, y: y0, width: F.iw + 120, height: rh - 2, class: "hit" }, F.g);
+    hit.addEventListener("pointermove", (ev) => showTip(ev, `<b>${esc(r.label)}</b>` +
+      (r.a ? tr("var(--bgr)", `Background (n=${NZ(r.na)})`, r.a.map(tfmt).join(" · ")) : "") +
+      (r.b ? tr("var(--pos)", `Known runs (n=${NZ(r.nb)})`, r.b.map(tfmt).join(" · ")) : "") +
+      `<div class="note">p5 · p25 · median · p75 · p95</div>`));
+    hit.addEventListener("pointerleave", hideTip);
+  });
+}
+
+// dot + whisker rows (x = value), optional several series per row
+function dotRows(el, { rows, series, domain, ref = null, xlabel = "", fmt = F3, labelW = 170 }) {
+  const rh = series.length > 1 ? 14 + 7 * series.length : 24, h = rows.length * rh + 44;
+  const F = frame(el, { h, xlabel, m: { l: labelW, t: 6 } });
+  const x = lin(domain[0], domain[1], 0, F.iw);
+  axes(F, x, null, { xt: ticks(domain[0], domain[1], 6), xf: (v) => +v.toFixed(2) });
+  ticks(domain[0], domain[1], 6).forEach((v) => S("line", { x1: x(v), x2: x(v), y1: 0, y2: F.ih, class: "gl" }, F.g));
+  if (ref != null) S("line", { x1: x(ref), x2: x(ref), y1: 0, y2: F.ih, stroke: "var(--muted)", "stroke-dasharray": "3 3" }, F.g);
+  const cl = (v) => Math.max(domain[0], Math.min(domain[1], v));
+  rows.forEach((r, i) => {
+    const y0 = i * rh + 4;
+    S("text", { x: -8, y: y0 + rh / 2 + 1, "text-anchor": "end", class: "lab" }, F.g).textContent = r.label;
+    series.forEach((s, k) => {
+      const v = r.values[k]; if (v == null) return;
+      const yy = y0 + (series.length > 1 ? 7 + k * 7 : rh / 2 - 2);
+      const lo = r.lo ? r.lo[k] : null, hi = r.hi ? r.hi[k] : null;
+      if (r.lo2 && r.lo2[k] != null) S("line", { x1: x(cl(r.lo2[k])), x2: x(cl(r.hi2[k])), y1: yy, y2: yy, stroke: s.color, "stroke-width": 1, "stroke-opacity": 0.6 }, F.g);
+      if (lo != null && hi != null) S("line", { x1: x(cl(lo)), x2: x(cl(hi)), y1: yy, y2: yy, stroke: s.color, "stroke-width": 2 }, F.g);
+      S("circle", { cx: x(cl(v)), cy: yy, r: 4.5, fill: s.color, stroke: "var(--surface)", "stroke-width": 1.5 }, F.g);
+    });
+    const hit = S("rect", { x: -labelW + 4, y: y0, width: F.iw + labelW - 4, height: rh - 2, class: "hit" }, F.g);
+    hit.addEventListener("pointermove", (ev) => showTip(ev, `<b>${esc(r.label)}</b>` + series.map((s, k) =>
+      tr(s.color, s.label, r.values[k] == null ? "–" : fmt(r.values[k]) + (r.lo && r.lo[k] != null ? ` (${fmt(r.lo[k])}–${fmt(r.hi[k])})` : ""))).join("") + (r.note ? `<div class="note">${esc(r.note)}</div>` : "")));
+    hit.addEventListener("pointerleave", hideTip);
+  });
+}
+
+// multi-series line chart with crosshair
+function lineChart(el, { series, xdomain, ydomain, xlabel, ylabel, diag = false, h = 300, xf = tfmt, yf = tfmt }) {
+  const F = frame(el, { h, xlabel, ylabel });
+  const x = lin(xdomain[0], xdomain[1], 0, F.iw), y = lin(ydomain[0], ydomain[1], F.ih, 0);
+  axes(F, x, y, { xt: ticks(...xdomain, 5), yt: ticks(...ydomain, 5), xf, yf });
+  if (diag) S("line", { x1: x(xdomain[0]), y1: y(ydomain[0]), x2: x(xdomain[1]), y2: y(ydomain[1]), stroke: "var(--muted)", "stroke-dasharray": "3 3" }, F.g);
+  series.forEach((s) => S("path", { d: s.x.map((v, i) => `${i ? "L" : "M"}${x(v).toFixed(1)},${y(s.y[i]).toFixed(1)}`).join(""), fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linejoin": "round" }, F.g));
+  const cross = S("line", { y1: 0, y2: F.ih, stroke: "var(--muted)", visibility: "hidden" }, F.g);
+  const hit = S("rect", { x: 0, y: 0, width: F.iw, height: F.ih, class: "hit" }, F.g);
+  hit.addEventListener("pointermove", (ev) => {
+    const pt = F.svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
+    const p = pt.matrixTransform(F.g.getScreenCTM().inverse());
+    const xv = x.inv(p.x), s0 = series[0];
+    let j = 0; for (let i = 1; i < s0.x.length; i++) if (Math.abs(s0.x[i] - xv) < Math.abs(s0.x[j] - xv)) j = i;
+    cross.setAttribute("x1", x(s0.x[j])); cross.setAttribute("x2", x(s0.x[j])); cross.setAttribute("visibility", "visible");
+    const rows = series.map((s) => [s, s.y[j]]).sort((a, b) => b[1] - a[1]);
+    showTip(ev, `<b>${esc(xlabel)} ${xf(s0.x[j])}</b>` + rows.map(([s, v]) => tr(s.color, s.label, yf(v))).join(""));
+  });
+  hit.addEventListener("pointerleave", () => { cross.setAttribute("visibility", "hidden"); hideTip(); });
+}
+
+// horizontal bars (signed or not)
+function barsH(el, { rows, xlabel = "", fmt = F3, signed = false, labelW = 160 }) {
+  const rh = 22, h = rows.length * rh + 44;
+  const F = frame(el, { h, xlabel, m: { l: labelW, t: 6 } });
+  const vmax = Math.max(1e-9, ...rows.map((r) => Math.abs(r.v)));
+  const x = signed ? lin(-vmax, vmax, 0, F.iw) : lin(0, vmax * 1.05, 0, F.iw);
+  const xt = signed ? ticks(-vmax, vmax, 6) : ticks(0, vmax * 1.05, 5);
+  axes(F, x, null, { xt, xf: (v) => tfmt(v) });
+  xt.forEach((v) => S("line", { x1: x(v), x2: x(v), y1: 0, y2: F.ih, class: "gl" }, F.g));
+  const x0 = x(0);
+  rows.forEach((r, i) => {
+    const y0 = i * rh + 4, xe = x(r.v);
+    S("text", { x: -8, y: y0 + 12, "text-anchor": "end", class: "lab" }, F.g).textContent = r.label;
+    const w = Math.abs(xe - x0), rx = Math.min(4, w / 2);
+    S("rect", { x: Math.min(x0, xe), y: y0 + 2, width: Math.max(1, w), height: rh - 8, rx, fill: r.color || (r.v >= 0 ? "var(--s1)" : "var(--s8)") }, F.g);
+    const hit = S("rect", { x: -labelW + 4, y: y0, width: F.iw + labelW - 4, height: rh - 1, class: "hit" }, F.g);
+    hit.addEventListener("pointermove", (ev) => showTip(ev, `<b>${esc(r.label)}</b>${tr(null, r.what || "Value", fmt(r.v))}${r.note ? `<div class="note">${esc(r.note)}</div>` : ""}`));
+    hit.addEventListener("pointerleave", hideTip);
+  });
+  if (signed) S("line", { x1: x0, x2: x0, y1: 0, y2: F.ih, stroke: "var(--muted)" }, F.g);
+}
+
+// 100% stacked horizontal bars
+function stack100(el, { rows, cats, labelW = 150, xlabel = "Share of reaches" }) {
+  const rh = 22, h = rows.length * rh + 44;
+  const F = frame(el, { h, xlabel, m: { l: labelW, t: 6 } });
+  const x = lin(0, 1, 0, F.iw);
+  axes(F, x, null, { xt: [0, 0.25, 0.5, 0.75, 1], xf: (v) => (100 * v) + "%" });
+  rows.forEach((r, i) => {
+    const y0 = i * rh + 4, tot = r.parts.reduce((a, b) => a + b, 0) || 1;
+    S("text", { x: -8, y: y0 + 12, "text-anchor": "end", class: "lab" }, F.g).textContent = r.label;
+    let acc = 0;
+    r.parts.forEach((p, k) => {
+      const w = x(p / tot) - x(0); if (w <= 0) { return; }
+      const seg = S("rect", { x: x(acc / tot) + (acc ? 1 : 0), y: y0 + 2, width: Math.max(0.5, w - (acc ? 1 : 0)), height: rh - 8, fill: cats[k].color }, F.g);
+      seg.addEventListener("pointermove", (ev) => showTip(ev, `<b>${esc(r.label)}</b>` + r.parts.map((q, j) => tr(cats[j].color, cats[j].label, `${(100 * q / tot).toFixed(1)}% · ${NZ(q)}`)).join("")));
+      seg.addEventListener("pointerleave", hideTip);
+      acc += p;
+    });
+  });
+  legend(el, cats);
+}
+
+// colour scales
+function mix(a, b, t) {
+  const pa = a.match(/\w\w/g).map((h) => parseInt(h, 16)), pb = b.match(/\w\w/g).map((h) => parseInt(h, 16));
+  return "#" + pa.map((v, i) => Math.round(v + (pb[i] - v) * t).toString(16).padStart(2, "0")).join("");
+}
+function ramp(stops, t) { t = Math.max(0, Math.min(1, t)); const k = t * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(k)); return mix(stops[i], stops[i + 1], k - i); }
+const seqStops = () => ["--seq0", "--seq1", "--seq2", "--seq3", "--seq4", "--seq5"].map(css);
+const divStops = () => ["--div-lo", "--div-lo2", "--div-mid", "--div-hi2", "--div-hi"].map(css);
+function ink(hex) { const [r, g, b] = hex.match(/\w\w/g).map((h) => parseInt(h, 16) / 255); const L = 0.2126 * r + 0.7152 * g + 0.0722 * b; return L > 0.5 ? "#111" : "#fff"; }
+// AUC: 0.5 = neutral, 1 = deep blue, 0 = deep red (anchored at 0.25 / 0.75 for contrast)
+const aucColor = (v) => v == null ? null : ramp(divStops(), (v - 0.5) / 0.6 + 0.5);
+const corrColor = (v) => v == null ? null : ramp(divStops(), (v + 1) / 2);
+
+// HTML heat table: rows x cols with coloured cells
+function heatTable(el, { cols, rows, color, fmt = F3, corner = "", sub = null, titleCols = null }) {
+  const head = `<tr><th>${esc(corner)}</th>${cols.map((c, j) => `<th title="${esc(titleCols ? titleCols[j] : c)}">${esc(c)}</th>`).join("")}</tr>`;
+  const body = rows.map((r) => `<tr><td class="l">${esc(r.label)}${r.sub ? ` <span class="note">${esc(r.sub)}</span>` : ""}</td>${r.cells.map((v, j) => {
+    const c = color(v, j);
+    return `<td class="c" ${c ? `style="background:${c};color:${ink(c)}"` : ""} title="${esc(r.label)} · ${esc(cols[j])}${r.tips ? " · " + esc(r.tips[j]) : ""}">${v == null ? "–" : fmt(v, j)}</td>`;
+  }).join("")}</tr>`).join("");
+  el.innerHTML = `<div class="tablewrap"><table class="t heat"><thead>${head}</thead><tbody>${body}</tbody></table></div>${sub ? `<p class="note" style="margin-top:6px">${sub}</p>` : ""}`;
+}
+
+// sortable table
+function table(el, { cols, rows, sort = null, desc = true, maxH = null }) {
+  let key = sort, dir = desc ? -1 : 1;
+  const draw = () => {
+    const rs = key ? [...rows].sort((a, b) => { const va = a[key], vb = b[key]; if (va == null) return 1; if (vb == null) return -1; return (va > vb ? 1 : va < vb ? -1 : 0) * dir; }) : rows;
+    el.innerHTML = `<div class="tablewrap ${maxH ? "scroll" : ""}"><table class="t"><thead><tr>${cols.map((c) => `<th class="sort ${c.l ? "l" : ""}" data-k="${c.k}" ${key === c.k ? `aria-sort="${dir < 0 ? "descending" : "ascending"}"` : ""} title="${esc(c.title || "")}">${esc(c.h)}</th>`).join("")}</tr></thead><tbody>${
+      rs.map((r) => `<tr>${cols.map((c) => `<td class="${c.l ? "l" : ""} ${c.wrap ? "wrap" : ""} ${c.mono ? "num" : ""}">${c.f ? c.f(r[c.k], r) : esc(r[c.k])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+    el.querySelectorAll("th.sort").forEach((th) => th.addEventListener("click", () => {
+      const k = th.dataset.k; if (key === k) dir = -dir; else { key = k; dir = -1; } draw();
+    }));
+  };
+  draw();
+}
+
+// 2D density (canvas) with positives on top
+function density2d(el, { grid, xe, ye, px, py, xlabel, ylabel, h = 340 }) {
+  el.innerHTML = "";
+  const W = Math.max(280, Math.round(el.clientWidth || 600)), M = { t: 8, r: 12, b: 38, l: 52 };
+  const wrap = document.createElement("div"); wrap.style.position = "relative"; el.appendChild(wrap);
+  const cv = document.createElement("canvas"); const dpr = window.devicePixelRatio || 1;
+  cv.width = W * dpr; cv.height = h * dpr; cv.style.height = h + "px"; wrap.appendChild(cv);
+  const ctx = cv.getContext("2d"); ctx.scale(dpr, dpr);
+  const iw = W - M.l - M.r, ih = h - M.t - M.b;
+  const x = lin(xe[0], xe[xe.length - 1], M.l, M.l + iw), y = lin(ye[0], ye[ye.length - 1], M.t + ih, M.t);
+  const mx = Math.max(1, ...grid.flat()), st = seqStops();
+  ctx.fillStyle = css("--surface"); ctx.fillRect(M.l, M.t, iw, ih);
+  grid.forEach((row, j) => row.forEach((c, i) => {
+    if (!c) return; ctx.fillStyle = ramp(st, 0.12 + 0.88 * Math.log1p(c) / Math.log1p(mx));
+    ctx.fillRect(x(xe[i]), y(ye[j + 1]), x(xe[i + 1]) - x(xe[i]) + 0.5, y(ye[j]) - y(ye[j + 1]) + 0.5);
+  }));
+  ctx.fillStyle = css("--s2"); ctx.strokeStyle = css("--surface"); ctx.lineWidth = 1;
+  for (let k = 0; k < px.length; k++) { ctx.beginPath(); ctx.arc(x(px[k]), y(py[k]), 2.6, 0, 6.2832); ctx.fill(); ctx.stroke(); }
+  ctx.fillStyle = css("--muted"); ctx.font = "11px " + css("--font-body"); ctx.strokeStyle = css("--line");
+  ticks(xe[0], xe[xe.length - 1], 6).forEach((v) => { ctx.textAlign = "center"; ctx.fillText(tfmt(v), x(v), M.t + ih + 15); });
+  ticks(ye[0], ye[ye.length - 1], 5).forEach((v) => { ctx.textAlign = "right"; ctx.fillText(tfmt(v), M.l - 6, y(v) + 3.5); });
+  ctx.textAlign = "center"; ctx.fillText(xlabel, M.l + iw / 2, h - 4);
+  ctx.save(); ctx.translate(12, M.t + ih / 2); ctx.rotate(-Math.PI / 2); ctx.fillText(ylabel, 0, 0); ctx.restore();
+  ctx.strokeRect(M.l, M.t, iw, ih);
+  cv.addEventListener("pointermove", (ev) => {
+    const r = cv.getBoundingClientRect(), xv = x.inv((ev.clientX - r.left) * W / r.width), yv = y.inv((ev.clientY - r.top) * h / r.height);
+    const i = xe.findIndex((e, k) => k < xe.length - 1 && xv >= e && xv < xe[k + 1]), j = ye.findIndex((e, k) => k < ye.length - 1 && yv >= e && yv < ye[k + 1]);
+    if (i < 0 || j < 0) { hideTip(); return; }
+    let np = 0; for (let k = 0; k < px.length; k++) if (px[k] >= xe[i] && px[k] < xe[i + 1] && py[k] >= ye[j] && py[k] < ye[j + 1]) np++;
+    showTip(ev, `<b>${tfmt(xe[i])}–${tfmt(xe[i + 1])} m/km · 10^${tfmt(ye[j])}–10^${tfmt(ye[j + 1])} m³/s</b>${tr("var(--s1)", "Background reaches", NZ(grid[j][i]))}${tr("var(--s2)", "Known-run reaches", NZ(np))}`);
+  });
+  cv.addEventListener("pointerleave", hideTip);
+}
+
+function select(id, opts, value) {
+  const s = $(id); s.innerHTML = opts.map(([v, l]) => `<option value="${esc(v)}" ${v === value ? "selected" : ""}>${esc(l)}</option>`).join(""); return s;
+}
+function seg(id, opts, value, on) {
+  const el = $(id); el.innerHTML = opts.map(([v, l]) => `<button type="button" data-v="${v}" aria-pressed="${v === value}">${esc(l)}</button>`).join("");
+  el.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { el.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); on(b.dataset.v); }));
+}
+const missing = (what, cmd) => `<p class="empty">${esc(what)} not computed yet. Run <code>${esc(cmd)}</code> and rebuild the page.</p>`;
+
+// ---------------------------------------------------------------- views
+const renders = {};   // view -> function (re-run on resize / theme change)
+const MODEL_COLOR = Object.fromEntries(ZOO.map((m, i) => [m.id, SLOT(i)]));
+const MODELS = R ? R.models : [];
+const METRIC_LABEL = { auc_style: "Style-matched AUC", auc: "AUC", auc_size: "Size-matched AUC", auc_style_size: "Style × size AUC",
+  recall_top10: "Recall @ top 10%", recall_top5: "Recall @ top 5%", median_pct: "Median percentile" };
+
+const OV_SERIES = [{ label: "Style-matched AUC", color: "var(--s1)" }, { label: "Style × size AUC", color: "var(--s2)" }];
+renders.overview = () => {
+  const v = $("v-overview");
+  const T = E ? E.total : null;
+  // the best model without coordinates: coordinates can learn where the guide authors paddled
+  const noXY = MODELS.filter((m) => !m.features.includes("x_km"));
+  const best = noXY.length ? [...noXY].sort((a, b) => b.cv.auc_style_size.mean - a.cv.auc_style_size.mean)[0] : null;
+  v.innerHTML = `
+  <div>
+    <p class="eyebrow">River Finder · model evaluation</p>
+    <h2>How well does each model find known whitewater it has not seen?</h2>
+    <p class="lede">Every reach in New Zealand draining ${E ? E.domain_km2 : 2}&nbsp;km² or more gets a score from a model that never saw its catchment. Known guide runs should rank high, against reaches of the <b>same paddling style</b>. Style comes from the Montgomery &amp; Buffington (1997) reach type of each reach (see <a href="#docs">Documentation</a>), so a model gains nothing just for preferring steep creeks over lowland rivers.</p>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="v">${T ? NZ(T.background + T.positives) : "–"}</div><div class="k">reaches in the domain (≥ ${E ? E.domain_km2 : 2} km², about 250 m each)</div></div>
+    <div class="stat"><div class="v">${T ? NZ(T.positives) : "–"}</div><div class="k">known-run reaches on ${T ? NZ(T.rivers) : "–"} rivers (positives)</div></div>
+    <div class="stat"><div class="v">${best ? F3(best.cv.auc_style_size.mean) : "–"}</div><div class="k">best style × size AUC without coordinates (${best ? esc(best.title) : "no CV yet"}; style-matched ${best ? F3(best.cv.auc_style.mean) : "–"})</div></div>
+    <div class="stat"><div class="v">${R ? `${R.repeats}×${R.folds}` : "–"}</div><div class="k">repeated catchment-grouped folds, plus leave-one-region-out</div></div>
+  </div>
+  <div class="panel"><h3>Style-matched and style × size AUC by model</h3><p class="note">Mean over ${R ? R.repeats : 5} repeats of the 5-fold split; whiskers ± 1 sd over repeats (thin line: ± 1 sd over single folds). Grey dash: chance. Higher is better; both are lower bounds because the background still holds undiscovered runs. Style is set by slope and confinement only, so style matching alone does not control river size: within a style, bigger rivers still win, and flood size alone scores high. Style × size also matches the flood quintile, so it separates the models more clearly.</p><div class="chart" id="ov-dots"></div></div>
+  <div><h2>All headline metrics</h2><div id="ov-table"></div></div>
+  <div class="grid2">
+    <div class="panel"><h3>What the metrics mean</h3>
+      <ul class="note" style="padding-left:18px;margin:0">
+        <li><b>AUC</b>: chance that a known-run reach outranks a random background reach. Size alone scores high here.</li>
+        <li><b>Size-matched</b>: the same, comparing only with background reaches in the same mean-annual-flood decile.</li>
+        <li><b>Style-matched (headline)</b>: comparing only with background reaches of the same paddling style.</li>
+        <li><b>Style × size</b>: same style and same flood quintile.</li>
+        <li><b>Recall @ top 10%</b>: share of known-run reaches in the top 10% of all background scores.</li>
+        <li><b>LORO</b>: style-matched AUC when a whole guide region is held out (mean over regions).</li>
+      </ul></div>
+    <div class="panel"><h3>Reading the gap between CV and LORO</h3><p class="note">Folds hold out whole sea-outlet catchments, so a model never trains on the river it is tested on. Neighbouring catchments still share geology, climate and the same guide authors, so CV can be optimistic. Leave-one-region-out removes a whole region at once; a model whose score drops much more there than others leans on region-specific patterns. <code>gbm_xy</code> (with coordinates) is included to show that effect.</p></div>
+  </div>`;
+  if (!R) { $("ov-dots").innerHTML = missing("Cross-validation results", "uv run river-finder ml cv"); $("ov-table").innerHTML = ""; return; }
+  const ms = MODELS;
+  dotRows($("ov-dots"), {
+    rows: ms.map((m) => {
+      const a = m.cv.auc_style, b = m.cv.auc_style_size;
+      return { label: m.title, values: [a.mean, b.mean], lo: [a.mean - a.sd, b.mean - b.sd], hi: [a.mean + a.sd, b.mean + b.sd],
+        lo2: [a.mean - (a.fold_sd || 0), b.mean - (b.fold_sd || 0)], hi2: [a.mean + (a.fold_sd || 0), b.mean + (b.fold_sd || 0)],
+        note: `${m.description} Fold sd ${F3(a.fold_sd)} (style), ${F3(b.fold_sd)} (style × size).` };
+    }), series: OV_SERIES, domain: [0.4, 1], ref: 0.5, xlabel: "AUC (out-of-fold)", labelW: 210 });
+  legend($("ov-dots"), OV_SERIES);
+  // fold-sd underlay
+  const keys = ["auc_style", "auc", "auc_size", "auc_style_size", "recall_top10", "recall_top5"];
+  const loroMean = (m) => { const xs = m.loro.map((r) => r.auc_style).filter((x) => x != null); return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null; };
+  heatTable($("ov-table"), {
+    corner: "Model", cols: [...keys.map((k) => METRIC_LABEL[k]), "LORO style-matched"],
+    rows: ms.map((m) => ({ label: m.title, sub: m.id, cells: [...keys.map((k) => m.cv[k].mean), loroMean(m)],
+      tips: [...keys.map((k) => `sd ${F3(m.cv[k].sd)} over repeats, ${F3(m.cv[k].fold_sd)} over folds`), "mean over held-out regions"] })),
+    color: (val, j) => j === 4 || j === 5 ? ramp(seqStops(), val) : aucColor(val),
+    sub: "Hover a cell for its spread. AUC columns use a diverging scale centred on 0.5 (chance); recall columns a sequential scale." });
+};
+
+let dataState = { feat: "gradient", group: "All", mode: "share", grad: "All" };
+renders.data = () => {
+  const v = $("v-data");
+  if (!E) { v.innerHTML = missing("Data summaries", "uv run river-finder ml explore"); return; }
+  v.innerHTML = `
+  <div><p class="eyebrow">What the data look like</p><h2>Reaches and known runs by region</h2>
+    <p class="note">Background = every reach of ${E.domain_km2} km² or more that no guide section covers. Known runs = reaches on runnable guide sections (positives). Medians are of smoothed gradient (m/km) and mean annual flood (m³/s).</p>
+    <div id="d-regions"></div></div>
+  <div class="grid2">
+    <div class="panel"><h3>Paddling-style mix: background</h3><div class="chart" id="d-style-bg"></div></div>
+    <div class="panel"><h3>Paddling-style mix: known runs</h3><div class="chart" id="d-style-pos"></div></div>
+  </div>
+  <div class="panel"><h3>Feature explorer</h3>
+    <div class="controls">
+      <label for="d-feat">Feature<select id="d-feat"></select></label>
+      <label for="d-group">Subset<select id="d-group"></select></label>
+      <label>Scale<span class="seg" id="d-mode"></span></label>
+    </div>
+    <p class="note" id="d-featdesc"></p>
+    <div class="chart" id="d-hist"></div>
+    <div id="d-q"></div></div>
+  <div><h2 id="d-sm-title">By region</h2><p class="note">Same feature, same bins, one panel per guide region; each series as a share of its own reaches.</p><div class="mini-grid" id="d-sm"></div></div>
+  <div class="grid2">
+    <div class="panel"><h3>Spread by region</h3><p class="note">Boxes p25–p75, whiskers p5–p95, thick tick = median.</p><div class="chart" id="d-box"></div></div>
+    <div class="panel"><h3>Spread by paddling style</h3><p class="note">Within a style the two distributions should overlap more: that is the point of style matching.</p><div class="chart" id="d-box-style"></div></div>
+  </div>
+  <div class="panel"><h3>Gradient × mean annual flood</h3>
+    <div class="controls"><label for="d-grad-r">Region<select id="d-grad-r"></select></label></div>
+    <div class="legend"><span><i style="background:var(--seq3)"></i>Background reaches (density, log colour)</span><span><i style="background:var(--s2)"></i>Known-run reaches</span></div>
+    <div class="chart" id="d-2d"></div></div>
+  <div class="grid2">
+    <div class="panel"><h3>Montgomery &amp; Buffington reach type</h3><p class="note">Track B with slope and confinement only (spec ${esc(E.spec_version)}). Shares within each group.</p><div id="d-rt"></div></div>
+    <div class="panel"><h3>How sure is the style?</h3><p class="note">Distribution of the winning style's probability. Low values mean the reach sits between styles; ${P1(E.reach_type.transitional_bg)} of background and ${P1(E.reach_type.transitional_pos)} of known-run reaches are flagged transitional (top two neighbouring types within 0.15).</p><div class="chart" id="d-stp"></div>
+      <h3 style="margin-top:12px">Confinement</h3><div id="d-conf"></div></div>
+  </div>
+  <div class="panel"><h3>Rock class at the reach (GNS 1:250k)</h3><p class="note">Lift = share among known runs ÷ share among background. Above 1: over-represented on known runs.</p><div id="d-rock"></div></div>
+  <div><h2>Labels</h2><p class="note">Guide sections and how they landed on reaches. Only the extent, status, held-out flag and grade are used; no other guide field reaches a model.</p>
+    <div class="grid3" id="d-labsum"></div>
+    <div class="grid2" style="margin-top:16px"><div class="panel"><h3>Sections by region and grade band</h3><div id="d-rg"></div></div><div class="panel"><h3>Sections by region and coordinate source</h3><div id="d-rc"></div></div></div>
+    <div class="panel" style="margin-top:16px"><h3>Known-run reaches by style and grade band</h3><div id="d-gs"></div></div>
+    <div style="margin-top:16px" class="controls"><label for="d-secq">Filter sections<input type="search" id="d-secq" placeholder="river, region, method…"></label></div>
+    <div id="d-secs"></div></div>`;
+  const regRows = E.by_region.map((r) => ({ ...r }));
+  table($("d-regions"), { sort: "positives", rows: [{ region: "All NZ", ...E.total }, ...regRows], maxH: 520, cols: [
+    { k: "region", h: "Region", l: true },
+    { k: "background", h: "Background", f: NZ, mono: true }, { k: "positives", h: "Known-run reaches", f: NZ, mono: true },
+    { k: "rivers", h: "Rivers", f: NZ, mono: true }, { k: "km", h: "Channel km", f: NZ, mono: true },
+    { k: "median_grad_bg", h: "Grad bg", f: F1, mono: true, title: "median smoothed gradient, background, m/km" },
+    { k: "median_grad_pos", h: "Grad runs", f: F1, mono: true, title: "median smoothed gradient, known runs, m/km" },
+    { k: "median_maf_bg", h: "MAF bg", f: F1, mono: true, title: "median mean annual flood, background, m3/s" },
+    { k: "median_maf_pos", h: "MAF runs", f: F1, mono: true, title: "median mean annual flood, known runs, m3/s" },
+    { k: "karst_bg", h: "Karst bg", f: P1, mono: true, title: "share of background reaches on karst rock" },
+    { k: "falls_pos", h: "Runs w/ falls", f: NZ, mono: true, title: "known-run reaches with an OSM waterfall" },
+    { k: "rapids_pos", h: "Runs w/ rapids", f: NZ, mono: true, title: "known-run reaches with OSM rapids nearby" }] });
+  const cats = STYLE_ORDER.map((s, i) => ({ label: SHORT_STYLE[s] || s, color: SLOT(i) }));
+  stack100($("d-style-bg"), { rows: [{ label: "All NZ", parts: E.total.style_bg }, ...E.by_region.map((r) => ({ label: r.region, parts: r.style_bg }))], cats });
+  stack100($("d-style-pos"), { rows: [{ label: "All NZ", parts: E.total.style_pos }, ...E.by_region.filter((r) => r.positives).map((r) => ({ label: r.region, parts: r.style_pos }))], cats });
+  // feature explorer
+  select("d-feat", E.features.map((f) => [f.id, f.label]), dataState.feat).onchange = (e) => { dataState.feat = e.target.value; drawFeat(); };
+  select("d-group", [["All", "All NZ"], ...E.regions.map((r) => [r, r]), ...STYLE_ORDER.map((s) => ["style:" + s, "Style: " + SL(s)])], dataState.group).onchange = (e) => { dataState.group = e.target.value; drawFeat(); };
+  seg("d-mode", [["share", "Share"], ["count", "Count"]], dataState.mode, (m) => { dataState.mode = m; drawFeat(); });
+  function drawFeat() {
+    const f = FEAT[dataState.feat], H = E.hist[dataState.feat], g = H.groups[dataState.group];
+    $("d-featdesc").textContent = `${f.desc} · units: ${f.unit}.`;
+    histChart($("d-hist"), { edges: H.edges, mode: dataState.mode, xlabel: `${f.label} (${f.unit})`, h: 240,
+      series: [{ label: `Background (${NZ(g.bg.reduce((a, b) => a + b, 0))})`, counts: g.bg, color: "var(--bgr)" },
+               { label: `Known runs (${NZ(g.pos.reduce((a, b) => a + b, 0))})`, counts: g.pos, color: "var(--pos)" }] });
+    legend($("d-hist"), [{ label: "Background reaches", color: "var(--bgr)" }, { label: "Known-run reaches", color: "var(--pos)" }]);
+    const q = (a) => a ? a.map(tfmt).join(" · ") : "–";
+    const sep = E.separation.find((s) => s.feature === dataState.feat);
+    $("d-q").innerHTML = `<p class="note num" style="margin-top:6px">p5 · p25 · median · p75 · p95 — background: ${q(g.q_bg)} | known runs: ${q(g.q_pos)}${sep ? ` | univariate AUC ${F3(sep.auc)}, style-matched ${F3(sep.auc_style)}` : ""}</p>`;
+    $("d-sm-title").textContent = `${f.label} by region`;
+    const sm = $("d-sm"); sm.innerHTML = "";
+    E.regions.forEach((r) => {
+      const gg = H.groups[r]; const box = document.createElement("div"); box.className = "mini";
+      const npos = gg.pos.reduce((a, b) => a + b, 0);
+      box.innerHTML = `<div class="t">${esc(r)}<span>${NZ(npos)} run reaches</span></div><div class="chart"></div>`; sm.appendChild(box);
+      histChart(box.querySelector(".chart"), { edges: H.edges, mode: "share", compact: true, h: 110,
+        series: [{ label: "Background", counts: gg.bg, color: "var(--bgr)" }, ...(npos ? [{ label: "Known runs", counts: gg.pos, color: "var(--pos)" }] : [])] });
+    });
+    const lo = H.edges[0], hi = H.edges[H.edges.length - 1];
+    boxRows($("d-box"), { domain: [lo, hi], xlabel: `${f.label} (${f.unit})`, rows: [["All", "All NZ"], ...E.regions.map((r) => [r, r])].map(([k, l]) => {
+      const gg = H.groups[k]; return { label: l, a: gg.q_bg, b: gg.q_pos, na: gg.bg.reduce((a, b) => a + b, 0), nb: gg.pos.reduce((a, b) => a + b, 0) }; }) });
+    boxRows($("d-box-style"), { domain: [lo, hi], xlabel: `${f.label} (${f.unit})`, rows: STYLE_ORDER.map((s) => {
+      const gg = H.groups["style:" + s]; return { label: SHORT_STYLE[s] || s, a: gg.q_bg, b: gg.q_pos, na: gg.bg.reduce((a, b) => a + b, 0), nb: gg.pos.reduce((a, b) => a + b, 0) }; }) });
+    legend($("d-box"), [{ label: "Background", color: "var(--bgr)" }, { label: "Known runs", color: "var(--pos)" }]);
+    legend($("d-box-style"), [{ label: "Background", color: "var(--bgr)" }, { label: "Known runs", color: "var(--pos)" }]);
+  }
+  drawFeat();
+  select("d-grad-r", [["All", "All NZ"], ...E.regions.map((r) => [r, r])], dataState.grad).onchange = (e) => { dataState.grad = e.target.value; draw2d(); };
+  function draw2d() {
+    const G = E.grad_maf, g = G.groups[dataState.grad];
+    density2d($("d-2d"), { grid: g.bg, xe: G.x.edges, ye: G.y.edges, px: g.pos_x, py: g.pos_y, xlabel: G.x.label, ylabel: G.y.label });
+  }
+  draw2d();
+  // reach types
+  const RTY = E.reach_types, rt = E.reach_type, sb = rt.counts_bg.reduce((a, b) => a + b, 0) || 1, sp = rt.counts_pos.reduce((a, b) => a + b, 0) || 1;
+  table($("d-rt"), { rows: RTY.map((c, i) => ({ type: c.replace("_", "-"), bg: rt.counts_bg[i] / sb, pos: rt.counts_pos[i] / sp, nb: rt.counts_bg[i], np: rt.counts_pos[i], lift: (rt.counts_pos[i] / sp) / Math.max(1e-9, rt.counts_bg[i] / sb) })), cols: [
+    { k: "type", h: "Reach type", l: true }, { k: "nb", h: "Background", f: NZ, mono: true }, { k: "bg", h: "share", f: P1, mono: true },
+    { k: "np", h: "Known runs", f: NZ, mono: true }, { k: "pos", h: "share", f: P1, mono: true }, { k: "lift", h: "Lift", f: F2, mono: true }] });
+  histChart($("d-stp"), { edges: Array.from({ length: 21 }, (_, i) => i / 20), mode: "share", xlabel: "Probability of the winning style", h: 180,
+    series: [{ label: "Background", counts: rt.style_p_hist_bg, color: "var(--bgr)" }, { label: "Known runs", counts: rt.style_p_hist_pos, color: "var(--pos)" }] });
+  const cf = rt.confinement, cb = cf.bg.reduce((a, b) => a + b, 0) || 1, cp = cf.pos.reduce((a, b) => a + b, 0) || 1;
+  table($("d-conf"), { rows: ["confined (< 2)", "moderately (2–4)", "unconfined (> 4)"].map((l, i) => ({ c: l, bg: cf.bg[i] / cb, pos: cf.pos[i] / cp })), cols: [
+    { k: "c", h: "Valley / bankfull width", l: true }, { k: "bg", h: "Background", f: P1, mono: true }, { k: "pos", h: "Known runs", f: P1, mono: true }] });
+  const rb = E.rockclass.reduce((a, r) => a + r.bg, 0) || 1, rp = E.rockclass.reduce((a, r) => a + r.pos, 0) || 1;
+  table($("d-rock"), { sort: "lift", rows: E.rockclass.map((r) => ({ ...r, sb: r.bg / rb, sp: r.pos / rp, lift: r.pos ? (r.pos / rp) / Math.max(1e-9, r.bg / rb) : 0 })), cols: [
+    { k: "rockclass", h: "Rock class", l: true }, { k: "bg", h: "Background", f: NZ, mono: true }, { k: "sb", h: "share", f: P1, mono: true },
+    { k: "pos", h: "Known runs", f: NZ, mono: true }, { k: "sp", h: "share", f: P1, mono: true }, { k: "lift", h: "Lift", f: F2, mono: true }] });
+  // labels
+  const S_ = E.sections, count = (key) => { const m = {}; S_.forEach((s) => { m[s[key]] = (m[s[key]] || 0) + 1; }); return Object.entries(m).sort((a, b) => b[1] - a[1]); };
+  const mk = (title, rows) => `<div class="panel"><h3>${esc(title)}</h3><table class="t">${rows.map(([k, n]) => `<tr><td class="l">${esc(k || "–")}</td><td class="num">${NZ(n)}</td></tr>`).join("")}</table></div>`;
+  $("d-labsum").innerHTML = mk("Sections by status", count("status")) + mk("Coordinates", count("coords")) + mk("How the extent was placed", count("method").slice(0, 8));
+  const cross = (el, key, cols) => {
+    const regsS = [...new Set(S_.map((s) => s.region))].sort();
+    const M = regsS.map((r) => cols.map((c) => S_.filter((s) => s.region === r && s[key] === c).length));
+    const mx = Math.max(1, ...M.flat());
+    heatTable($(el), { corner: "Region", cols, rows: regsS.map((r, i) => ({ label: r, cells: M[i] })), fmt: NZ,
+      color: (val) => val ? ramp(seqStops(), 0.1 + 0.9 * Math.log1p(val) / Math.log1p(mx)) : null });
+  };
+  cross("d-rg", "band", ["≤3", "3-4", "4+", "?"]);
+  cross("d-rc", "coords", [...new Set(S_.map((s) => s.coords))].sort());
+  const gs = E.grade_by_style;
+  heatTable($("d-gs"), { corner: "Style", cols: ["≤3", "3-4", "4+", "?"], rows: STYLE_ORDER.map((s) => ({ label: SL(s), cells: ["≤3", "3-4", "4+", "?"].map((g) => gs[s][g]) })),
+    color: (val) => val ? ramp(seqStops(), 0.1 + 0.9 * Math.log1p(val) / Math.log1p(Math.max(1, ...Object.values(gs).flatMap((o) => Object.values(o))))) : null, fmt: NZ,
+    sub: "Counts of known-run reaches. Grade bands come from the guide's grade (max of a range); '?' = no grade recorded." });
+  const drawSecs = () => {
+    const q = ($("d-secq").value || "").toLowerCase();
+    table($("d-secs"), { maxH: true, sort: "domain_reaches", rows: S_.filter((s) => !q || JSON.stringify(s).toLowerCase().includes(q)), cols: [
+      { k: "river", h: "River", l: true }, { k: "section", h: "Section", l: true, wrap: true }, { k: "region", h: "Region", l: true },
+      { k: "status", h: "Status", l: true }, { k: "grade", h: "Grade", l: true }, { k: "band", h: "Band", l: true },
+      { k: "coords", h: "Coords", l: true }, { k: "method", h: "Placed by", l: true, wrap: true },
+      { k: "domain_reaches", h: "Reaches ≥ 2 km²", f: NZ, mono: true }, { k: "style", h: "Main style", l: true, f: (s) => esc(SHORT_STYLE[s] || s || "–") },
+      { k: "held_out", h: "Held out", f: (b) => b ? "yes" : "" }] });
+  };
+  $("d-secq").addEventListener("input", drawSecs); drawSecs();
+};
+
+renders.separation = () => {
+  const v = $("v-separation");
+  if (!E) { v.innerHTML = missing("Separation statistics", "uv run river-finder ml explore"); return; }
+  v.innerHTML = `
+  <div><p class="eyebrow">One feature at a time</p><h2>How well does each feature alone separate known runs from background?</h2>
+    <p class="note">Univariate AUC: the feature itself used as a score. 0.5 = no separation; below 0.5 = known runs have <i>lower</i> values. Matching by style or size shows how much of a feature's power is just "steep" or "big".</p>
+    <div class="panel"><div class="chart" id="s-dots"></div></div></div>
+  <div><h2>Univariate AUC by region</h2><p class="note">Within each region (its known runs vs its own background). Blank = no known runs in that region.</p><div id="s-reg"></div></div>
+  <div><h2>Univariate AUC within paddling style</h2><div id="s-sty"></div></div>
+  <div><h2>Spearman correlation between features</h2><p class="note">On 60,000 background reaches plus every known-run reach. Strongly correlated features share their weight in a linear model.</p><div id="s-corr"></div></div>`;
+  const sep = [...E.separation].sort((a, b) => Math.abs(b.auc_style - 0.5) - Math.abs(a.auc_style - 0.5));
+  const series = [{ label: "AUC (all background)", color: "var(--s1)" }, { label: "Size-matched", color: "var(--s3)" }, { label: "Style-matched", color: "var(--s2)" }];
+  dotRows($("s-dots"), { rows: sep.map((s) => ({ label: FEAT[s.feature].label, values: [s.auc, s.auc_size, s.auc_style], note: FEAT[s.feature].desc })), series, domain: [0, 1], ref: 0.5, xlabel: "Univariate AUC", labelW: 230 });
+  legend($("s-dots"), series);
+  heatTable($("s-reg"), { corner: "Feature", cols: E.regions, rows: sep.map((s) => ({ label: FEAT[s.feature].label, cells: E.regions.map((r) => s.by_region[r]) })), color: (x) => aucColor(x) });
+  heatTable($("s-sty"), { corner: "Feature", cols: STYLE_ORDER.map((s) => SHORT_STYLE[s] || s), titleCols: STYLE_ORDER.map(SL), rows: sep.map((s) => ({ label: FEAT[s.feature].label, cells: STYLE_ORDER.map((st) => s.by_style[st]) })), color: (x) => aucColor(x) });
+  const C = E.corr;
+  heatTable($("s-corr"), { corner: "", cols: C.features, titleCols: C.features.map((f) => FEAT[f].label), rows: C.features.map((f, i) => ({ label: FEAT[f].label, cells: C.matrix[i] })), color: (x) => corrColor(x), fmt: F2 });
+};
+
+let modelState = { model: null, river: "" };
+renders.models = () => {
+  const v = $("v-models");
+  if (!R) { v.innerHTML = missing("Cross-validation results", "uv run river-finder ml cv"); return; }
+  modelState.model = modelState.model || MODELS[MODELS.length > 5 ? 5 : 0].id;
+  v.innerHTML = `
+  <div><p class="eyebrow">Out-of-fold, ${R.repeats} × ${R.folds} folds by sea-outlet catchment · seed ${R.seed} · created ${esc(R.created)}</p>
+    <h2>Cross-validated metrics, every model</h2>
+    <p class="note">Mean ± sd over repeats. Every number compares known-run reaches with background reaches scored by the same out-of-fold models.</p><div id="m-table"></div></div>
+  <div class="grid2">
+    <div class="panel"><h3>ROC, pooled out-of-fold (repeat 1)</h3><p class="note">False-positive rate here is the share of <i>background</i> above the threshold, so it includes unknown runs.</p><div class="chart" id="m-roc"></div></div>
+    <div class="panel"><h3>Where known runs land</h3><div class="controls"><label for="m-pick">Model<select id="m-pick"></select></label></div><p class="note">Percentile of each known-run reach among background (blue: all background; orange: same style only).</p><div class="chart" id="m-pct"></div></div>
+  </div>
+  <div><h2>Style-matched AUC within each style</h2><p class="note">Known-run reaches of a style against background reaches of that style. The column header gives the counts.</p><div id="m-style"></div></div>
+  <div><h2>By region: cross-validation vs leave-one-region-out</h2><p class="note">Style-matched AUC of a region's known runs against its own background. CV: the region's catchments were scored by models trained on other folds (which include the rest of that region). LORO: the model never saw the region.</p>
+    <div class="grid2"><div><h3>Cross-validation</h3><div id="m-cvreg"></div></div><div><h3>Leave one region out</h3><div id="m-loro"></div></div></div></div>
+  <div><h2>By grade band</h2><p class="note">Style-matched AUC of known-run reaches in each band (grade of the guide section, max of a range).</p><div id="m-grade"></div></div>
+  <div class="grid2">
+    <div class="panel"><h3 id="m-imp-t">What the model uses</h3><p class="note" id="m-imp-n"></p><div class="chart" id="m-imp"></div></div>
+    <div class="panel"><h3>Model</h3><div id="m-desc"></div></div>
+  </div>
+  <div><h2>Every known river, out-of-fold</h2><div class="controls"><label for="m-rq">Filter<input type="search" id="m-rq" placeholder="river or region"></label></div><p class="note">Percentiles averaged over repeats. "Style pct" ranks each reach among background of its own style; sorted by that.</p><div id="m-rivers"></div></div>`;
+  const keys = ["auc_style", "auc", "auc_size", "auc_style_size", "recall_top10", "recall_top5", "median_pct"];
+  table($("m-table"), { rows: MODELS.map((m) => ({ id: m.id, title: m.title, kind: m.kind, nf: m.features.length + m.categorical.length, ...Object.fromEntries(keys.map((k) => [k, m.cv[k].mean])), ...Object.fromEntries(keys.map((k) => [k + "_sd", m.cv[k].sd])) })), sort: "auc_style",
+    cols: [{ k: "title", h: "Model", l: true }, { k: "kind", h: "Kind", l: true }, { k: "nf", h: "Inputs", mono: true },
+      ...keys.map((k) => ({ k, h: METRIC_LABEL[k], mono: true, f: (x, r) => k === "median_pct" ? `${F1(x)} <span class="note">± ${F1(r[k + "_sd"])}</span>` : `${F3(x)} <span class="note">± ${F3(r[k + "_sd"])}</span>` }))] });
+  const fpr = Array.from({ length: 101 }, (_, i) => i / 100);
+  lineChart($("m-roc"), { series: MODELS.map((m) => ({ label: m.title, color: MODEL_COLOR[m.id], x: fpr, y: m.cv_detail.roc })), xdomain: [0, 1], ydomain: [0, 1], xlabel: "Background share above threshold", ylabel: "Known-run reaches above threshold", diag: true, h: 320, xf: (x) => (100 * x).toFixed(0) + "%", yf: (y) => (100 * y).toFixed(0) + "%" });
+  legend($("m-roc"), MODELS.map((m) => ({ label: m.id, color: MODEL_COLOR[m.id], line: true })));
+  select("m-pick", MODELS.map((m) => [m.id, m.title]), modelState.model).onchange = (e) => { modelState.model = e.target.value; drawModel(); };
+  const st = MODELS[0].cv_detail.by_style;
+  heatTable($("m-style"), { corner: "Model", cols: st.map((s) => `${SHORT_STYLE[s.style] || s.style} (${NZ(s.positives)} / ${NZ(s.background)})`), titleCols: st.map((s) => SL(s.style)),
+    rows: MODELS.map((m) => ({ label: m.title, cells: m.cv_detail.by_style.map((s) => s.auc) })), color: (x) => aucColor(x) });
+  const regs = R.models[0].cv_detail.by_region.map((r) => r.region);
+  heatTable($("m-cvreg"), { corner: "Model", cols: regs, rows: MODELS.map((m) => ({ label: m.id, cells: regs.map((r) => (m.cv_detail.by_region.find((x) => x.region === r) || {}).auc_style) })), color: (x) => aucColor(x) });
+  const lregs = [...new Set(MODELS.flatMap((m) => m.loro.map((r) => r.region)))];
+  heatTable($("m-loro"), { corner: "Model", cols: lregs, rows: MODELS.map((m) => ({ label: m.id, cells: lregs.map((r) => (m.loro.find((x) => x.region === r) || {}).auc_style), tips: lregs.map((r) => { const x = m.loro.find((y) => y.region === r); return x ? `${NZ(x.positives)} known-run reaches, ${x.rivers} rivers; CV on same rows ${F3(x.cv_auc_style_same_rows)}` : ""; }) })), color: (x) => aucColor(x),
+    sub: "LORO regions are whole sea-outlet catchments assigned to the region holding most of their reaches." });
+  const grades = ["≤3", "3-4", "4+", "?"];
+  heatTable($("m-grade"), { corner: "Model", cols: grades.map((g) => { const x = MODELS[0].cv_detail.by_grade.find((y) => y.grade === g); return `${g} (${x ? NZ(x.positives) : 0})`; }),
+    rows: MODELS.map((m) => ({ label: m.title, cells: grades.map((g) => (m.cv_detail.by_grade.find((y) => y.grade === g) || {}).auc_style) })), color: (x) => aucColor(x) });
+  function drawModel() {
+    const m = MODELS.find((x) => x.id === modelState.model), d = m.cv_detail;
+    histChart($("m-pct"), { edges: Array.from({ length: 21 }, (_, i) => i * 5), mode: "share", xlabel: "Percentile among background", h: 210,
+      series: [{ label: "vs all background", counts: d.pct_hist, color: "var(--s1)" }, { label: "vs same style", counts: d.style_pct_hist, color: "var(--s2)" }] });
+    legend($("m-pct"), [{ label: "vs all background", color: "var(--s1)" }, { label: "vs same style", color: "var(--s2)" }]);
+    const imp = Object.entries(m.importance).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 24);
+    const lab = (k) => (FEAT[k] ? FEAT[k].label : k.startsWith("rc_") ? "Rock: " + k.slice(3).replace(/_/g, " ") : k === "rockclass" ? "Rock class" : k === "rockgroup" ? "Rock group" : k);
+    $("m-imp-t").textContent = m.kind === "gbm" ? "Split gain share (mean over folds)" : "Coefficients on standardised features (mean over folds)";
+    $("m-imp-n").textContent = m.kind === "gbm" ? "Share of total split gain. Gain says how much a feature is used, not in which direction." : "Blue raises the score, red lowers it. Correlated features share weight, so read single signs with care.";
+    barsH($("m-imp"), { rows: imp.map(([k, x]) => ({ label: lab(k), v: x, color: m.kind === "gbm" ? MODEL_COLOR[m.id] : null, what: m.kind === "gbm" ? "Gain share" : "Coefficient" })), signed: m.kind !== "gbm", labelW: 190, xlabel: m.kind === "gbm" ? "Gain share" : "Coefficient (per sd)" });
+    $("m-desc").innerHTML = `<p><b>${esc(m.title)}</b> <span class="pill">${esc(m.id)}</span> <span class="pill">${m.kind === "gbm" ? "LightGBM" : "logistic"}</span></p><p class="note">${esc(m.description)}</p>
+      <p class="note">Inputs: ${m.features.map((f) => `<code>${esc(f)}</code>`).join(" ")} ${m.categorical.map((f) => `<code>${esc(f)}</code>`).join(" ")}</p>
+      <table class="t" style="margin-top:6px">${["auc_style", "auc", "auc_size", "auc_style_size", "recall_top10"].map((k) => `<tr><td class="l">${METRIC_LABEL[k]}</td><td class="num">${F3(m.cv[k].mean)} ± ${F3(m.cv[k].sd)}</td><td class="num note">fold sd ${F3(m.cv[k].fold_sd)}</td></tr>`).join("")}</table>`;
+    const q = ($("m-rq").value || "").toLowerCase();
+    table($("m-rivers"), { maxH: true, sort: "median_style_pct", rows: m.rivers.filter((r) => !q || (r.river + " " + r.region).toLowerCase().includes(q)), cols: [
+      { k: "river", h: "River (key)", l: true, wrap: true }, { k: "region", h: "Region", l: true }, { k: "grade", h: "Band", l: true },
+      { k: "style", h: "Main style", l: true, f: (s) => esc(SHORT_STYLE[s] || s) }, { k: "reaches", h: "Reaches", f: NZ, mono: true },
+      { k: "median_style_pct", h: "Style pct", f: F1, mono: true }, { k: "median_pct", h: "Pct", f: F1, mono: true },
+      { k: "best_pct", h: "Best pct", f: F1, mono: true }, { k: "share_top10", h: "In top 10%", f: P1, mono: true }] });
+  }
+  $("m-rq").addEventListener("input", drawModel);
+  drawModel();
+};
+
+renders.registry = () => {
+  const v = $("v-registry");
+  if (!REG) { v.innerHTML = missing("Registry evaluations", "uv run river-finder models evaluate"); return; }
+  const ev = REG.evaluations;
+  v.innerHTML = `
+  <div><p class="eyebrow">Frozen model cards · models/*.json</p><h2>Registry models on their fixed splits</h2>
+    <p class="note">The versioned cards (v1, v2, …) were trained on the river-level split <code>guides-v1</code> (25% of rivers held out, seed 20261113). This is the older, single-split yardstick, kept so cards stay comparable over time; the cross-validated numbers on the Models tab are the main one. The split holds out whole rivers but not whole catchments, so a test river can share a catchment with training rivers, which flatters flexible models more than the catchment-grouped CV does. <code>v3</code> is the <code>gbm_terrain</code> recipe (LightGBM) frozen as a card and trained on the same training rivers as v2. "Sourced" counts only test sections with published coordinates.</p>
+    <div id="r-table"></div></div>
+  <div><div class="controls"><label for="r-pick">Evaluation<select id="r-pick"></select></label></div><div id="r-rivers"></div></div>`;
+  table($("r-table"), { sort: "auc_style_matched", rows: ev.map((e) => ({ ...e, key: `${e.model} · ${e.split} · ${e.coords}` })), cols: [
+    { k: "model", h: "Model", l: true }, { k: "split", h: "Split", l: true }, { k: "coords", h: "Test coords", l: true },
+    { k: "test_rivers", h: "Test rivers", f: NZ, mono: true }, { k: "test_reaches", h: "Reaches", f: NZ, mono: true },
+    { k: "auc", h: "AUC", f: F3, mono: true }, { k: "auc_size_matched", h: "Size-matched", f: F3, mono: true },
+    { k: "auc_style_matched", h: "Style-matched", f: F3, mono: true }, { k: "auc_style_size_matched", h: "Style × size", f: F3, mono: true },
+    { k: "recall_top10", h: "Recall @10%", f: P1, mono: true },
+    { k: "median_pct", h: "Median pct", f: F1, mono: true }] });
+  select("r-pick", ev.map((e, i) => [String(i), `${e.model} · ${e.split} · ${e.coords}`]), "0").onchange = (e) => drawR(+e.target.value);
+  function drawR(i) {
+    const e = ev[i];
+    table($("r-rivers"), { maxH: true, sort: "median_pct", rows: e.rivers || [], cols: [
+      { k: "river", h: "River", l: true }, { k: "region", h: "Region", l: true }, { k: "grade", h: "Grade", l: true },
+      { k: "reaches", h: "Reaches", f: NZ, mono: true }, { k: "median_pct", h: "Median pct", f: F1, mono: true },
+      { k: "median_pct_size_matched", h: "Size-matched", f: F1, mono: true }, { k: "median_pct_style_matched", h: "Style-matched", f: F1, mono: true },
+      { k: "median_pct_style_size_matched", h: "Style × size", f: F1, mono: true },
+      { k: "best_pct", h: "Best", f: F1, mono: true }, { k: "share_top10", h: "In top 10%", f: P1, mono: true },
+      { k: "coords", h: "Coords", l: true }, { k: "extent", h: "Extent", l: true, wrap: true }] });
+  }
+  drawR(0);
+};
+
+renders.docs = () => {
+  const v = $("v-docs"), sp = D.spec;
+  const iqr = sp ? sp.classes.map((c) => { const p = sp.slope_iqr[c]; return `<tr><td class="l">${esc(c.replace("_", "-"))}</td><td class="num">${p.q25}–${p.q75}</td><td class="num">${(p.q25 * 1000).toFixed(0)}–${(p.q75 * 1000).toFixed(0)}</td><td class="num">${F2(sp.confinement[c].confined)} / ${F2(sp.confinement[c].moderately_confined)} / ${F2(sp.confinement[c].unconfined)}</td><td class="l">${esc(Object.entries(sp.style_map).filter(([, cs]) => cs.includes(c)).map(([s]) => SL(s)).join(", "))}</td></tr>`; }).join("") : "";
+  const feats = (D.feature_docs || []).map((f) => `<tr><td class="l"><code>${esc(f.id)}</code></td><td class="l">${esc(f.group)}</td><td class="l wrap">${esc(f.desc)}</td></tr>`).join("");
+  const zoo = ZOO.map((m) => `<tr><td class="l"><code>${esc(m.id)}</code></td><td class="l">${m.kind === "gbm" ? "LightGBM" : "logistic"}</td><td class="l wrap">${esc(m.description)}</td><td class="num">${m.features.length + m.categorical.length}</td></tr>`).join("");
+  v.innerHTML = `
+  <div><p class="eyebrow">Reference</p><h2>How this page is made</h2>
+  <p class="lede">River Finder looks for unexplored whitewater in New Zealand. It splits every river into reaches of about 250&nbsp;m, measures each reach from terrain, flood statistics and geology, and ranks reaches by how much they resemble runs in the guidebooks. This tab documents every number on the other tabs: where the data come from, how they are transformed, how models are trained and how they are scored.</p>
+  <ol class="toc"><li><a href="#doc-pipeline">Pipeline</a></li><li><a href="#doc-sources">Data sources</a></li><li><a href="#doc-reaches">Reaches and features</a></li><li><a href="#doc-labels">Labels</a></li><li><a href="#doc-styles">Reach types and styles</a></li><li><a href="#doc-cv">Evaluation protocol</a></li><li><a href="#doc-metrics">Metrics</a></li><li><a href="#doc-models">Models</a></li><li><a href="#doc-limits">Limitations</a></li><li><a href="#doc-repro">Reproduce</a></li></ol></div>
+
+  <div id="doc-pipeline"><h2>Pipeline</h2>
+  <div class="flow"><span class="box">LINZ 8 m DEM (NZVD2016, EPSG:2193)</span><span class="arr">→</span><span class="box">Priority-Flood fill + D8 routing, 64 km tiles</span><span class="arr">→</span><span class="box">channel network ≥ 0.5 km²</span><span class="arr">→</span><span class="box">250 m reaches + metrics</span><span class="arr">→</span><span class="box">join REC1 floods, REC2 names, GNS geology, OSM</span><span class="arr">→</span><span class="box">reach type (MB1997)</span><span class="arr">→</span><span class="box">labels from guides</span><span class="arr">→</span><span class="box">grouped CV + LORO</span><span class="arr">→</span><span class="box">this page</span></div>
+  <p class="note" style="margin-top:8px">Routing runs on the DEM, never a surface model. The national run covers 115 land tiles of 64 km with REC2 inflows across tile edges; reaches are stitched across tiles by a downstream id.</p></div>
+
+  <div id="doc-sources"><h2>Data sources</h2>
+  <div class="tablewrap"><table class="t"><thead><tr><th>Layer</th><th>Provider</th><th>What we use</th><th>Notes</th></tr></thead><tbody>
+  <tr><td class="l">Elevation</td><td class="l">LINZ, public <code>s3://nz-elevation</code> (COG + STAC)</td><td class="l wrap">8 m national DEM (contour-derived) for routing and every terrain metric</td><td class="l wrap">NZVD2016 heights, NZTM2000 (EPSG:2193). Contour DEMs have flat valley floors, so gradient is smoothed over about 750 m.</td></tr>
+  <tr><td class="l">River network</td><td class="l">NIWA REC2 (River Environment Classification v2)</td><td class="l wrap">River names, inflows across tile edges, outlets</td><td class="l wrap">Reaches are our own (from the DEM); REC2 gives names by nearest line.</td></tr>
+  <tr><td class="l">Floods</td><td class="l">NIWA, Henderson &amp; Collins (2018) on REC1</td><td class="l wrap">Mean annual flood (MAF, m³/s) per reach, matched to our reaches by position and catchment area</td><td class="l wrap">MAF is a regionalised estimate, not a gauge. Stream power = ρ g × MAF × gradient.</td></tr>
+  <tr><td class="l">Geology</td><td class="l">GNS Science 1:250k Geological Map of NZ (2023), layer 55</td><td class="l wrap">Rock class, rock group, main rock, minimum age at the reach midpoint; resistant-rock flag; karst flag</td><td class="l wrap">Resistant = volcanic, plutonic, metamorphic, greywacke, ignimbrite, … Karst = main rock limestone, marble, dolomite, calcarenite.</td></tr>
+  <tr><td class="l">Waterfalls, rapids</td><td class="l">OpenStreetMap via Overture Maps (release 2026-10-21.0)</td><td class="l wrap">Waterfalls snapped to the reach line (100 m) with mapped height; rapids counted within 150 m of the reach midpoint</td><td class="l wrap">© OpenStreetMap contributors, ODbL. Mapping effort is uneven: rapids are mostly mapped on known runs.</td></tr>
+  <tr><td class="l">Roads and tracks</td><td class="l">OpenStreetMap via Overture Maps</td><td class="l wrap">Shown in the map viewer only</td><td class="l wrap"><b>Never a model input</b>: access is the paddler's call, and it correlates with being in a guide.</td></tr>
+  <tr><td class="l">Guide regions</td><td class="l">16 river-guide regions built from Stats NZ regional council boundaries (2022)</td><td class="l wrap">Region of each reach by point-in-polygon (nearest region for coastal leftovers); per-region summaries and LORO</td><td class="l wrap"><code>national.region_filters</code></td></tr>
+  <tr><td class="l">Known runs</td><td class="l"><code>labels/known_runs.toml</code> + <code>labels/guide_research.json</code></td><td class="l wrap">Section extents (put-in → take-out, outlet + length, or whole steep river), status, grade, held-out flag</td><td class="l wrap">339 researched guide sections plus the reference runs.</td></tr>
+  </tbody></table></div></div>
+
+  <div id="doc-reaches"><h2>Reaches and features</h2>
+  <p>Cells with 0.5&nbsp;km² or more upstream are channel. Each link between confluences is cut into reaches of about 250&nbsp;m. Per reach: the drop and length (gradient), steepest 50&nbsp;m, catchment area at the lower end, k<sub>sn</sub> = S × A<sup>0.45</sup> (A in m²), gorge depth (highest ground within 150&nbsp;m above the channel), Melton number (catchment relief / √area), head (mean catchment height above the channel), plateau share (catchment slopes under 4°), resistant-rock share (catchment cells on resistant rock), valley-floor width (ground within 5&nbsp;m height of its channel per metre of channel, from HAND), knickpoint ratio (k<sub>sn</sub> over the next reach downstream). Gradient and k<sub>sn</sub> are smoothed over the reach and its upstream and downstream neighbours (about 750&nbsp;m).</p>
+  <p>Model inputs are transforms of these (logs and caps, below). The <b>domain</b> for training and evaluation is every reach draining ${E ? E.domain_km2 : 2}&nbsp;km² or more.</p>
+  <div class="tablewrap"><table class="t"><thead><tr><th>Input</th><th>Group</th><th>Definition</th></tr></thead><tbody>${feats}</tbody></table></div>
+  <p class="note" style="margin-top:6px">Karst share of the catchment is accumulated down the reach network from each reach's local drainage area (its area minus the areas of the reaches above it), using the geology at each reach midpoint as that local area's rock. It is an approximation where tile edges cut catchments.</p></div>
+
+  <div id="doc-labels"><h2>Labels</h2>
+  <ul>
+    <li><b>Positive</b>: a reach of ${E ? E.domain_km2 : 2}&nbsp;km² or more on a runnable guide section. Extents in order of precedence: put-in → take-out along the flow path; outlet + length upstream; otherwise every steep reach (≥ 10&nbsp;m/km, ≥ 2&nbsp;km²) of the named river (approximate).</li>
+    <li><b>Held out</b>: sections flagged <code>held_out</code> (the Mangakarengorengo) are scored as positives but never trained on.</li>
+    <li><b>Background</b>: every other domain reach that no section touches. It is <i>unlabelled</i>, not "not runnable": it still holds unknown runs. Models treat it as negative in training (positive-unlabelled learning), and every AUC on this page is a lower bound of the true one.</li>
+    <li>Reaches of a known section that are not positives (pools under 1&nbsp;km², parts outside the domain) are left out of both sets.</li>
+    <li>From the guides we use only the extent, status, held-out flag and grade (grade only for reporting by band). Tags, portages, deaths, popularity, commercially rafted, access type, gauge, flow notes, length and the stated gradient are never inputs or targets.</li>
+    <li>A river listed in several sections, or in both label files, is one river key ("River | region"), so it is never split across folds.</li>
+  </ul></div>
+
+  <div id="doc-styles"><h2>Reach types and paddling styles</h2>
+  <p>The comparison set for the headline metric is defined by the Montgomery &amp; Buffington (1997) channel-reach types, as operationalised in <a href="${esc(D.pdf)}" target="_blank" rel="noopener">MB1997_reach_classification_spec.pdf</a> (spec ${sp ? esc(sp.version) : ""}; the PDF is in the repo under <code>docs/</code>). The spec scores seven types with a weighted naive-Bayes log score and a softmax: numeric features get a Gaussian membership on log₁₀ from published interquartile ranges, categorical features a likelihood table.</p>
+  <p>We have no grain size, bankfull depth or bed-morphology observations anywhere in NZ, so we run the spec's <b>Track B (quantitative proxies)</b> with the two inputs we can measure; the spec skips missing features for every class.</p>
+  <ul>
+    <li><b>slope</b> (weight ${sp ? sp.weights.slope : 1}) = smoothed gradient / 1000 (m/m), floored at 10<sup>−4</sup>.</li>
+    <li><b>confinement</b> (weight ${sp ? sp.weights.confinement : 0.5}) from valley-floor width / bankfull width: &lt; 2 confined, 2–4 moderately confined, &gt; 4 unconfined (spec thresholds). Bankfull width is estimated as <code>w = ${E ? E.bankfull_a : 4} × MAF^0.5</code> (m, m³/s), with the mean annual flood standing in for bankfull flow. The coefficient is our operational choice.</li>
+    <li>Prior uniform (1/7). Type = argmax. "Transitional" = the top two are neighbouring types within 0.15.</li>
+    <li><b>Style</b> (spec section 9, a heuristic): each style's score is the sum of its types' probabilities; style = argmax.</li>
+  </ul>
+  <div class="tablewrap"><table class="t"><thead><tr><th>Type</th><th>Slope IQR (m/m)</th><th>m/km</th><th>Confinement likelihood (conf / mod / unconf)</th><th>Paddling style</th></tr></thead><tbody>${iqr}</tbody></table></div>
+  <p class="note" style="margin-top:6px">With slope and confinement only, a type is a slope-and-confinement class with Montgomery &amp; Buffington's names, not a field classification. Bedrock has the widest slope range, so without substrate evidence "bedrock" takes the confined band between step-pool and cascade slopes. Colluvial needs slopes above about 0.17, which few reaches of 2&nbsp;km² reach. Volume (big water) is not part of any style, hence the extra style × size metric.</p></div>
+
+  <div id="doc-cv"><h2>Evaluation protocol</h2>
+  <ul>
+    <li><b>Groups</b>: every reach belongs to the sea-outlet catchment it drains to (following downstream links). Folds hold whole catchments, so a river, its tributaries and its downstream neighbours never straddle training and test.</li>
+    <li><b>Folds</b>: catchments with known runs are dealt to ${R ? R.folds : 5} folds largest first, each to the fold with the fewest positive rivers so far (random tie-breaks); other catchments go to a random fold.</li>
+    <li><b>Repeats</b>: ${R ? R.repeats : 5} repeats with seeds ${R ? R.seed : ""}+r. Every domain reach gets one out-of-fold (OOF) score per repeat. Metrics use the pooled OOF scores of a repeat (scores from five fold models ranked together); the table shows mean ± sd over repeats, and the sd over single folds.</li>
+    <li><b>Leave one region out (LORO)</b>: each catchment goes to the guide region holding most of its domain reaches. For each region with known runs, train on all other regions and score that region.</li>
+    <li><b>Training set</b>: positives + background (+ labelled not-runnable, if any) in the training folds. Logistic models use every reach with class weights; LightGBM uses every positive and ${R ? R.neg_sample_gbm * 100 : 30}% of background, re-weighted.</li>
+  </ul></div>
+
+  <div id="doc-metrics"><h2>Metrics</h2>
+  <ul>
+    <li><b>AUC</b> = mean over positive reaches of the share of background reaches it outranks (ties count half). Mann–Whitney AUC.</li>
+    <li><b>Style-matched AUC</b> (headline) = the same, but each positive is compared only with background reaches of its own style. Equal to the per-style AUCs weighted by their positive counts. A model scores 0.5 if it only knows that steep creeks are steeper than lowland rivers.</li>
+    <li><b>Size-matched AUC</b> = compared within the positive's decile of log mean annual flood (deciles of the background).</li>
+    <li><b>Style × size</b> = within style and flood quintile.</li>
+    <li><b>Recall @ top k%</b> = share of positive reaches scoring above the (100 − k)th percentile of all background.</li>
+    <li><b>Within-region AUC</b> = a region's positives against that region's background only.</li>
+    <li>With the background containing a share θ of real runs, the AUC we measure is θ/2 + (1 − θ) × the true AUC, if guide runs were a random sample of all runs. That keeps model rankings, but guides favour big, accessible, popular rivers, so the bias is not uniform.</li>
+  </ul></div>
+
+  <div id="doc-models"><h2>Models</h2>
+  <div class="tablewrap"><table class="t"><thead><tr><th>Id</th><th>Kind</th><th>What</th><th>Inputs</th></tr></thead><tbody>${zoo}</tbody></table></div>
+  <p class="note" style="margin-top:6px">Logistic: L2-regularised (λ = 1) Newton/IRLS on standardised inputs with balanced class weights. LightGBM: ${R ? esc(Object.entries(R.gbm_params).filter(([k]) => !["verbose", "num_threads", "objective"].includes(k)).map(([k, x]) => `${k} ${x}`).join(", ")) : ""}. Rock class and group enter LightGBM as categorical (top 30 groups, the rest "other"); the logistic model gets one-hots of the ten common rock classes.</p></div>
+
+  <div id="doc-limits"><h2>Limitations</h2>
+  <ul>
+    <li>Positive-unlabelled labels: background holds unknown runs, so precision cannot be measured, only lower bounds of ranking quality. Periodic audits of top-ranked reaches are the way to estimate it.</li>
+    <li>Guide coverage is uneven by region, and guide sections favour accessible, popular rivers. A model can learn "documented" rather than "runnable"; access is kept out of the inputs for that reason, and OSM rapids are a known risk.</li>
+    <li>Many extents are inferred or name-only; see the <i>Coordinates</i> and <i>How the extent was placed</i> tables on the Data tab.</li>
+    <li>Reach types use slope and confinement only, with an estimated bankfull width; they are comparison classes, not field truth.</li>
+    <li>MAF is regionalised; reaches inherit it from the nearest REC1 reach of similar area.</li>
+    <li>8 m contour-derived elevation smooths short steep drops; steepest-50 m and knickpoint features are only as good as that DEM.</li>
+  </ul></div>
+
+  <div id="doc-repro"><h2>Reproduce</h2>
+  <pre>uv sync
+uv run river-finder nz fetch            # REC2, floods, geology, boundaries -> data/nz/
+uv run river-finder nz tiles            # 115 tiles, ~4 h, ~12 GB peak; resumes
+uv run river-finder nz score
+uv run river-finder models table        # national reach table cache
+uv run river-finder external fetch      # OSM via Overture
+uv run river-finder external attach
+uv run river-finder ml table            # + geology, karst, OSM, catchments, reach types
+uv run river-finder ml explore          # -> models/cv/explore.json
+uv run river-finder ml cv               # -> models/cv/results.json (repeated CV + LORO)
+uv run river-finder models evaluate     # registry cards -> models/evaluations.json
+uv run river-finder ml page             # -> data/viewer_nz/ml.html</pre>
+  <p class="note">Code: <code>src/river_finder/ml.py</code> (features, folds, models, metrics), <code>reachtype.py</code> (MB1997), <code>mlpage.py</code> (summaries and this page), <code>assets/ml_template.html</code>. The spec's reference implementation is <code>tests/mb_classifier_ref.py</code>; <code>tests/test_reachtype.py</code> checks ours against it and against the spec's conformance tests.</p></div>`;
+};
+
+// ---------------------------------------------------------------- routing
+const VIEWS = ["overview", "data", "separation", "models", "registry", "docs"];
+let current = null;
+function route() {
+  const h = location.hash.slice(1);
+  let view = VIEWS.includes(h) ? h : null, anchor = null;
+  if (!view && h.startsWith("doc-")) { view = "docs"; anchor = h; }
+  view = view || "overview";
+  document.querySelectorAll("nav.tabs a").forEach((a) => { if (a.getAttribute("href") === "#" + view) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
+  VIEWS.forEach((x) => { $("v-" + x).hidden = x !== view; });
+  if (current !== view || !$("v-" + view).childElementCount) { current = view; try { renders[view](); } catch (e) { $("v-" + view).insertAdjacentHTML("beforeend", `<p class="empty">This view failed to render: ${esc(e.message)}</p>`); console.error(e); } }
+  if (anchor) { const a = $(anchor); if (a) a.scrollIntoView(); } else window.scrollTo(0, 0);
+}
+$("meta").textContent = [E && `data ${E.created}`, R && `CV ${R.created}`].filter(Boolean).join(" · ");
+window.addEventListener("hashchange", route);
+let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (current && current !== "docs") renders[current](); }, 200); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (current) renders[current](); });
+new MutationObserver(() => { if (current) renders[current](); }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+route();
+})();
+</script>

@@ -94,7 +94,7 @@ def national_table(rebuild: bool = False, log=print) -> pd.DataFrame:
     if cache.exists() and not rebuild:
         return pd.read_pickle(cache)
     cols = ["seg_id", "gid", "down_gid", "river", "area_km2", "length_m", "score_regression", "label", "holdout",
-            *_RAW]
+            *_RAW, "valley_width_m"]
     parts, xs, ys = [], [], []
     for name in FILTER_ORDER:
         p = nz_dir() / "regions" / _rslug(name) / "segments_scored.gpkg"
@@ -120,15 +120,15 @@ def national_table(rebuild: bool = False, log=print) -> pd.DataFrame:
     return t
 
 
-def reference_frame(rid: str) -> pd.DataFrame:
-    """A 5 m reference area's reaches in the same layout (``vi``: viewer index, reaches >= 1 km2)."""
+def reference_frame(rid: str, guide_regions: bool = True) -> pd.DataFrame:
+    """A 5 m reference area's reaches in the same layout (``vi``: viewer index, reaches >= 1 km2).
+    ``guide_regions=False`` skips the guide-region lookup (it needs the national council layer)."""
     import pyogrio
-
-    from .national import assign_regions
 
     reg = load_region(rid)
     g = pyogrio.read_dataframe(reg.data_dir() / "segments_scored.gpkg",
-                               columns=["seg_id", "down_seg", "river", "area_km2", "length_m", *_RAW])
+                               columns=["seg_id", "down_seg", "river", "area_km2", "length_m", *_RAW,
+                                        "valley_width_m"])
     mid = g.geometry.interpolate(0.5, normalized=True)
     f = pd.DataFrame(g.drop(columns="geometry"))
     f["down"] = f["down_seg"].astype(np.int64)
@@ -136,7 +136,12 @@ def reference_frame(rid: str) -> pd.DataFrame:
     f["vi"] = np.where(big, np.cumsum(big) - 1, -1)
     f["region"] = rid
     f = _finish(f, mid.x.to_numpy(), mid.y.to_numpy())
-    f["guide_region"] = assign_regions(mid.reset_index(drop=True))
+    if guide_regions:
+        from .national import assign_regions
+
+        f["guide_region"] = assign_regions(mid.reset_index(drop=True))
+    else:
+        f["guide_region"] = ""
     return f
 
 
@@ -463,13 +468,20 @@ def save_card(card: dict) -> Path:
     p = card_path(card["id"])
     if p.exists():
         old = json.loads(p.read_text())
-        if (old["coef"], old["intercept"]) != (card["coef"], card["intercept"]):
+        same = (old.get("coef"), old.get("intercept"), old.get("booster_sha256"))
+        if same != (card.get("coef"), card.get("intercept"), card.get("booster_sha256")):
             raise FileExistsError(f"{p} is a frozen checkpoint with different weights; pick a new model id.")
     p.write_text(json.dumps(card, indent=1, ensure_ascii=False) + "\n")
     return p
 
 
 def logits(card: dict, f: pd.DataFrame) -> np.ndarray:
+    """The card's raw score (log-odds) for every reach of ``f``. Kind "gbm" (LightGBM, ``ml.gbm_logits``)
+    needs the ML columns, which it adds to a frame that lacks them (``ml.enrich``)."""
+    if card.get("kind") == "gbm":
+        from .ml import gbm_logits
+
+        return gbm_logits(card, f)
     names = card["features"]
     X = features(f, names)
     mean = np.array([card["mean"][n] for n in names])
@@ -609,6 +621,16 @@ def train(table: pd.DataFrame, mapped: list[Mapped], split: dict, mid: str, titl
 
 
 # ---------------------------------------------------------------------------- evaluation
+def _pct_strata(lg: np.ndarray, bg: np.ndarray, strata: np.ndarray) -> np.ndarray:
+    """Percentile (0-100) of every reach among the background reaches of its own stratum."""
+    out = np.zeros(len(lg))
+    for b in np.unique(strata):
+        sel = strata == b
+        ref = np.sort(lg[bg & sel])
+        out[sel] = 100.0 * np.searchsorted(ref, lg[sel], side="right") / max(len(ref), 1)
+    return out
+
+
 def _auc(pos: np.ndarray, neg_sorted: np.ndarray) -> float:
     lo = np.searchsorted(neg_sorted, pos, side="left")
     hi = np.searchsorted(neg_sorted, pos, side="right")
@@ -635,13 +657,19 @@ def evaluate(card: dict, table: pd.DataFrame, mapped: list[Mapped], split: dict,
     # size-matched: rank each reach only among background reaches of similar flood size (10 bins of
     # log mean annual flood), so "it is a big river" earns nothing
     lq = np.nan_to_num(np.log10(table["maf_m3s"].clip(lower=0.05).to_numpy()), nan=np.log10(0.05))
-    edges = np.quantile(lq[bg], np.linspace(0, 1, 11)[1:-1])
-    bins = np.searchsorted(edges, lq)
-    mpct = np.zeros(len(table))
-    for b in range(10):
-        ref = np.sort(lg[bg & (bins == b)])
-        sel = bins == b
-        mpct[sel] = 100.0 * np.searchsorted(ref, lg[sel], side="right") / max(len(ref), 1)
+    mpct = _pct_strata(lg, bg, np.searchsorted(np.quantile(lq[bg], np.linspace(0, 1, 11)[1:-1]), lq))
+    # style-matched: rank each reach among background reaches of the same paddling style
+    # (Montgomery & Buffington reach type from slope and confinement, see reachtype.py); style x size
+    # also within the same flood quintile (as ml.strata), so neither "steep" nor "big" earns anything
+    spct = sspct = None
+    if "valley_width_m" in table:
+        from .reachtype import classify_frame
+
+        st = table["style"] if "style" in table else classify_frame(table)["style"]
+        style = st.cat.codes.to_numpy().astype(np.int64)
+        spct = _pct_strata(lg, bg, style)
+        q5 = np.searchsorted(np.quantile(lq[bg], np.linspace(0, 1, 6)[1:-1]), lq)
+        sspct = _pct_strata(lg, bg, style * 10 + q5)
     test = set(split["test"])
     # a test river is left out for this card if any of its reaches were in the card's training data
     # (v1 trained on rivers that the guide research lists again, under other region names)
@@ -680,6 +708,8 @@ def evaluate(card: dict, table: pd.DataFrame, mapped: list[Mapped], split: dict,
         "auc": round(_auc(lg[P], bg_sorted), 4),
         "median_pct": round(float(np.median(p)), 1),
         "auc_size_matched": round(float(np.mean(mpct[P]) / 100.0), 4),
+        **({"auc_style_matched": round(float(np.mean(spct[P]) / 100.0), 4),
+            "auc_style_size_matched": round(float(np.mean(sspct[P]) / 100.0), 4)} if spct is not None else {}),
         "recall_top10": round(float((p >= 90).mean()), 3),
         "recall_top5": round(float((p >= 95).mean()), 3),
         "lift_top10": round(float((p >= 90).mean() / 0.10), 2),
@@ -697,6 +727,9 @@ def evaluate(card: dict, table: pd.DataFrame, mapped: list[Mapped], split: dict,
                        "reaches": int(len(rows)), "best_pct": round(float(rp.max()), 1),
                        "median_pct": round(float(np.median(rp)), 1),
                        "median_pct_size_matched": round(float(np.median(mpct[rows])), 1),
+                       **({"median_pct_style_matched": round(float(np.median(spct[rows])), 1),
+                           "median_pct_style_size_matched": round(float(np.median(sspct[rows])), 1)}
+                          if spct is not None else {}),
                        "share_top10": round(float((rp >= 90).mean()), 2),
                        "coords": "/".join(sorted(r["coords"])), "extent": "/".join(sorted(r["method"]))})
     out["rivers"] = sorted(rivers, key=lambda r: -r["median_pct"])
@@ -719,6 +752,7 @@ def evaluate(card: dict, table: pd.DataFrame, mapped: list[Mapped], split: dict,
 def evaluate_all(table: pd.DataFrame, mapped: list[Mapped], log=print) -> dict:
     """Every card on every split, with and without inferred-coordinate test sections."""
     splits = [json.loads(p.read_text()) for p in sorted(SPLITS_DIR.glob("*.json"))]
+    table = scoring_table(table)
     res = []
     ref_mapped = None
     for card in list_cards():
@@ -769,7 +803,7 @@ def score_blob(card: dict, f: pd.DataFrame, guides: np.ndarray | None = None) ->
     Flags: bits 0-1 role (1 trained on, 2 test river), bit 2 on a guide-listed section."""
     vis = np.flatnonzero(f["vi"].to_numpy() >= 0)
     vis = vis[np.argsort(f["vi"].to_numpy()[vis])]
-    pct = percentiles(card, logits(card, f.iloc[vis]))
+    pct = percentiles(card, logits(card, f)[vis])   # the whole frame: features may follow the network
     q = np.round(pct * 100).astype("<u2")
     r = roles(card, f)[vis].astype(np.uint8)
     if guides is not None:
@@ -781,8 +815,11 @@ def write_viewer_scores(out_dir: Path, table: pd.DataFrame | None = None, log=pr
     """``<region>_m_<model>.txt`` for every region in the viewer index and every card."""
     index = json.loads((out_dir / "regions_index.json").read_text())
     cards = list_cards()
-    table = table if table is not None else national_table()
     by_slug = {_rslug(n): n for n in FILTER_ORDER}
+    if table is None and any(e["id"] in by_slug for e in index):
+        table = national_table()   # only national regions need it; reference regions have their own frame
+    if table is not None:
+        table = scoring_table(table)   # ML columns for "gbm" cards (whole-NZ network)
     secs = all_sections()
     for e in index:
         if e["id"] in by_slug:
@@ -805,8 +842,43 @@ def write_viewer_scores(out_dir: Path, table: pd.DataFrame | None = None, log=pr
     return cards
 
 
+def scoring_table(table: pd.DataFrame) -> pd.DataFrame:
+    """``table`` with the ML columns when a card needs them (kind "gbm"): the cached ``ml_table`` when it
+    lines up with ``table`` (whole-NZ karst accumulation), else ``ml.enrich(table)``."""
+    if not any(c.get("kind") == "gbm" for c in list_cards()):
+        return table
+    from . import ml
+
+    cache = nz_dir() / "ml_table.pkl"
+    if cache.exists() and "seg_id" in table:
+        t = ml.ml_table()
+        if len(t) == len(table) and (t["seg_id"].to_numpy() == table["seg_id"].to_numpy()).all():
+            return t
+    return ml.enrich(table)
+
+
+def cv_summary() -> dict | None:
+    """The cross-validated model zoo (``models/cv/results.json``), headline numbers only."""
+    p = MODELS_DIR / "cv" / "results.json"
+    if not p.exists():
+        return None
+    r = json.loads(p.read_text())
+    keys = ("auc", "auc_style", "auc_size", "auc_style_size", "recall_top10", "recall_top5", "median_pct")
+    models = []
+    for m in r["models"]:
+        lo = [x["auc_style"] for x in m.get("loro", []) if x.get("auc_style") is not None]
+        models.append({"id": m["id"], "kind": m["kind"], "title": m["title"], "description": m["description"],
+                       "inputs": len(m["features"]) + len(m.get("categorical", [])),
+                       "cv": {k: m["cv"][k] for k in keys if k in m["cv"]},
+                       "loro_auc_style": round(float(np.mean(lo)), 4) if lo else None})
+    return {"created": r["created"], "folds": r["folds"], "repeats": r["repeats"], "domain_km2": r["domain_km2"],
+            "spec_version": r.get("spec_version"), "models": models}
+
+
 def viewer_models() -> dict:
-    """What the page embeds: card summaries (no quantiles or sections) and the evaluations."""
+    """What the page embeds: card summaries (no quantiles or sections), the held-out evaluations and the
+    cross-validation summary. The default model is the newest card trained on every guide section
+    ("all" variant)."""
     cards = []
     for c in list_cards():
         lab = c["labels"]
@@ -814,9 +886,22 @@ def viewer_models() -> dict:
                      | {"variant": lab.get("variant"), "split": lab.get("split"),
                         "train_rivers": lab.get("train_rivers", []), "test_rivers": lab.get("test_rivers", []),
                         "positives": lab.get("positives"), "training_reaches": lab.get("training_reaches"),
-                        "checkpoint_check": c.get("checkpoint_check")})
+                        "checkpoint_check": c.get("checkpoint_check")}
+                     | ({"features": c["features"] + c.get("categorical", []), "importance": c.get("importance"),
+                         "recipe": c.get("recipe")} if c["kind"] == "gbm" else {}))
     ev = MODELS_DIR / "evaluations.json"
-    full = [c for c in cards if c["kind"] == "logistic" and c["variant"] == "all"]
+    full = [c for c in cards if c["kind"] in ("logistic", "gbm") and c["variant"] == "all"]
     return {"models": cards, "default": (full or cards)[-1]["id"] if cards else None,
             "evaluations": json.loads(ev.read_text()) if ev.exists() else None,
-            "descriptions": {k: v[2] for k, v in FEATURES.items()}}
+            "cv": cv_summary(),
+            "descriptions": _descriptions(any(c["kind"] == "gbm" for c in cards))}
+
+
+def _descriptions(extended: bool) -> dict:
+    """Feature descriptions keyed by name; with ``extended``, the ML features of "gbm" cards too."""
+    out = {k: v[2] for k, v in FEATURES.items()}
+    if extended:
+        from .ml import CATEGORICAL, EXTRA
+
+        out |= {k: v[1] for k, v in EXTRA.items()} | dict(CATEGORICAL)
+    return out

@@ -1,7 +1,8 @@
 name: CI
+# Manual only (Actions tab -> CI -> Run workflow): runs on every push failed to start and sent
+# an email each time. Put push/pull_request back once Actions can run on this repository.
 on:
-  push:
-  pull_request:
+  workflow_dispatch:
 jobs:
   test:
     runs-on: ubuntu-latest

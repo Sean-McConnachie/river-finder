@@ -2,7 +2,7 @@
 
 This file provides instructions and context for AI coding agents working on this project.
 
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:1105d646 -->
+<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:46cd31e7 -->
 ## Beads Issue Tracker
 
 This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
@@ -46,6 +46,7 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
    # Team-maintainer opt-in only, unless current instructions forbid it:
    git pull --rebase
+   bd dolt push
    git push
    git status
    ```
@@ -92,7 +93,14 @@ uv run river-finder run kaimai karangahake tutamoe  # fetch (8 m + 5 m LiDAR, RE
 uv run river-finder score kaimai karangahake tutamoe  # re-score only (regression is pooled across the regions given)
 uv run river-finder nz fetch|tiles|score|viewer   # national 8 m scan in 64 km tiles (data/nz/, ~4 h)
 uv run river-finder external fetch|attach   # OSM waterfalls/roads/tracks per reach via Overture S3 (~10 min)
+uv run river-finder web data|build|serve|pages  # web app (Map, Top rivers, Models, Info) -> data/web/
+uv run river-finder ml table|explore|cv|page|audit  # ML: features, grouped repeated 5-fold OOF + LORO, ML page (~10 min);
+                                          # audit: top unlisted runs of a model -> models/audits/
+uv run river-finder models train --kind gbm --recipe gbm_terrain --name v3  # LightGBM registry card (+ v3.lgb.txt)
 ```
+
+Web app: `src/river_finder/web/` (contract and ownership in `web/README.md`; page briefs in
+`docs/ui/`). Edit only the page folder you own; `core/` changes go through the core owner.
 
 National tiles peak at ~12 GB: never run another heavy job (reference viewer build, 5 m
 rasters) while `nz tiles` runs, or the OOM killer takes the tile run. It resumes where it
@@ -103,7 +111,9 @@ Outputs go to `data/<region>/` (gitignored): `area_km2.tif`, `validation_summary
 Code: `src/river_finder/`. `routing.py` holds the graph algorithms (Priority-Flood, D8, flat
 resolution, Kahn accumulation), `reaches.py` the channel network and reach metrics, `scoring.py`
 the run finder, signature, composite and regression, and `context.py` the geology and flood
-fetchers. An 80 M-cell (5 m) region routes in about 100 s on this 4-core, 15 GB machine.
+fetchers. `ml.py` holds the CV evaluation (catchment folds, model zoo, metrics), `reachtype.py`
+the Montgomery & Buffington reach types used for style-matched AUC (spec: `docs/MB1997_reach_classification_spec.pdf`),
+`mlpage.py` the ML page (`data/viewer_nz/ml.html`) built from `models/cv/*.json`. An 80 M-cell (5 m) region routes in about 100 s on this 4-core, 15 GB machine.
 
 ## Conventions & Patterns
 
