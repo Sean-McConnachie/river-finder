@@ -56,7 +56,7 @@
     map.addControl(new window.maplibregl.ScaleControl({ unit: "metric", maxWidth: 110 }), "bottom-right");
     map.addControl(new window.maplibregl.AttributionControl({ compact: true, customAttribution: [
       'Terrain <a href="https://registry.opendata.aws/nz-elevation/" target="_blank" rel="noopener">LINZ</a> CC BY 4.0',
-      'Rivers <a href="https://niwa.co.nz/" target="_blank" rel="noopener">NIWA</a>',
+      'Rivers <a href="https://data.linz.govt.nz/layer/103632-nz-river-name-lines-pilot/" target="_blank" rel="noopener">LINZ</a>, <a href="https://niwa.co.nz/" target="_blank" rel="noopener">NIWA</a>',
       '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a>',
       'Guides <a href="https://www.riverguide.co.nz/" target="_blank" rel="noopener">NZ RiverGuide</a> CC BY-SA 3.0 NZ',
     ] }), "bottom-right");

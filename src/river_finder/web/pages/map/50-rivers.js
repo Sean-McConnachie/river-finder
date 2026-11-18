@@ -38,8 +38,11 @@
   M.defineLayer({ id: "pred-listed", parent: "pred", label: "Include runs already in the guides", defaultOn: false, swatch: "none",
     count: () => runs.filter((r) => r.status === "listed").length, apply: applyPred });
 
-  M.defineLayer({ id: "net", parent: "rivers", label: "River network", note: "Channels from the LINZ elevation model", defaultOn: true,
-    colors: [{ key: "c", token: "--river-linz" }], legend: "River network (LINZ DEM channels)", count: () => M.R?.segments?.g.length ?? null, apply: applyNet });
+  M.defineLayer({ id: "linz", parent: "rivers", label: "LINZ rivers", note: "NZ Topo50 river lines with LINZ names", defaultOn: true,
+    link: "https://data.linz.govt.nz/layer/103632-nz-river-name-lines-pilot/",
+    colors: [{ key: "c", token: "--river-linz" }], legend: "LINZ river (NZ River Name Lines)", count: () => M.linz?.lines.length ?? null, apply: applyLinz });
+  M.defineLayer({ id: "net", parent: "rivers", label: "Modelled channels", note: "From the LINZ elevation model (shown when LINZ lines are missing)", defaultOn: false,
+    colors: [{ key: "c", token: "--muted" }], legend: "Modelled channel (LINZ DEM)", count: () => M.R?.segments?.g.length ?? null, apply: applyNet });
   M.defineLayer({ id: "names", parent: "rivers", label: "River names", note: "From zoom 11", defaultOn: true, swatch: "none", apply: applyNames });
 
   // ---------- map layers ----------
@@ -52,7 +55,10 @@
   M.layerInits = M.layerInits || [];
   M.layerInits.push(() => {
     const map = M.map;
-    ["net", "known", "pred", "names"].forEach((id) => map.addSource(`src-${id}`, { type: "geojson", data: EMPTY, tolerance: 0.4 }));
+    ["net", "linz", "known", "pred", "names"].forEach((id) => map.addSource(`src-${id}`, { type: "geojson", data: EMPTY, tolerance: 0.4 }));
+    M.addLayer({ id: "linz-line", type: "line", source: "src-linz", layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": "#888", "line-opacity": 0.95,
+        "line-width": ["interpolate", ["linear"], ["zoom"], 8, ["case", ["get", "named"], 1.1, 0.5], 12, ["case", ["get", "named"], 2, 1], 16, ["case", ["get", "named"], 4, 2]] } }, "network");
     M.addLayer({ id: "net-line", type: "line", source: "src-net", layout: { "line-cap": "round", "line-join": "round" },
       paint: { "line-color": "#888", "line-width": ["interpolate", ["linear"], ["zoom"], 8, ["interpolate", ["linear"], ["get", "w"], 0, 0.4, 1, 1.6], 14, ["interpolate", ["linear"], ["get", "w"], 0, 1, 1, 4]], "line-opacity": 0.9 } }, "network");
     M.addLayer({ id: "pred-casing", type: "line", source: "src-pred", layout: { "line-cap": "round", "line-join": "round" },
@@ -79,6 +85,7 @@
     M.clickable({ layers: ["known-line", "known-casing"], priority: 90, feature: (f) => sectionFeature(f.properties.i) });
     M.clickable({ layers: ["pred-line", "pred-casing"], priority: 80, feature: (f) => runs[f.properties.i] || null });
     M.clickable({ layers: ["net-line"], priority: 40, feature: (f) => reachFeature(f.properties.i) });
+    M.clickable({ layers: ["linz-line"], priority: 45, feature: (f, e) => linzFeature(f, e) });
   });
 
   // ---------- data per region ----------
@@ -145,11 +152,29 @@
   }
   M.runs = () => runs;
 
+  // LINZ river lines (river_finder.linz): <id>_linz.json = {names, types, lines: [[type, name | -1, section id, flat lon/lat]]}
+  M.linz = null;
+  async function loadLinz(R) {
+    let L = null;
+    try { const r = await fetch(`${R.id}_linz.json`); if (r.ok) L = await r.json(); } catch (e) { L = null; }
+    if (M.R !== R) return;
+    M.linz = L;
+    const feats = (L?.lines || []).map(([t, n, sid, flat], i) => {
+      const c = []; for (let j = 0; j < flat.length; j += 2) c.push([flat[j], flat[j + 1]]);
+      return { type: "Feature", properties: { i, t, n: n >= 0 ? L.names[n] : "", named: n >= 0, sid }, geometry: { type: "LineString", coordinates: c } };
+    });
+    M.map.getSource("src-linz").setData({ type: "FeatureCollection", features: feats });
+    // labels: LINZ names (their lines are smooth Topo50 centrelines); REC2 chains when there is no LINZ file
+    M.map.getSource("src-names").setData(L ? { type: "FeatureCollection", features: feats.filter((f) => f.properties.named).map((f) => ({ type: "Feature", properties: { n: f.properties.n }, geometry: f.geometry })) } : buildNames(R));
+    applyLinz(); applyNet(M.isVisible("net"), (k) => M.colorOf("net", k)); M.renderTree();
+  }
+
   M.onRegion((R) => {
     if (!M.map.getSource("src-known")) return;
     M.map.getSource("src-known").setData(buildKnown(R));
     M.map.getSource("src-net").setData(buildNet(R));
-    M.map.getSource("src-names").setData(buildNames(R));
+    M.linz = null; M.map.getSource("src-linz").setData(EMPTY); M.map.getSource("src-names").setData(EMPTY);
+    loadLinz(R);
     runs = []; M.map.getSource("src-pred").setData(EMPTY);
     buildPred(R);
   });
@@ -176,8 +201,14 @@
   }
   function applyNet(on, colorOf) {
     if (!M.ready || !M.map.getLayer("net-line")) return;
-    M.vis("net-line", on);
-    M.map.setPaintProperty("net-line", "line-color", colorOf("c"));
+    // stand in for the LINZ lines where a region has none (no LDS key at build time)
+    M.vis("net-line", on || (M.isVisible("linz") && !M.linz));
+    M.map.setPaintProperty("net-line", "line-color", on ? colorOf("c") : M.colorOf("linz"));
+  }
+  function applyLinz() {
+    if (!M.ready || !M.map.getLayer("linz-line")) return;
+    M.vis("linz-line", M.isVisible("linz"));
+    M.map.setPaintProperty("linz-line", "line-color", M.colorOf("linz"));
   }
   function applyNames(on) { if (M.ready) M.vis("names-label", on); }
 
@@ -186,6 +217,32 @@
     const sec = M.R?.sections?.[i]; if (!sec) return null;
     return { kind: "section", region: M.R.id, id: sec.id, name: sec.river, section: sec.section, grade: sec.grade, src: sec.src, members: sec.m, sec };
   }
+  /** The modelled reach nearest a point (within maxM metres), or -1. */
+  function nearestReach(S, lon, lat, maxM = 300) {
+    const k = Math.cos(lat * Math.PI / 180), lim = (maxM / 111200) ** 2;
+    let best = lim, bi = -1;
+    for (let i = 0; i < S.c.length; i++) {
+      const c = S.c[i];
+      for (let j = 0; j < c.length; j++) {
+        const dx = (c[j][0] - lon) * k, dy = c[j][1] - lat, d = dx * dx + dy * dy;
+        if (d < best) { best = d; bi = i; }
+      }
+    }
+    return bi;
+  }
+  M.nearestReach = nearestReach;
+  const LINZ_TYPE = { river_cl: "river", canal_cl: "canal" };
+  function linzFeature(f, e) {
+    const p = f.properties, S = M.R?.segments, type = LINZ_TYPE[M.linz?.types?.[p.t]] || "river";
+    const linz = { name: p.n || "", sid: p.sid, type };
+    const seg = S ? nearestReach(S, e.lngLat.lng, e.lngLat.lat) : -1;
+    const name = p.n || (seg >= 0 && S.r[seg] >= 0 ? S.rivers[S.r[seg]] : `Unnamed ${type}`);
+    if (seg >= 0) return { kind: "reach", region: M.R.id, id: `${M.R.id}:reach:${seg}`, seg, name, linz, geometry: f.geometry };
+    const a = M.areaAt(e.lngLat);
+    return { kind: "linz-river", region: M.R.id, id: `linz:${p.sid}`, name, linz, lat: e.lngLat.lat, lon: e.lngLat.lng, geometry: f.geometry,
+      km2: a ? Math.max(a.km2, a.channel?.km2 || 0) : null };
+  }
+
   function reachFeature(i) {
     const S = M.R?.segments; if (!S) return null;
     return { kind: "reach", region: M.R.id, id: `${M.R.id}:reach:${i}`, seg: i, name: S.r[i] >= 0 ? S.rivers[S.r[i]] : "Unnamed stream" };
@@ -204,7 +261,8 @@
   };
   M.card.reach = (f) => {
     const S = M.R.segments, i = f.seg;
-    return { eyebrow: "River network · one reach", title: f.name,
+    return { eyebrow: f.linz ? `LINZ ${f.linz.type} · numbers from the nearest modelled reach` : "Modelled channel · one reach", title: f.name,
       lines: [el("span", { class: "num", text: `${fmt.grad(S.g[i])} m/km · flood ${fmt.flow(S.maf[i])} m³/s · ${fmt.km2(S.a[i])} km² · ${Math.round(S.zt[i])} m` })] };
   };
 })();
+

@@ -24,13 +24,11 @@ from pyproj import Transformer
 from rasterio.enums import Resampling
 from rasterio.warp import calculate_default_transform, reproject
 
+from .areacode import CODE_LOG_MIN, CODE_STEP, encode_area
 from .regions import Region
 
-# Pixel codes in the area PNG: 0 = nodata (sea), 1 = land below MIN_KM2, 2..255 = log10(area km2)
-MIN_KM2 = 0.02
-LOG_MIN = math.log10(MIN_KM2)
-LOG_MAX = 4.0  # 10 000 km2, larger than any North Island catchment we will show
-STEP = (LOG_MAX - LOG_MIN) / 253.0
+# Pixel codes in the area PNG: see areacode.py (every land cell has an area, down to one cell)
+LOG_MIN, STEP = CODE_LOG_MIN, CODE_STEP
 
 TITLES = {"kaimai": "Kaimai Range", "tutamoe": "Tutamoe plateau", "karangahake": "Karangahake Gorge"}
 
@@ -53,15 +51,6 @@ def _data_uri(img: Image.Image, fmt: str, **kw) -> str:
     img.save(buf, format=fmt, optimize=True, **kw)
     mime = "jpeg" if fmt == "JPEG" else "png"
     return f"data:image/{mime};base64," + base64.b64encode(buf.getvalue()).decode()
-
-
-def encode_area(area_km2: np.ndarray) -> np.ndarray:
-    code = np.zeros(area_km2.shape, dtype=np.uint8)
-    land = np.isfinite(area_km2)
-    code[land] = 1
-    big = land & (area_km2 >= MIN_KM2)
-    code[big] = np.clip(2 + np.round((np.log10(area_km2[big]) - LOG_MIN) / STEP), 2, 255).astype(np.uint8)
-    return code
 
 
 def _rec2_features(path: Path, min_order: int) -> list[dict]:

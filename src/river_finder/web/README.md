@@ -33,7 +33,7 @@ Build order: `core/tokens.css`, `core/base.css`, `vendor/*.css`, `pages/<id>/*.c
 uv run river-finder run kaimai karangahake tutamoe   # reference regions, ~15 min (once)
 uv run river-finder nz viewer                        # region data files -> data/viewer_nz/ (refs only if no national scan)
 uv run river-finder external all                     # waterfalls, roads, tracks (~1 min for the refs)
-uv run river-finder web data                         # known sections per region
+LINZ_LDS_KEY=... uv run river-finder web data        # known sections, roads/tracks, gauges, LINZ rivers (key: LDS, never committed)
 uv run river-finder web build                        # -> data/web/index.html + artifact.html (+ data files)
 uv run river-finder web serve                        # http://localhost:8000/
 ```
@@ -107,6 +107,9 @@ Stable unless noted. Anything not listed here is internal.
 | `RF.data.loaded(id)` | the region if already loaded, else null |
 | `RF.data.gauges()` → `Promise<{flow, rain, sources}>` | national river-flow gauges `[site, name, lat, lon, council, operator, funder, area, years, maf, q10, q100]` and rain gauges `[agent, name, lat, lon, owner]` |
 | `RF.data.scores(regionId, modelId)` → `Promise<{pct, role}>` | per-reach percentile (0-100) for a model; `role` bits 0-1: 1 trained on, 2 test river; bit 2: on a guide section |
+
+Catchment area: `Region.area` is an 8-bit log code (see `areacode.py`, decoded with `Region.code`):
+every land cell has an area, from 2e-5 km² (one cell) to 30 000 km².
 
 `Region` has `id, title, description, bounds, segments` (below), `sections` (known whitewater
 sections placed on reaches: `{id, river, section, grade, gmin, gmax, src, srcName, desc, putIn, takeOut,

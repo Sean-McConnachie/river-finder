@@ -74,9 +74,11 @@
     if (!M.basemapAvailable({ site: true })) parts.push(el("p", { class: "rf-note", text: "Topographic and aerial maps need the standalone site: this host blocks map tile servers." }));
     if (cur.startsWith("catch")) {
       const s = M.catchSettings();
-      const logToS = (v) => Math.round((Math.log10(v) + 1.3) / 3.3 * 1000), sToLog = (x) => 10 ** (x / 1000 * 3.3 - 1.3);
+      // smallest coloured area: 2e-5 km² (every cell) to 100 km², log slider
+      const LO = Math.log10(2e-5), SPAN = 2 - LO;
+      const logToS = (v) => Math.round((Math.log10(v) - LO) / SPAN * 1000), sToLog = (x) => 10 ** (LO + x / 1000 * SPAN);
       parts.push(el("div", { class: "map-catch-ctl" },
-        slider({ id: "map-catch-min", label: "Smallest catchment coloured", min: 0, max: 1000, step: 1, value: logToS(s.minKm2), fmtv: (x) => `${M.nice(sToLog(x))} km²`, oninput: (x) => M.setCatch({ minKm2: sToLog(x) }) }),
+        slider({ id: "map-catch-min", label: "Colour areas from", min: 0, max: 1000, step: 1, value: logToS(s.minKm2), fmtv: (x) => (x <= 2 ? "All land" : M.fmtArea(+sToLog(x).toPrecision(2))), oninput: (x) => M.setCatch({ minKm2: x <= 2 ? 2e-5 : sToLog(x) }) }),
         cur === "catch" ? slider({ id: "map-catch-max", label: "Colour scale up to", min: 0, max: 1000, step: 1, value: Math.round((Math.log10(s.linMax)) / 4 * 1000), fmtv: (x) => `${M.nice(10 ** (x / 1000 * 4))} km²`, oninput: (x) => M.setCatch({ linMax: Math.max(10 ** (x / 1000 * 4), 0.1) }) }) : null,
         slider({ id: "map-catch-op", label: "Opacity", min: 0, max: 100, step: 1, value: Math.round(s.opacity * 100), fmtv: (x) => `${x}%`, oninput: (x) => M.setCatch({ opacity: x / 100 }) }),
         el("label", { class: "map-check" }, el("input", { type: "checkbox", checked: s.fadeTrunc, onchange: (e) => M.setCatch({ fadeTrunc: e.target.checked }) }), "Fade catchments cut off by the region edge")));

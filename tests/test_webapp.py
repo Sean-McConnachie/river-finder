@@ -80,3 +80,15 @@ def test_section_record_shapes_a_research_section():
     assert rec["links"] == [{"t": "NZ RiverGuide", "u": "https://www.riverguide.co.nz/x"}] and rec["m"] == [3, 4]
     local = Section(region="kaimai", river="Tuakopae Stream", status="runnable", source="Sean: top run")
     assert source_group(local) == "local" and section_record(local, [1], "name")["desc"] == "Sean: top run"
+
+
+def test_area_code_covers_every_land_cell():
+    import numpy as np
+
+    from river_finder.areacode import CODE_STEP, decode_area, encode_area
+
+    a = np.array([np.nan, -1.0, 2.5e-5, 6.4e-5, 0.0014, 1.0, 120.0, 25_000.0])  # sea, nodata, 5 m and 8 m cells, ...
+    c = encode_area(a)
+    assert c[0] == 0 and c[1] == 0 and (c[2:] >= 2).all()  # one cell already has an area code
+    back = decode_area(c[2:])
+    assert np.all(np.abs(np.log10(back) - np.log10(a[2:])) <= CODE_STEP / 2 + 1e-9)

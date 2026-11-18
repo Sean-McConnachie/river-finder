@@ -35,6 +35,7 @@ from pyproj import Transformer
 from rasterio.windows import Window
 from shapely.geometry import LineString, Point, box
 
+from .areacode import CODE_LOG_MIN, CODE_STEP, CODE_TAG, encode_area
 from .national import nz_dir
 from .products import _write, hillshade
 from .regions import Region
@@ -266,17 +267,6 @@ def _core_window(ds, core) -> Window:
     return rasterio.windows.from_bounds(x0, y0, x1, y1, ds.transform).round_offsets().round_lengths()
 
 
-def encode_area(area_km2: np.ndarray) -> np.ndarray:
-    """uint8 code: 0 = nodata/sea, 1 = < 0.05 km2, 2..255 = log10(area) from 0.05 to 30 000 km2."""
-    a = np.nan_to_num(area_km2, nan=-1.0)
-    code = np.zeros(a.shape, np.uint8)
-    code[a >= 0] = 1
-    lo, hi = math.log10(0.05), math.log10(30000.0)
-    m = a >= 0.05
-    code[m] = np.clip(2 + (np.log10(a[m]) - lo) / (hi - lo) * 253, 2, 255).astype(np.uint8)
-    return code
-
-
 def finish_tile(tile: Tile, keep_full: bool = False) -> dict:
     d = tile.dir()
     base = tile.index * SEG_BASE
@@ -307,7 +297,7 @@ def finish_tile(tile: Tile, keep_full: bool = False) -> dict:
     prof.pop("predictor", None)
     with rasterio.open(d / "area_code.tif", "w", **dict(prof, dtype="uint8", nodata=0)) as dst:
         dst.write(encode_area(area), 1)
-        dst.update_tags(code="0 nodata, 1 <0.05 km2, 2..255 log10(area km2) from 0.05 to 30000")
+        dst.update_tags(code=CODE_TAG)
     with rasterio.open(d / "truncated.tif") as ds:
         tr8 = ds.read(1, window=_core_window(ds, core))
     with rasterio.open(d / "truncated_core.tif", "w", **dict(prof, dtype="uint8", nodata=255)) as dst:
@@ -475,10 +465,9 @@ def _vrt(paths: list[Path], out: Path, band_type: str, nodata, resampling: str =
 def _area_code_qml() -> str:
     from .export import RAMP, STOPS
 
-    lo, hi = math.log10(0.05), math.log10(30000.0)
     items = []
     for v, c in zip(STOPS, RAMP, strict=True):
-        code = 2 + (math.log10(v) - lo) / (hi - lo) * 253
+        code = 2 + (math.log10(v) - CODE_LOG_MIN) / CODE_STEP
         items.append(f'<item alpha="230" value="{code:.1f}" label="{v} km²" color="{c}"/>')
     return f"""<!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>
 <qgis version="3.34.0" styleCategories="AllStyleCategories">
@@ -486,7 +475,7 @@ def _area_code_qml() -> str:
     <rasterrenderer type="singlebandpseudocolor" band="1" opacity="1" alphaBand="-1">
       <rastershader>
         <colorrampshader colorRampType="INTERPOLATED" classificationMode="1" clip="1">
-          <item alpha="0" value="1" label="&lt; 0.05 km²" color="#cde2fb"/>
+          <item alpha="0" value="1" label="&lt; 2e-5 km²" color="#cde2fb"/>
           {chr(10).join(items)}
         </colorrampshader>
       </rastershader>
@@ -527,8 +516,8 @@ def export_gis(log=print) -> Path:
     (out / "README.txt").write_text(
         "river-finder national GIS export. NZTM2000 (EPSG:2193). Open the .vrt files in QGIS; they\n"
         "read the per-tile GeoTIFFs in ../tiles/ (keep the folder layout).\n\n"
-        "area_code.vrt        8 m catchment area as a code: 0 sea, 1 < 0.05 km2, 2..255 = log10(km2)\n"
-        "                     from 0.05 to 30 000 km2 (area = 10 ** (log10(0.05) + (code - 2) * 0.022839));\n"
+        "area_code.vrt        8 m catchment area as a code: 0 sea, 2..255 = log10(km2) from 2e-5 to 30 000 km2\n"
+        f"                     (area = 10 ** ({CODE_LOG_MIN:.4f} + (code - 2) * {CODE_STEP:.6f}));\n"
         "                     styled by area_code.qml\n"
         "hillshade_24m.vrt    hillshade\n"
         "truncated_core.vrt   1 = catchment reaches a tile edge without a REC2 inflow\n"

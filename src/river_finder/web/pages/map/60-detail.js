@@ -95,10 +95,11 @@
       note ? el("p", { class: "rf-note", text: note }) : null);
   }
 
-  function linkGroups(name, mid, sec, near) {
+  function linkGroups(name, mid, sec, near, linz) {
     const [lon, lat] = mid, q = encodeURIComponent;
     const groups = [];
     if (sec?.links?.length) groups.push(["Guides and sources", sec.links.map((l) => ext(l.u, l.t))]);
+    if (linz) groups.push(["River line and name", [ext("https://data.linz.govt.nz/layer/103632-nz-river-name-lines-pilot/", "LINZ NZ River Name Lines (CC BY 4.0)")]]);
     const gauges = [];
     if (sec?.gauge) gauges.push(el("span", { class: "det-gauge" }, `Gauge named in the guide: ${sec.gauge}. `, ext(`https://www.google.com/search?q=${q(`${sec.gauge} river flow gauge NZ`)}`, "Look it up")));
     const gb = ({ feature, km }) => el("button", { type: "button", class: "det-gaugebtn", onclick: () => RF.detail.open(feature) },
@@ -141,7 +142,7 @@
     ctx.actions.append(showBtn);
     const eyebrow = f.kind === "section" ? `Known river · ${sec.srcName === "riverguide" ? "NZ RiverGuide" : sec.srcName}`
       : f.kind === "run" ? (f.status === "listed" ? "Predicted run · in the guides" : f.status === "heldout" ? "Predicted run · test river" : "Predicted run · not in the guides")
-        : "River network";
+        : f.linz ? `LINZ ${f.linz.type} · numbers from the modelled channel` : "Modelled channel";
     const title = f.kind === "section" && sec.section ? `${sec.river}: ${sec.section}` : name;
 
     // summary
@@ -178,7 +179,7 @@
         sec.flow ? el("p", { class: "rf-note", text: `Flow notes: ${sec.flow}` }) : null));
     }
     const near = M.nearGauges ? await M.nearGauges(midC[1], midC[0]).catch(() => null) : null;
-    body.push(section("Links", linkGroups(name, midC, sec, near)));
+    body.push(section("Links", linkGroups(name, midC, sec, near, f.linz)));
     body.push(el("p", { class: "rf-note det-foot", text: [
       sec ? `Placed on the river network by: ${sec.how}.` : "",
       f.kind === "run" ? "A run is a stretch of consecutive reaches that pass the run-finder settings (see Models)." : "",

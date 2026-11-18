@@ -16,7 +16,12 @@
   // ---------- geometry of feature references ----------
   M.geometry.run = (f) => { const S = M.R?.segments; return S ? { type: "LineString", coordinates: RF.runs.path(S, f.members) } : null; };
   M.geometry.section = M.geometry.run;
-  M.geometry.reach = (f) => { const S = M.R?.segments; return S ? { type: "LineString", coordinates: S.c[f.seg] } : null; };
+  M.geometry.reach = (f) => { if (f.geometry) return f.geometry; const S = M.R?.segments; return S ? { type: "LineString", coordinates: S.c[f.seg] } : null; };
+  M.geometry["linz-river"] = (f) => f.geometry || null;
+  M.card["linz-river"] = (f) => ({ eyebrow: `LINZ ${f.linz.type}`, title: f.name,
+    lines: [f.km2 ? el("span", { class: "num", text: `Catchment area here: ${M.fmtArea(f.km2)}` }) : null,
+      el("span", { class: "rf-note", text: "Smaller than the modelled reaches (from 1 km²), so no gradient or flow here." }),
+      RF.util.copyable(fmt.coord(f.lat, f.lon))], noDetails: true });
   M.geometryOf = (f) => {
     if (M.geometry[f.kind]) return M.geometry[f.kind](f);
     if (f.lon !== undefined && f.lat !== undefined) return { type: "Point", coordinates: [f.lon, f.lat] };
@@ -63,13 +68,11 @@
       const f = await c.feature(hits[0], e);
       if (f) { M.select(f, { fit: false }); return; }
     }
-    // nothing drawn here: catchment readout on the catchment base maps, else clear
-    if (M.prefs.basemap.startsWith("catch")) {
-      const a = M.areaAt(e.lngLat);
-      if (a) { M.select({ kind: "point", region: M.R?.id, id: `pt:${e.lngLat.lng},${e.lngLat.lat}`, name: "This point", lon: e.lngLat.lng, lat: e.lngLat.lat, km2: a.km2, trunc: a.trunc }, { fit: false }); return; }
-    }
+    // nothing drawn here: another region's outline when zoomed out, else the catchment area at this land point
     const reg = M.map.queryRenderedFeatures(e.point, { layers: ["regions-fill"] }).find((r) => r.properties.id !== M.R?.id);
     if (reg && M.map.getZoom() < 10) { M.openRegion(reg.properties.id, { fit: true }); return; }
+    const a = M.areaAt(e.lngLat);
+    if (a) { M.select(Object.assign({ kind: "point", region: M.R?.id, id: `pt:${e.lngLat.lng},${e.lngLat.lat}`, name: "This point", lon: e.lngLat.lng, lat: e.lngLat.lat }, a), { fit: false }); return; }
     M.clearSelection();
   }
 
@@ -78,9 +81,13 @@
   M.buildCard = (root) => { cardEl = el("div", { class: "map-card", hidden: true, role: "region", "aria-label": "Selected feature" }); root.append(cardEl); };
 
   M.card.point = (f) => ({
-    eyebrow: "Catchment area", title: f.km2 > 0 ? `${fmt.km2(f.km2)} km²` : "Under 0.02 km²",
-    lines: [f.trunc ? el("span", { class: "rf-pill rf-pill--warn", text: "Cut off by the region edge: true area is larger" }) : null,
-      RF.util.copyable(fmt.coord(f.lat, f.lon), "Copy")],
+    eyebrow: "Catchment area at this point", title: M.fmtArea(f.km2),
+    lines: [
+      f.trunc ? el("span", { class: "rf-pill rf-pill--warn", text: "Cut off by the region edge: the true area is larger" }) : null,
+      f.channel ? el("span", { class: "rf-row" }, el("span", { text: `Nearest channel: ${M.fmtArea(f.channel.km2)}` }),
+        el("button", { type: "button", class: "rf-btn", onclick: () => { M.map.easeTo({ center: [f.channel.lon, f.channel.lat], duration: 300 }); M.select(Object.assign({}, f, { lon: f.channel.lon, lat: f.channel.lat, km2: f.channel.km2, trunc: f.channel.trunc, channel: null }), { fit: false }); } }, "Go to it")) : null,
+      RF.util.copyable(fmt.coord(f.lat, f.lon), "Copy"),
+      el("span", { class: "rf-note", text: `Area draining through this point (map cell about ${f.pixelM} m).` })],
     noDetails: true,
   });
   M.card.run = (f) => ({

@@ -21,10 +21,10 @@
   /** Two significant figures, no trailing zeros: 0.05, 0.5, 3.2, 45, 1200. */
   M.nice = (v) => v <= 0 ? "0" : String(+v.toPrecision(2));
 
-  // Sequential blue, small to large catchment. Pale steps would vanish into the hillshade, so light
-  // mode runs 300 to 700 and dark mode 450 to 100 (largest rivers brightest).
-  const RAMP_LIGHT = ["#6da7ec", "#5598e7", "#3987e5", "#2a78d6", "#256abf", "#1c5cab", "#184f95", "#104281", "#0d366b"];
-  const RAMP_DARK = ["#2a78d6", "#3987e5", "#5598e7", "#6da7ec", "#86b6ef", "#9ec5f4", "#b7d3f6", "#cde2fb"];
+  // Sequential blue, small to large catchment. Every land point is coloured, so the ramp spans the full
+  // range: ridges pale, channels dark in light mode; in dark mode the largest rivers are brightest.
+  const RAMP_LIGHT = ["#f4f8fd", "#dceafb", "#bcd6f6", "#94bdf0", "#6aa1e8", "#3f84dc", "#2a6cc0", "#1d5299", "#123a70", "#0a2550"];
+  const RAMP_DARK = ["#101b28", "#152b44", "#1b3d61", "#225181", "#2c67a3", "#3f82c6", "#62a0e2", "#93c0f0", "#c5dcf8", "#eef5fd"];
   M.ramp = () => (M.isDark() ? RAMP_DARK : RAMP_LIGHT).map(M.hexRgb);
   M.rampAt = (t) => {
     const R = M.ramp(), x = Math.min(Math.max(t, 0), 1) * (R.length - 1), i = Math.min(Math.floor(x), R.length - 2), f = x - i;
@@ -32,7 +32,10 @@
   };
 
   // Catchment settings (per browser): smallest area shown, opacity, linear range, fade truncated.
-  M.catchDefaults = { minKm2: 0.5, opacity: 0.9, linMax: 100, fadeTrunc: true };
+  // minKm2 2e-5 = every land cell (the area code starts below one 5 m or 8 m cell)
+  M.catchDefaults = { minKm2: 2e-5, opacity: 0.85, linMax: 100, fadeTrunc: true };
+  /** Area for people: m² under 0.01 km², else km². */
+  M.fmtArea = (km2) => !isFinite(km2) ? "–" : km2 < 0.01 ? `${Math.round(km2 * 1e6).toLocaleString("en-NZ")} m²` : `${RF.util.fmt.km2(km2)} km²`;
   M.catchSettings = () => Object.assign({}, M.catchDefaults, M.prefs.catch || {});
 
   function initBaseSources() {
@@ -136,13 +139,13 @@
 
   /** Colour lookup per area code (256 entries, RGBA packed little-endian). */
   function lut(R, s, mode, dark) {
-    const out = new Uint32Array(256), minLog = Math.log10(Math.max(s.minKm2, 1e-3)), maxLog = Math.max(C.maxLog, minLog + 0.5);
+    const out = new Uint32Array(256), minLog = Math.max(Math.log10(Math.max(s.minKm2, 1e-9)), R.code.log_min), maxLog = Math.max(C.maxLog, minLog + 0.5);
     const a = Math.round(255);
     for (let c = 2; c < 256; c++) {
       const lg = R.code.log_min + (c - 2) * R.code.step;
       if (lg < minLog) continue;
       const t = mode === "catch-log" ? (lg - minLog) / (maxLog - minLog) : Math.min(10 ** lg / s.linMax, 1);
-      const [r, g, b] = M.rampAt(mode === "catch-log" || dark ? t : 0.15 + 0.85 * t);
+      const [r, g, b] = M.rampAt(t);
       out[c] = (a << 24) | (b << 16) | (g << 8) | r;
     }
     return out;
@@ -176,22 +179,33 @@
     if (Object.keys(patch).some((k) => k !== "opacity")) M.redrawCatch();
   };
 
-  /** Catchment area (km²) and whether it is cut off by the region edge, at a map point, or null. */
+  /** Catchment area at a map point: {km2, trunc, channel: {km2, lon, lat} | null}, or null off land.
+   *  Every land point has an area (down to one cell); a much larger channel within ~3 px is also given,
+   *  because a finger rarely lands exactly on a 1 px stream. */
   M.areaAt = (lngLat) => {
     if (!C) return null;
     const R = C.R, p = window.maplibregl.MercatorCoordinate.fromLngLat(lngLat);
-    // R.merc = [x0, y0, x1, y1] in EPSG:3857 metres; convert the mercator unit coordinate to metres
     const E = 20037508.342789244, x = p.x * 2 * E - E, y = E - p.y * 2 * E;
-    const q = Math.floor((x - R.merc[0]) / ((R.merc[2] - R.merc[0]) / R.width)), r = Math.floor((R.merc[3] - y) / ((R.merc[3] - R.merc[1]) / R.height));
+    const pw = (R.merc[2] - R.merc[0]) / R.width, ph = (R.merc[3] - R.merc[1]) / R.height;
+    const q = Math.floor((x - R.merc[0]) / pw), r = Math.floor((R.merc[3] - y) / ph);
     if (q < 0 || r < 0 || q >= R.width || r >= R.height) return null;
-    // the largest area within 2 px, so a tap near a channel finds it
-    let best = 0, bi = -1;
-    for (let dr = -2; dr <= 2; dr++) for (let dq = -2; dq <= 2; dq++) {
+    const i0 = r * R.width + q, c0 = C.area[i0];
+    if (c0 < 1) return null;
+    const km2 = (c) => 10 ** (R.code.log_min + (c - 2) * R.code.step);
+    const here = c0 >= 2 ? km2(c0) : 0;
+    let best = c0, bi = i0;
+    for (let dr = -3; dr <= 3; dr++) for (let dq = -3; dq <= 3; dq++) {
       const rr = r + dr, qq = q + dq; if (rr < 0 || qq < 0 || rr >= R.height || qq >= R.width) continue;
       const i = rr * R.width + qq; if (C.area[i] > best) { best = C.area[i]; bi = i; }
     }
-    if (best < 2) return best === 1 ? { km2: 0, trunc: false } : null;
-    return { km2: 10 ** (R.code.log_min + (best - 2) * R.code.step), trunc: C.trunc[bi] > 0 };
+    let channel = null;
+    if (bi !== i0 && best >= 2 && km2(best) >= 0.5 && km2(best) >= 20 * Math.max(here, 1e-6)) {
+      const bq = bi % R.width, br = (bi - bq) / R.width;
+      const mx = R.merc[0] + (bq + 0.5) * pw, my = R.merc[3] - (br + 0.5) * ph;
+      const ll = new window.maplibregl.MercatorCoordinate((mx + E) / (2 * E), (E - my) / (2 * E)).toLngLat();
+      channel = { km2: km2(best), lon: ll.lng, lat: ll.lat, trunc: C.trunc[bi] > 0 };
+    }
+    return { km2: here, trunc: C.trunc[i0] > 0, channel, pixelM: Math.round(pw * Math.cos(lngLat.lat * Math.PI / 180)) };
   };
 
   /** Show the chosen base map. */
@@ -220,23 +234,26 @@
   M.basemapLegend = () => {
     const id = M.prefs.basemap, { el } = RF.util;
     if (!id.startsWith("catch") || !C) return null;
-    const s = M.catchSettings(), log = id === "catch-log", minLog = Math.log10(s.minKm2), maxLog = Math.max(C.maxLog, minLog + 0.5);
+    const s = M.catchSettings(), log = id === "catch-log", minLog = Math.max(Math.log10(s.minKm2), C.R.code.log_min), maxLog = Math.max(C.maxLog, minLog + 0.5);
     const cv = el("canvas", { width: 240, height: 10, class: "map-ramp", "aria-hidden": "true" });
     const ctx = cv.getContext("2d");
     for (let x = 0; x < 240; x++) {
-      const t = x / 239, [r, g, b] = M.rampAt(log || M.isDark() ? t : 0.15 + 0.85 * t);
+      const t = x / 239, [r, g, b] = M.rampAt(t);
       ctx.fillStyle = `rgb(${r},${g},${b})`; ctx.fillRect(x, 0, 1, 10);
     }
     const ticks = el("div", { class: "map-ticks" });
     if (log) {
-      for (let e = Math.ceil(minLog); e <= Math.floor(maxLog); e++) {
+      const decades = []; for (let e = Math.ceil(minLog); e <= Math.floor(maxLog); e++) decades.push(e);
+      const stride = Math.ceil(decades.length / 5);
+      decades.filter((e, k) => k % stride === 0).forEach((e) => {
         const pos = (e - minLog) / (maxLog - minLog) * 100;
-        ticks.append(el("span", { style: `left:${pos}%`, text: M.nice(10 ** e) }));
-      }
+        const v = 10 ** e;
+        ticks.append(el("span", { style: `left:${pos}%`, text: v < 0.01 ? `${Math.round(v * 1e6)} m²` : String(+v.toPrecision(1)) }));
+      });
     } else {
       [0, 0.25, 0.5, 0.75, 1].forEach((t) => ticks.append(el("span", { style: `left:${t * 100}%`, text: t === 1 ? `${M.nice(s.linMax)}+` : M.nice(s.linMax * t) })));
     }
-    return el("div", { class: "map-legend-block" }, el("div", { class: "map-legend-title", text: `Catchment area, km²${log ? " (log scale)" : ""}` }), cv, ticks,
-      el("p", { class: "rf-note", text: `Areas under ${M.nice(s.minKm2)} km² are not coloured.${s.fadeTrunc ? " Faded: catchments cut off by the region edge." : ""}` }));
+    return el("div", { class: "map-legend-block" }, el("div", { class: "map-legend-title", text: `Catchment area${log ? ", log scale (km² unless marked m²)" : ", km²"}` }), cv, ticks,
+      el("p", { class: "rf-note", text: `${s.minKm2 > 3e-5 ? `Areas under ${M.fmtArea(s.minKm2)} are not coloured. ` : "Every land point is coloured. "}Tap the map for the area at any point.${s.fadeTrunc ? " Faded: catchments cut off by the region edge." : ""}` }));
   };
 })();

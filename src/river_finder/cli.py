@@ -205,11 +205,13 @@ def main(argv: list[str] | None = None) -> None:
         from . import webapp
 
         if args.step == "data":
+            from .linz import write_linz
             from .webdata import write_access, write_gauges, write_sections
 
             write_sections(args.data)
             write_access(args.data)
             write_gauges(args.data)
+            write_linz(args.data)
         elif args.step == "build":
             out = webapp.build(args.out, args.data if args.data.exists() else None, args.basemaps_key)
             print(f"web -> {out['site']} and {out['artifact'].name} ({out['regions']} regions, "
