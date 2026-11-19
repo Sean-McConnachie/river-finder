@@ -137,6 +137,10 @@
     evaluations: REG ? REG.evaluations : null,
     /** Feature descriptions keyed by feature name. */
     descriptions: REG ? REG.descriptions : {},
+    /** Cross-validated model zoo (models.cv_summary of models/cv/results.json): {created, folds, repeats,
+     *  domain_km2, spec_version, models: [{id, kind, title, description, inputs, cv: {auc, auc_style, auc_size,
+     *  auc_style_size, recall_top10, recall_top5, median_pct: {mean, sd, fold_sd}}, loro_auc_style}]}, or null. */
+    cv: REG ? REG.cv || null : null,
     /** Pooled regression and run-finder defaults from model.json (coef, holdout, lorocv, run_params, ...), or null. */
     legacy: P.model || null,
   };

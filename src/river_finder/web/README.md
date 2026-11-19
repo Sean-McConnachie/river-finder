@@ -160,6 +160,8 @@ see `webdata.py`), `falls`
 ### Models: `RF.models`
 
 `list()`, `get(id)`, `default`, `evaluations` (`models/evaluations.json`), `descriptions` (features),
+`cv` (the cross-validated model zoo from `models/cv/results.json`: per recipe the mean, repeat sd and
+fold sd of each AUC and recall, plus the leave-one-region-out style-matched AUC; or null),
 `legacy` (pooled regression and run-finder defaults from `model.json`, or null).
 
 ### Detail view: `RF.detail`
