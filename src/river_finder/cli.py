@@ -188,6 +188,13 @@ def _rain(args):
     if args.step == "weights":
         fams = list(cfg.grids) if args.grid == "all" else [args.grid]
         pipeline.run_weights(cfg, fams, log=log)
+    elif args.step == "ecmwf":
+        from .rainfall.ecmwf import parse_hour
+
+        both = not (args.obs or args.fc)
+        now = parse_hour(args.now) if args.now else None
+        pipeline.run_ecmwf(cfg, run=args.run, obs=args.obs or both, fc=args.fc or both, reader=args.reader, now=now,
+                           cache=not args.no_cache, log=log)
     else:
         pipeline.status(cfg, log=print)
 
@@ -252,11 +259,20 @@ def main(argv: list[str] | None = None) -> None:
     pl.add_argument("--models", nargs="*", help="cv: only these model ids (default: the whole zoo)")
     pl.add_argument("--repeats", type=int, default=5, help="cv: repeats of the 5-fold split")
     pl.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz")
-    pr = sub.add_parser("rain", help="rainfall per catchment: weights | status (see src/river_finder/rainfall/)")
-    pr.add_argument("step", choices=["weights", "status"],
-                    help="weights: grid-cell -> local-catchment matrices into <data>/rain/; status: config, "
-                         "weight files and buffers")
+    pr = sub.add_parser("rain", help="rainfall per catchment: weights | ecmwf | status "
+                                     "(see src/river_finder/rainfall/)")
+    pr.add_argument("step", choices=["weights", "ecmwf", "status"],
+                    help="weights: grid-cell -> local-catchment matrices into <data>/rain/; ecmwf: ECMWF IFS observed "
+                         "proxy and next-24-h forecast into <data>/rain/obs_ecmwf.npz and fc_ecmwf.npz; status: "
+                         "config, weight files and buffers")
     pr.add_argument("--grid", choices=["gsmap", "ecmwf", "all"], default="all", help="weights: which grid(s)")
+    pr.add_argument("--run", default="latest", help="ecmwf: 'latest' or a run YYYYMMDDHH (UTC, 00/06/12/18)")
+    pr.add_argument("--obs", action="store_true", help="ecmwf: fill the observed buffer (ECMWF_OBS) only")
+    pr.add_argument("--fc", action="store_true", help="ecmwf: fill the forecast buffer (ECMWF_FC) only")
+    pr.add_argument("--reader", choices=["openmeteo-s3", "ecmwf-s3"], default=None,
+                    help="ecmwf: where hourly IFS rain comes from (default: ecmwf.reader in config/rainfall.toml)")
+    pr.add_argument("--now", default=None, help="ecmwf: treat this hour (YYYYMMDDHH, UTC) as now (default: the clock)")
+    pr.add_argument("--no-cache", action="store_true", help="ecmwf: ignore and do not write the decoded-field cache")
     pr.add_argument("--data", type=Path, default=None,
                     help="national data directory with tiles/ and segments_table.pkl (default: paths.nz_data in "
                          "config/rainfall.toml, i.e. data/nz)")

@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from .buffer import HourlyBuffer, PutResult, ScaleFactors
+import numpy as np
+
+from .buffer import SLOTS, HourlyBuffer, PutResult, ScaleFactors
 from .config import RainConfig
+from .grid import floor_hour, hour_index, hour_time
 from .sources import RainfallSource
 from .weights import CatchmentWeights
 
@@ -98,5 +102,129 @@ def status(cfg: RainConfig, log=print) -> None:
             for r in held:
                 prods[r["product"]] = prods.get(r["product"], 0) + 1
             span = f"{rows[0]['hour']} .. {rows[-1]['hour']}" if rows else "empty"
-            log(f"{kind} {fam}: {span}, {len(held)}/{len(rows)} hours held {prods}, "
-                f"missing {[r['hour'] for r in rows if not r['product']]}")
+            runs = sorted({r["run"] for r in held if r.get("run")})
+            age = ""
+            if runs and kind == "forecast":
+                newest = max(int(h) for h in b.run_hour[b.hour >= 0])
+                age = f", {hour_index(floor_hour(datetime.now(UTC))) - newest} h old now"
+            log(f"{kind} {fam}: {span}, {len(held)}/{len(rows)} hours held {prods}"
+                + (f", runs {runs}{age}" if runs else "")
+                + f", missing {[r['hour'] for r in rows if not r['product']]}")
+
+
+# --- ECMWF (rf-t26.3) ------------------------------------------------------------------------------
+def _hour(h: int) -> str:
+    return hour_time(h).strftime("%Y-%m-%d %H:00Z")
+
+
+def window_summary(buf: HourlyBuffer, w: CatchmentWeights, xs) -> dict:
+    """Per window: national area-weighted mean and max depth, volume, completeness and products."""
+    out = {}
+    area = w.area_m2
+    for x, t in buf.windows(xs).items():
+        m3 = t.m3(area)
+        out[str(x)] = {"first": _hour(t.first_hour - 1), "last": _hour(t.last_hour),
+                       "mean_mm": round(float(m3.sum() / area.sum() * 1000.0), 3),
+                       "max_mm": round(float(np.nanmax(t.mm)), 2) if t.mm.size else 0.0,
+                       "volume_m3": float(m3.sum()), "catchments_incomplete": int(np.count_nonzero(t.n_missing)),
+                       "missing_hours": [_hour(h) for h in t.missing_hours], "products": t.products}
+    return out
+
+
+def run_ecmwf(cfg: RainConfig, run: str = "latest", obs: bool = True, fc: bool = True, reader=None,
+              now: datetime | None = None, cache: bool = True, http=None, log=print) -> dict:
+    """Fill the observed (``ECMWF_OBS``) and forecast (``ECMWF_FC``) ECMWF buffers from one run.
+
+    ``run`` is ``latest`` (the newest published run that covers what is asked) or ``YYYYMMDDHH``.
+    The observed window takes the short leads of that run and the ``obs_runs - 1`` runs before it;
+    the forecast holds hours ``now+1 .. now+24`` of that run. Buffers go to
+    ``<rain>/obs_ecmwf.npz`` and ``<rain>/fc_ecmwf.npz``, each with a ``.json`` report of the last
+    ingest (source, run, lead and product of every hour, missing hours, windows, download).
+    """
+    from .ecmwf import EcmwfSource, Reader, fc_plan, find_run, make_reader, obs_plan, parse_run, run_label
+    from .fetch import Http
+
+    ec = cfg.ecmwf
+    w = CatchmentWeights.load(cfg.weights_path("ecmwf"))
+    if isinstance(reader, Reader):  # tests pass a ready reader
+        rd, name = reader, reader.name
+        http = reader.bucket.http
+    else:
+        name = reader or ec.reader
+        http = http or Http(log=log)
+        rd = make_reader(name, cfg.grids["ecmwf"], http=http, cache_dir=cfg.cache_dir if cache else None,
+                         keep_days=ec.keep_days, ecmwf_urls=ec.ecmwf_urls, openmeteo_url=ec.openmeteo_url, log=log)
+    now = floor_hour(now or datetime.now(UTC))
+    now_h = hour_index(now)
+    explicit = None if run == "latest" else parse_run(run)
+    if explicit is not None and not rd.leads(explicit):
+        raise SystemExit(f"run {run_label(explicit)} is not published on {name}")
+    lo, hi = ec.obs_leads
+    log(f"ECMWF reader {name}; now {_hour(now_h)}; run {run}; weights {w.n} catchments")
+    report = {}
+
+    def ingest_plan(kind: str, tag: str, buf: HourlyBuffer, plan, missing, start_h: int, end_h: int, extra: dict):
+        b0, s0, t0 = http.stats.bytes, http.stats.requests, time.monotonic()
+        res = ingest(EcmwfSource(rd, tag, plan), buf, w, hour_time(start_h), hour_time(end_h))
+        hours = []
+        for r in res:
+            r_run, lead = plan[r.hour]
+            how = rd.hourly(r_run, lead)[1]  # cached: no download
+            hours.append({"hour": _hour(r.hour), "product": tag, "source": name, "run": run_label(r_run),
+                          "lead": lead, "method": how, "status": r.status})
+            log(f"  {_hour(r.hour)} {tag} {name} run {run_label(r_run)} lead {lead:3d} ({how}): {r.status}"
+                + (f" (was {r.previous})" if r.previous and r.status != "updated" else ""))
+        for h in missing:
+            log(f"  {_hour(h)} {tag}: no run covers this hour")
+        path = buf.save(cfg.buffer_path(kind, "ecmwf"))
+        rep = {"product": tag, "reader": name, "written": datetime.now(UTC).isoformat(timespec="seconds"),
+               "now": _hour(now_h), **extra, "hours": hours, "missing": [_hour(h) for h in missing],
+               "windows": window_summary(buf, w, cfg.windows), "buffer": buf.slot_table(),
+               "download": {"bytes": http.stats.bytes - b0, "requests": http.stats.requests - s0,
+                            "seconds": round(time.monotonic() - t0, 1)}}
+        path.with_suffix(".json").write_text(json.dumps(rep, indent=1))
+        d = rep["download"]
+        log(f"{kind} -> {path} ({len(hours)} hours written, {len(missing)} missing; "
+            f"{d['bytes'] / 1e6:.1f} MB in {d['requests']} requests, {d['seconds']} s)")
+        for x, s in rep["windows"].items():
+            log(f"  {x:>2} h {s['first']} .. {s['last']}: mean {s['mean_mm']:.2f} mm, max {s['max_mm']:.1f} mm, "
+                f"{s['volume_m3'] / 1e6:.1f} Mm3, {s['catchments_incomplete']} catchments incomplete")
+        return rep
+
+    if obs:
+        latest = explicit or find_run(rd, now, lambda r: range(lo, hi + 1), ec.search_hours)
+        if latest is None:
+            raise SystemExit(f"no {name} run with leads {lo}-{hi} h published in the last {ec.search_hours} h")
+        plan, missing, end = obs_plan(rd, latest, (lo, hi), ec.obs_runs)
+        buf = open_buffer(cfg, "observed", "ecmwf", w)
+        log(f"observed: ECMWF_OBS from leads {lo}-{hi} h of {ec.obs_runs} runs up to {run_label(latest)}; "
+            f"window ends {_hour(end)} ({now_h - end} h before now)")
+        report["observed"] = ingest_plan(
+            "observed", "ECMWF_OBS", buf, plan, missing, end - SLOTS, end,
+            {"latest_run": run_label(latest), "runs": sorted({run_label(r) for r, _ in plan.values()}),
+             "leads": [lo, hi], "window_end": _hour(end), "hours_behind_now": now_h - end})
+
+    if fc:
+        def need(r):
+            first = max(1, now_h + 1 - hour_index(r))
+            return range(first, now_h + SLOTS + 1 - hour_index(r))
+        frun = explicit or find_run(rd, now, need, ec.search_hours)
+        if frun is None:
+            raise SystemExit(f"no {name} run covering {_hour(now_h + 1)} .. {_hour(now_h + SLOTS)} "
+                             f"published in the last {ec.search_hours} h")
+        plan, missing = fc_plan(rd, frun, now_h)
+        buf = open_buffer(cfg, "forecast", "ecmwf", w)
+        held = {int(r) for r in buf.run_hour[buf.hour >= 0]}
+        if buf.anchor > now_h or any(r > hour_index(frun) for r in held):
+            log("forecast: the saved buffer is ahead of this request (later 'now' or newer run); starting afresh")
+            buf = HourlyBuffer.for_weights(w, "forecast")
+        buf.advance(now_h)
+        age = (now - frun) / timedelta(hours=1)
+        log(f"forecast: ECMWF_FC from run {run_label(frun)} ({age:.0f} h old), hours {_hour(now_h + 1)} .. "
+            f"{_hour(now_h + SLOTS)} = leads {now_h + 1 - hour_index(frun)}-{now_h + SLOTS - hour_index(frun)}")
+        report["forecast"] = ingest_plan("forecast", "ECMWF_FC", buf, plan, missing, now_h, now_h + SLOTS,
+                                         {"run": run_label(frun), "run_age_hours": age})
+    report["download"] = http.stats.to_dict()
+    log(f"download total: {http.stats.bytes / 1e6:.1f} MB in {http.stats.requests} requests "
+        f"({http.stats.retries} retries), {http.stats.seconds:.1f} s on the wire; by host {http.stats.by_host}")
+    return report

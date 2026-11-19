@@ -8,10 +8,10 @@ windows = [1, 3, 6, 12, 24]
 nz_data = "data/nz"              # national data, relative to the repository root; --data overrides it
 tiles = "tiles"                  # <nz_data>/tiles/<tile>/local_catchment_core.tif (8 m, gid per pixel)
 segments = "segments_table.pkl"  # one row per reach: the row order of every catchment array
-rain = "rain"                    # outputs: weights_<grid>.npz (+ .json), obs_<source>.npz, fc_<source>.npz
+rain = "rain"                    # outputs: weights_<grid>.npz (+ .json), obs_<source>.npz, fc_<source>.npz (+ .json)
 
 [observed]
-source = "gsmap"      # source family that feeds the observed metric: gsmap | ecmwf
+source = "gsmap"      # source family that feeds the observed metric: the satellite family (gsmap) | ecmwf
 compare = ["ecmwf"]   # other families kept in their own observed buffers, for side-by-side comparison
 
 [forecast]
@@ -35,3 +35,19 @@ dlon = 0.1
 dlat = -0.1
 nx = 133
 ny = 141
+
+# ECMWF IFS (rf-t26.3; src/river_finder/rainfall/ecmwf.py has the details and the comparison behind the choices).
+[ecmwf]
+# Where hourly IFS rain comes from:
+#   openmeteo-s3: Open-Meteo's hourly copy of the IFS run (native O1280 grid, regridded bilinearly to the 0.1 deg
+#                 cells; CC-BY 4.0), hourly to 90 h, out ~6 h after the run;
+#   ecmwf-s3:     ECMWF open data 0.1 deg GRIB tp (exactly this grid), 3-hourly steps split evenly into hours,
+#                 out ~8.5-9.5 h after the run.
+reader = "openmeteo-s3"
+obs_leads = [1, 6]    # ECMWF_OBS: lead hours of each run used as the observed proxy (runs are 6 h apart: span >= 6)
+obs_runs = 5          # runs read for the observed window: the latest and the 4 before it
+search_hours = 48     # "latest" looks back this far for a published run
+cache = "cache"       # under <rain>: decoded NZ fields per run (re-runs download only listings); "" = no cache
+keep_days = 3         # cached runs older than this are deleted
+ecmwf_urls = ["https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/", "https://storage.googleapis.com/ecmwf-open-data/"]
+openmeteo_url = "https://openmeteo.s3.amazonaws.com/"

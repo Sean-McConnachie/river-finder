@@ -17,6 +17,8 @@ dependencies = [
   "scipy>=1.13",
   "pyarrow>=17",
   "lightgbm>=4.7.0",
+  "gribberish>=1.9",
+  "omfiles>=1.2",
 ]
 
 [project.scripts]

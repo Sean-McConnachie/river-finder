@@ -17,13 +17,29 @@ Modules
   ``ahead(x)`` (next x hours) report missing hours explicitly. ``ScaleFactors`` per family and
   region.
 - :mod:`.config`: ``config/rainfall.toml`` (windows, which family feeds the observed and forecast
-  metrics, paths, grids), validated.
-- :mod:`.pipeline`: ``ingest(source, buffer, weights, start, end, factors)``, the hourly step.
+  metrics, paths, grids, ``[ecmwf]`` reader and leads), validated.
+- :mod:`.pipeline`: ``ingest(source, buffer, weights, start, end, factors)``, the hourly step;
+  ``run_ecmwf`` (the ``rain ecmwf`` step) and ``status``.
+- :mod:`.fetch`: HTTP byte ranges from public buckets with retries (S3 ``503 SlowDown``), mirror
+  fallback and a download tally; ``RangeFile`` lets ``omfiles`` read a remote ``.om`` file.
+- :mod:`.ecmwf` (rf-t26.3): ECMWF IFS hourly rain on the 0.1° ECMWF grid from either reader,
+  ``openmeteo-s3`` (Open-Meteo's hourly copy, O1280 regridded; default) or ``ecmwf-s3`` (0.1° GRIB
+  ``tp`` by range request, 3-hourly steps split evenly); the time steps found, the comparison
+  behind the choice, which leads make ``ECMWF_OBS`` and how ``ECMWF_FC`` is filled are in its
+  docstring.
 
 Data flow
 ---------
 Once per grid: ``river-finder rain weights --grid gsmap|ecmwf|all`` writes
 ``data/nz/rain/weights_<family>.npz`` (+ ``.json`` with the checks).
+
+ECMWF, every few hours (a run comes every 6 h): ``river-finder rain ecmwf`` fills
+``obs_ecmwf.npz`` (``ECMWF_OBS``: leads 1-6 h of the latest run and the 4 before it, the newest
+run per hour) and ``fc_ecmwf.npz`` (``ECMWF_FC``: hours now+1 .. now+24 of the newest run that
+covers them), each with a ``.json`` report giving the source, run, lead and product of every hour,
+the run's age and the download. Re-running replaces hours, never adds to them; decoded fields are
+cached under ``data/nz/rain/cache/``. ``--run YYYYMMDDHH`` picks a run, ``--obs`` / ``--fc`` one
+buffer, ``--reader`` the other reader.
 
 Every hour (children 2 and 3 provide the sources)::
 
@@ -37,11 +53,10 @@ Every hour (children 2 and 3 provide the sources)::
 - rf-t26.2 (GSMaP): subclass ``RainfallSource`` with ``family = "gsmap"``; crop the global field
   with ``cfg.grids["gsmap"].crop(values, GSMAP_GLOBAL)``; yield ``GSMAP_NOW`` then ``GSMAP_NRT``
   for an hour when both exist (NRT has the higher priority and replaces NOW in the buffer).
-- rf-t26.3 (ECMWF): ``family = "ecmwf"``, grid ``ecmwf``. Observed proxy: ``ECMWF_OBS`` fields
-  (short-lead hours; for the same hour a newer run replaces an older one) into the observed ecmwf
-  buffer. Forecast: ``fc.advance(now_hour)``, then ``ECMWF_FC`` fields with ``run`` set into
-  ``fc_ecmwf.npz``; ``fc.ahead(x)``. The 0p1 open data has 3-hourly precipitation steps to 144 h:
-  split into hours (document how) or use the hourly Open-Meteo copy.
+- rf-t26.3 (ECMWF, done): ``EcmwfSource`` (``family = "ecmwf"``, grid ``ecmwf``) yields
+  ``ECMWF_OBS`` into the observed ecmwf buffer, next to the satellite buffer (IMERG, replacing
+  GSMaP) for comparison through the same interface, and ``ECMWF_FC`` into ``fc_ecmwf.npz``
+  (``fc.advance(now)``, then ``fc.ahead(x)`` for x = 1..24, ``.m3(w.area_m2)`` for volumes).
 - rf-t26.5 (scaling): build ``ScaleFactors(family, buffer.regions, factor, version)`` and pass them
   to ``ingest``; ``buffer.apply_factors`` re-scales hours already held. Regions are the segment
   table's ``region`` column (river-guide regions, which follow the councils), ``buffer.region_of``.
@@ -50,15 +65,15 @@ Every hour (children 2 and 3 provide the sources)::
 """
 
 from .buffer import DEFAULT_WINDOWS, SLOTS, HourlyBuffer, PutResult, ScaleFactors, WindowTotal
-from .config import RainConfig, load_config
+from .config import EcmwfConfig, RainConfig, load_config
 from .grid import ECMWF_GLOBAL, GSMAP_GLOBAL, GridSpec, hour_index, hour_time
 from .pipeline import ingest, open_buffer
 from .sources import PRODUCTS, HourlyField, Product, RainfallSource, SyntheticSource
 from .weights import CatchmentWeights, build_weights
 
 __all__ = [
-    "DEFAULT_WINDOWS", "ECMWF_GLOBAL", "GSMAP_GLOBAL", "PRODUCTS", "SLOTS", "CatchmentWeights", "GridSpec",
-    "HourlyBuffer", "HourlyField", "Product", "PutResult", "RainConfig", "RainfallSource", "ScaleFactors",
+    "DEFAULT_WINDOWS", "ECMWF_GLOBAL", "GSMAP_GLOBAL", "PRODUCTS", "SLOTS", "CatchmentWeights", "EcmwfConfig",
+    "GridSpec", "HourlyBuffer", "HourlyField", "Product", "PutResult", "RainConfig", "RainfallSource", "ScaleFactors",
     "SyntheticSource", "WindowTotal", "build_weights", "hour_index", "hour_time", "ingest", "load_config",
     "open_buffer",
 ]

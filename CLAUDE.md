@@ -98,6 +98,8 @@ uv run river-finder ml table|explore|cv|page|audit  # ML: features, grouped repe
                                           # audit: top unlisted runs of a model -> models/audits/
 uv run river-finder models train --kind gbm --recipe gbm_terrain --name v3  # LightGBM registry card (+ v3.lgb.txt)
 uv run river-finder rain weights --grid gsmap|ecmwf|all; rain status  # rainfall: 0.1° cell -> local-catchment weights -> data/nz/rain/ (~4 min; config/rainfall.toml)
+uv run river-finder rain ecmwf [--run latest|YYYYMMDDHH] [--obs] [--fc] [--reader openmeteo-s3|ecmwf-s3]  # ECMWF IFS hourly rain:
+                                          # observed proxy (leads 1-6 of 5 runs) + next 24 h -> data/nz/rain/obs|fc_ecmwf.npz + .json (~1 min, ~35 MB)
 ```
 
 Web app: `src/river_finder/web/` (contract and ownership in `web/README.md`; page briefs in
