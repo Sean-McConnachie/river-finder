@@ -1,0 +1,4 @@
+/* Top rivers page (#top). Owner: Top-rivers agent. */
+.top-end { justify-content: space-between; }
+/* "Show more" moves focus to the first new row; keep its ring inside the scrolling table */
+.top-table tbody tr:focus-visible { outline-offset: -2px; }
