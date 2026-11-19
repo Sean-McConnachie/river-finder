@@ -100,10 +100,11 @@ def _relink(args, log):
     from .national import nz_dir
     from .relink import check_network, relink_table
 
-    src = args.table or nz_dir() / "segments_table.pkl"
+    data = args.data or nz_dir()
+    src = args.table or data / "segments_table.pkl"
     dst = args.table_out or src
     t = pd.read_pickle(src)
-    fixed, lg = relink_table(t, nz_dir() / "tiles", nz_dir() / "rec2.gpkg", log=log)
+    fixed, lg = relink_table(t, data / "tiles", data / "rec2.gpkg", log=log)
     for name, f in (("before", t), ("after", fixed)):
         r = check_network(f["down"].to_numpy(), f["area_km2"].to_numpy())
         log(f"{name}: " + json.dumps({k: v for k, v in r.items() if not k.startswith("_")}))
@@ -241,8 +242,11 @@ def main(argv: list[str] | None = None) -> None:
     pn.add_argument("tiles", nargs="*", help="tile ids such as x11y16 (default: every land tile)")
     pn.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz")
     pn.add_argument("--page-only", action="store_true", help="viewer: re-render only the page, keep the region files")
+    pn.add_argument("--data", type=Path, default=None,
+                    help="relink: national data directory with tiles/, rec2.gpkg and segments_table.pkl "
+                         "(default data/nz)")
     pn.add_argument("--table", type=Path, default=None,
-                    help="relink: table to read (default data/nz/segments_table.pkl)")
+                    help="relink: table to read (default <data>/segments_table.pkl)")
     pn.add_argument("--table-out", type=Path, default=None,
                     help="relink: where to write the relinked table (default: replace --table, keeping the old one "
                          "as <name>.pre_relink.pkl); the link log goes next to it as <name>_relink_log.csv")
