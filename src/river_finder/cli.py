@@ -175,6 +175,23 @@ def _ml(args):
         mlpage.build(args.out, log=log)
 
 
+def _rain(args):
+    from .rainfall import pipeline
+    from .rainfall.config import load_config
+
+    t0 = time.time()
+
+    def log(m):
+        print(f"[{(time.time() - t0) / 60:6.1f} min] {m}", flush=True)
+
+    cfg = load_config(args.config, args.data)
+    if args.step == "weights":
+        fams = list(cfg.grids) if args.grid == "all" else [args.grid]
+        pipeline.run_weights(cfg, fams, log=log)
+    else:
+        pipeline.status(cfg, log=print)
+
+
 STEPS = {"fetch": _fetch, "route": _route, "validate": _validate, "reaches": _reaches, "export": _export}
 
 
@@ -235,6 +252,15 @@ def main(argv: list[str] | None = None) -> None:
     pl.add_argument("--models", nargs="*", help="cv: only these model ids (default: the whole zoo)")
     pl.add_argument("--repeats", type=int, default=5, help="cv: repeats of the 5-fold split")
     pl.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz")
+    pr = sub.add_parser("rain", help="rainfall per catchment: weights | status (see src/river_finder/rainfall/)")
+    pr.add_argument("step", choices=["weights", "status"],
+                    help="weights: grid-cell -> local-catchment matrices into <data>/rain/; status: config, "
+                         "weight files and buffers")
+    pr.add_argument("--grid", choices=["gsmap", "ecmwf", "all"], default="all", help="weights: which grid(s)")
+    pr.add_argument("--data", type=Path, default=None,
+                    help="national data directory with tiles/ and segments_table.pkl (default: paths.nz_data in "
+                         "config/rainfall.toml, i.e. data/nz)")
+    pr.add_argument("--config", type=Path, default=None, help="rainfall config (default config/rainfall.toml)")
     pv = sub.add_parser("viewer", help="build the browser viewer for the given regions")
     pv.add_argument("regions", nargs="*")
     pv.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer")
@@ -278,6 +304,9 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.cmd == "ml":
         _ml(args)
+        return
+    if args.cmd == "rain":
+        _rain(args)
         return
     regions = [load_region(n) for n in (args.regions or list_regions())]
 

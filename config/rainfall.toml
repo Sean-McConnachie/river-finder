@@ -1,0 +1,37 @@
+# Rainfall accumulation per catchment (epic rf-t26). Read and validated by src/river_finder/rainfall/config.py.
+
+# Windows (hours) for observed rain (the past x hours) and forecast rain (the next x hours).
+# Any whole hour in 1..24: the buffers keep 24 hourly slots.
+windows = [1, 3, 6, 12, 24]
+
+[paths]
+nz_data = "data/nz"              # national data, relative to the repository root; --data overrides it
+tiles = "tiles"                  # <nz_data>/tiles/<tile>/local_catchment_core.tif (8 m, gid per pixel)
+segments = "segments_table.pkl"  # one row per reach: the row order of every catchment array
+rain = "rain"                    # outputs: weights_<grid>.npz (+ .json), obs_<source>.npz, fc_<source>.npz
+
+[observed]
+source = "gsmap"      # source family that feeds the observed metric: gsmap | ecmwf
+compare = ["ecmwf"]   # other families kept in their own observed buffers, for side-by-side comparison
+
+[forecast]
+source = "ecmwf"      # source family that feeds "rain in the next x hours"
+
+# NZ windows of each product's native 0.1 degree grid. lon0/lat0 = centre of the north-west cell;
+# rows run north to south. Both cover every national tile (166.09..178.75 E, 34.27..47.44 S) with a margin.
+
+[grids.gsmap]         # JAXA GSMaP: cell centres on x.x5 deg (global 3600 x 1200, first centre 0.05E 59.95N)
+lon0 = 165.85
+lat0 = -33.85
+dlon = 0.1
+dlat = -0.1
+nx = 132
+ny = 140
+
+[grids.ecmwf]         # ECMWF IFS open data 0p1: grid points on x.x0 deg (global 3600 x 1801 from 90N, 180)
+lon0 = 165.8
+lat0 = -33.8
+dlon = 0.1
+dlat = -0.1
+nx = 133
+ny = 141
