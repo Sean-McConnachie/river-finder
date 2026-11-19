@@ -1,19 +1,99 @@
 /* Top rivers page (#top). Owner: Top-rivers agent. */
+
+/* ---------- header: model, link to Models, safety note ---------- */
+.top-model { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); }
+.top-model p { flex: 1 1 300px; min-width: 0; font-size: var(--fs-sm); }
+.top-model strong { overflow-wrap: anywhere; }
+.top-safety {
+  display: flex; align-items: flex-start; gap: var(--sp-2); max-width: 80ch;
+  padding: var(--sp-2) var(--sp-3); border-left: 3px solid var(--warn); border-radius: var(--radius);
+  background: var(--warn-soft); color: var(--fg); font-size: var(--fs-sm);
+}
+.top-safety svg { width: 16px; height: 16px; flex: none; margin-top: 2px; color: var(--warn); }
+
+/* ---------- controls: region and "New leads only", then the filter panel ---------- */
+.top-controls { display: grid; gap: var(--sp-3); min-width: 0; }
+.top-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); }
+.top-region { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; max-width: 100%; }
+.top-region select { min-width: 0; }
+.top-check { display: inline-flex; align-items: center; gap: var(--sp-2); min-height: 36px; font-size: var(--fs-sm); font-weight: 550; cursor: pointer; }
+.top-check input, .top-chip input { width: 18px; height: 18px; margin: 0; flex: none; accent-color: var(--accent); }
+.top-ftoggle { display: none; }
+.top-badge {
+  display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px;
+  background: var(--accent); color: var(--accent-fg); font: 600 var(--fs-xs)/1 var(--font-ui);
+}
+.top-ftoggle::after {
+  content: ""; width: 7px; height: 7px; margin: -3px 2px 0 2px; flex: none;
+  border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg);
+}
+.top-controls.is-open .top-ftoggle::after { margin-top: 3px; transform: rotate(-135deg); }
+
+.top-panel {
+  display: grid; gap: var(--sp-3) var(--sp-4); align-items: end; min-width: 0;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  padding-top: var(--sp-3); border-top: 1px solid var(--line);
+}
+.top-field { display: grid; gap: 4px; min-width: 0; align-content: end; }
+.top-flabel { font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.top-field select { width: 100%; min-width: 0; }
+.top-field--status { grid-column: span 2; }
+.top-range { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.top-range select { flex: 1 1 0; }
+.top-range span { font-size: var(--fs-sm); }
+.top-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.top-chip {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 var(--sp-3) 0 var(--sp-2);
+  border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface);
+  font-size: var(--fs-sm); font-weight: 550; cursor: pointer; white-space: nowrap;
+}
+.top-chip:has(input:checked) { background: var(--accent-soft); border-color: var(--accent); }
+.top-reset { justify-self: start; }
+.top-reset:disabled { opacity: 0.55; cursor: default; }
+.top-reset:disabled:hover { border-color: var(--line-strong); }
+@media (pointer: coarse) { .top-check, .top-chip { min-height: var(--touch); } }
+
+/* loading progress ("Loaded 5 of 19 regions") and the filter summary */
+.top-progress { display: grid; gap: 6px; font-size: var(--fs-sm); color: var(--muted); }
+.top-progress progress { width: min(320px, 100%); height: 6px; accent-color: var(--accent); }
+.top-err { color: var(--crit); }
+
+/* ---------- the list ---------- */
 .top-end { justify-content: space-between; }
 /* "Show more" moves focus to the first new row; keep its ring inside the scrolling table */
 .top-table tbody tr:focus-visible { outline-offset: -2px; }
+.top-noroad .top-road { display: none; }   /* no access data in the regions shown */
+.top-table td.top-name .rf-pill { vertical-align: 1px; }
+.top-sub { display: block; margin-top: 2px; color: var(--muted); font-size: var(--fs-xs); }
+.top-grade, .top-falls { gap: 5px; }
+.top-gdot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.top-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; vertical-align: 1px; }
+.top-dot--hi { background: var(--score-hi); }
+.top-dot--mid { background: var(--score-mid); }
+.top-dot--lo { background: var(--score-lo); }
+.top-acts { flex-wrap: wrap; }
+.top-guide { color: var(--accent); padding: 0 var(--sp-2); }
 /* Text for screen readers only (spoken column headers; on phones the whole header row) */
 .top-vh {
   position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
   overflow: hidden; clip-path: inset(50%); white-space: nowrap;
 }
 
-/* Phones: each row is a list item that fits the card.
-     1  River name [pill]          SCORE 87
-        6.2 km · 30 m/km · flood 12 m³/s
-        [      Map      ] [    Details    ]
+/* Phones: the filters fold into a "Filters" disclosure, and each row is a list item that fits the card.
+     1  River name [pill] [grade]       SCORE 87
+        Region (all regions only)
+        6.2 km · 30 m/km · flood 12 m³/s · road 680 m
+        [      Map      ] [    Details    ] [Guide]
    The table stays a table for screen readers: explicit roles in top.js, headers visually hidden. */
 @media (max-width: 720px) {
+  .top-bar { gap: var(--sp-2) var(--sp-3); }
+  .top-region { flex: 1 1 100%; }
+  .top-region select { flex: 1 1 auto; }
+  .top-ftoggle { display: inline-flex; margin-left: auto; }
+  .top-controls:not(.is-open) .top-panel { display: none; }
+  .top-panel { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-3); }
+  .top-field--status, .top-field--range, .top-field--wide { grid-column: 1 / -1; }
+
   .top-table, .top-table tbody { display: block; }
   .top-table thead {
     position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
@@ -38,17 +118,19 @@
     content: attr(data-label); content: attr(data-label) / "";
     margin-right: 6px; font: 600 var(--fs-xs)/1 var(--font-ui); letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted);
   }
-  /* second line: km · m/km · flood, each kept whole (a long line wraps between them) */
-  .top-table td.top-km, .top-table td.top-grad, .top-table td.top-flood { order: 4; margin-top: 2px; white-space: nowrap; }
+  /* second line: km · m/km · flood · road, each kept whole (a long line wraps between them) */
+  .top-table td.top-km, .top-table td.top-grad, .top-table td.top-flood, .top-table td.top-road { order: 4; margin-top: 2px; white-space: nowrap; }
   .top-table td.top-km::after, .top-table td.top-grad::after, .top-table td.top-flood::after,
-  .top-table td.top-grad::before, .top-table td.top-flood::before { font-family: var(--font-ui); color: var(--muted); }
+  .top-table td.top-grad::before, .top-table td.top-flood::before, .top-table td.top-road::before { font-family: var(--font-ui); color: var(--muted); }
   .top-table td.top-km::after { content: " km"; content: " km" / ""; }
   .top-table td.top-grad::after { content: " m/km"; content: " m/km" / ""; }
   .top-table td.top-flood::after { content: " m³/s"; content: " m³/s" / ""; }
   .top-table td.top-grad::before { content: "\00a0·\00a0 "; content: "\00a0·\00a0 " / ""; }
   .top-table td.top-flood::before { content: "\00a0·\00a0 flood "; content: "\00a0·\00a0 flood " / ""; }
-  /* third line: two equal buttons */
+  .top-table td.top-road::before { content: "\00a0·\00a0 road "; content: "\00a0·\00a0 road " / ""; }
+  /* third line: Map and Details share the width; Guide (known rivers with a guide page) stays small */
   .top-table td.top-act { order: 5; flex-basis: 100%; margin-top: var(--sp-2); }
-  .top-table td.top-act .rf-row { max-width: 400px; }
+  .top-table td.top-act .rf-row { max-width: 400px; flex-wrap: nowrap; }
   .top-table td.top-act .rf-btn { flex: 1 1 0; }
+  .top-table td.top-act .top-guide { flex: none; }
 }
