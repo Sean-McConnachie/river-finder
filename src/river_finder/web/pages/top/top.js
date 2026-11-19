@@ -88,7 +88,9 @@
   /** The cached rows of a region, if they are for the current model and run-finder settings. */
   const fresh = (id) => { const c = cache.get(id); return c && c.model === RF.state.model && c.params === RF.state.runParams ? c : null; };
 
-  async function regionItems(id) {
+  /** Rows of one region. release: forget the region's decoded reaches afterwards (All regions keeps only the
+   *  rows, so a national scan does not hold every region in memory; Map and Details load it again on demand). */
+  async function regionItems(id, release) {
     const model = RF.state.model, params = RF.state.runParams, hit = fresh(id);
     if (hit) return hit;
     const R = await RF.data.region(id);
@@ -96,6 +98,7 @@
     await yieldMain();   // the region was just decoded: let the page paint before the run finder runs
     const out = { model, params, items: itemsFor(R, RF.runs.find(R, { model: sc })), fallback: !!sc?.fallback };
     if (model === RF.state.model && params === RF.state.runParams) cache.set(id, out);
+    if (release) RF.data.release(id);
     return out;
   }
 
@@ -117,7 +120,7 @@
     const worker = async () => {
       while (next < ids.length) {
         const i = next++;
-        try { parts[i] = await regionItems(ids[i]); } catch (e) { if (my === loadToken) errors.push([title(ids[i]), e.message]); }
+        try { parts[i] = await regionItems(ids[i], ids.length > 1); } catch (e) { if (my === loadToken) errors.push([title(ids[i]), e.message]); }
         if (my !== loadToken) return;
         done++;
         pool = parts.flatMap((p) => p?.items || []);
@@ -141,7 +144,7 @@
   function setProgress(done, total) {
     const lines = [];
     if (scope === ALL && (loading || errors.length)) {
-      lines.push(el("span", { text: loading ? `Loaded ${done} of ${total} regions. The ranking updates as each one arrives.` : `Ranked across ${total - errors.length} of ${total} regions.` }));
+      lines.push(el("span", { text: loading ? `Loaded ${done} of ${total} regions. The ranking updates as each one arrives. This downloads every region: best on Wi-Fi.` : `Ranked across ${total - errors.length} of ${total} regions.` }));
       if (loading) lines.push(el("progress", { max: total, value: done, "aria-hidden": "true" }));
     }
     if (errors.length) lines.push(el("span", { class: "top-err", text: `Could not load ${errors.map(([t, m]) => `${t} (${m})`).join("; ")}.` }));

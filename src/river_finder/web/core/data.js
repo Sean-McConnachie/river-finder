@@ -101,6 +101,13 @@
     },
     /** The already-loaded region, or null (no fetch). */
     loaded: (id) => done.get(id) || null,
+    /** Forget a loaded region so its memory can be freed (a later region(id) loads it again). The region open
+     *  on the map (RF.state.region) is kept. For pages that scan many regions and keep only summaries. */
+    release(id) {
+      if (!id || id === RF.state.region) return false;
+      const had = cache.delete(id); done.delete(id);
+      return had;
+    },
     /** Per-model reach scores: {pct: number[] (percentile 0-100), role: number[] | null}.
      *  role bits 0-1: 1 = the model trained on this reach's river, 2 = test river; bit 2: on a guide section.
      *  Falls back to the scores packed with the reaches when a model file is missing. */

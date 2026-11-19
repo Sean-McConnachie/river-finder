@@ -109,6 +109,7 @@ Stable unless noted. Anything not listed here is internal.
 | `RF.data.defaultRegion()` | last-used region id, else the first |
 | `RF.data.region(id)` → `Promise<Region>` | fetch once, then cached |
 | `RF.data.loaded(id)` | the region if already loaded, else null |
+| `RF.data.release(id)` | forget a loaded region so its memory can be freed (not the one open on the map); `region(id)` loads it again |
 | `RF.data.gauges()` → `Promise<{flow, rain, sources}>` | national river-flow gauges `[site, name, lat, lon, council, operator, funder, area, years, maf, q10, q100]` and rain gauges `[agent, name, lat, lon, owner]` |
 | `RF.data.scores(regionId, modelId)` → `Promise<{pct, role}>` | per-reach percentile (0-100) for a model; `role` bits 0-1: 1 trained on, 2 test river; bit 2: on a guide section |
 
