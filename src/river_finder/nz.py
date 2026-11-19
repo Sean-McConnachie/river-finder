@@ -388,8 +388,14 @@ def run_tiles(tiles: list[Tile] | None = None, log=print, keep_full: bool = Fals
             nxt.result()
 
 
-def merge_segments(tiles: list[Tile] | None = None, stitch_m: float = 24.0) -> gpd.GeoDataFrame:
-    """All tiles' core segments, with downstream links stitched across tile edges."""
+def merge_segments(tiles: list[Tile] | None = None, stitch_m: float = 24.0, relink: bool = True,
+                   log=print) -> gpd.GeoDataFrame:
+    """All tiles' core segments, with downstream links stitched across tile edges.
+
+    A segment that leaves its tile's core is first stitched to a segment of another tile within
+    ``stitch_m`` of its end point. Those still without a downstream link are then reconnected along
+    REC2 (``relink.relink_outlets``; through lakes and flat valleys, where the two tiles route the river
+    apart), and the links are logged to ``data/nz/relink_log.csv``."""
     from scipy.spatial import cKDTree
 
     root = nz_dir() / "tiles"
@@ -425,7 +431,31 @@ def merge_segments(tiles: list[Tile] | None = None, stitch_m: float = 24.0) -> g
             if best >= 0:
                 down[i] = gid[best]
         g["down_gid"] = down
+    if relink and len(ex) and (nz_dir() / "rec2.gpkg").exists():
+        _relink(g, log)
     return g
+
+
+def _relink(g: gpd.GeoDataFrame, log=print) -> None:
+    """Reconnect, in place, the segments that left their tile and found no segment to stitch to."""
+    import shapely
+
+    from .relink import Rec2Graph, describe_log, relink_outlets, roots
+
+    gid = g["gid"].to_numpy(np.int64)
+    pos = pd.Series(np.arange(len(g)), index=gid)
+    down = pd.Series(g["down_gid"].to_numpy()).map(pos).fillna(-1).astype(np.int64).to_numpy()
+    xy, ix = shapely.get_coordinates(g.geometry.to_numpy(), return_index=True)
+    new, lg = relink_outlets(down, g["area_km2"].to_numpy(float), g[["end_x", "end_y"]].to_numpy(float),
+                             g["exits_core"].to_numpy(bool), xy, ix, Rec2Graph.read(nz_dir() / "rec2.gpkg"),
+                             key=gid, length=g["length_m"].to_numpy(float))
+    if (roots(new) < 0).any():
+        raise RuntimeError("relink made a cycle")
+    g["down_gid"] = np.where(new >= 0, gid[np.maximum(new, 0)], -1)
+    lg = describe_log(lg, g)
+    lg.to_csv(nz_dir() / "relink_log.csv", index=False)
+    log(f"relink: {int((lg['status'] == 'linked').sum())} of {len(lg)} segments that left their tile and found no "
+        f"stitch reconnected along REC2 -> {nz_dir() / 'relink_log.csv'}")
 
 
 # --- GIS export -----------------------------------------------------------------------------------

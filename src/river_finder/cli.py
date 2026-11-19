@@ -80,6 +80,8 @@ def _nz(args):
         nz.run_tiles(tiles, log=log)
     elif args.step == "export":
         nz.export_gis(log)
+    elif args.step == "relink":
+        _relink(args, log)
     elif args.step == "score":
         from .nzscore import score_national
 
@@ -88,6 +90,29 @@ def _nz(args):
         from .viewer_nz import build
 
         log(f"viewer -> {build(args.out, page_only=args.page_only)}")
+
+
+def _relink(args, log):
+    import shutil
+
+    import pandas as pd
+
+    from .national import nz_dir
+    from .relink import check_network, relink_table
+
+    src = args.table or nz_dir() / "segments_table.pkl"
+    dst = args.table_out or src
+    t = pd.read_pickle(src)
+    fixed, lg = relink_table(t, nz_dir() / "tiles", nz_dir() / "rec2.gpkg", log=log)
+    for name, f in (("before", t), ("after", fixed)):
+        r = check_network(f["down"].to_numpy(), f["area_km2"].to_numpy())
+        log(f"{name}: " + json.dumps({k: v for k, v in r.items() if not k.startswith("_")}))
+    if dst == src:
+        shutil.copy2(src, src.with_name(src.stem + ".pre_relink.pkl"))
+    fixed.to_pickle(dst)
+    out_log = dst.with_name(dst.stem + "_relink_log.csv")
+    lg.to_csv(out_log, index=False)
+    log(f"relinked table -> {dst}; log -> {out_log}")
 
 
 def _models(args):
@@ -208,11 +233,19 @@ def main(argv: list[str] | None = None) -> None:
     for name in [*STEPS, "score", "run"]:
         p = sub.add_parser(name, help="all steps + score + viewer" if name == "run" else f"{name} step")
         p.add_argument("regions", nargs="*", help=f"region names (default: all of {list_regions()})")
-    pn = sub.add_parser("nz", help="national run: fetch | tiles | score | export | viewer (see docs/PLAN.md)")
-    pn.add_argument("step", choices=["fetch", "tiles", "score", "viewer", "export"])
+    pn = sub.add_parser("nz", help="national run: fetch | tiles | score | export | viewer | relink "
+                                   "(see docs/PLAN.md)")
+    pn.add_argument("step", choices=["fetch", "tiles", "score", "viewer", "export", "relink"],
+                    help="relink: reconnect, along REC2, reaches of the national table that stop at a tile edge "
+                         "(rf-t26.8), without re-running tiles or score")
     pn.add_argument("tiles", nargs="*", help="tile ids such as x11y16 (default: every land tile)")
     pn.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz")
     pn.add_argument("--page-only", action="store_true", help="viewer: re-render only the page, keep the region files")
+    pn.add_argument("--table", type=Path, default=None,
+                    help="relink: table to read (default data/nz/segments_table.pkl)")
+    pn.add_argument("--table-out", type=Path, default=None,
+                    help="relink: where to write the relinked table (default: replace --table, keeping the old one "
+                         "as <name>.pre_relink.pkl); the link log goes next to it as <name>_relink_log.csv")
     pm = sub.add_parser("models", help="model registry: table | checkpoint | baseline | import | split | "
                                        "train | evaluate | viewer (see src/river_finder/models.py)")
     pm.add_argument("step", choices=["table", "checkpoint", "baseline", "import", "split", "train", "evaluate",

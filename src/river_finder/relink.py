@@ -38,8 +38,10 @@ from scipy.spatial import cKDTree
 
 @dataclass(frozen=True)
 class RelinkParams:
-    match_m: float = 150.0                    # REC2 reach within this of the outlet's end point
-    match_ratio: tuple[float, float] = (0.5, 2.0)   # REC2 cumulative area / outlet area
+    match_m: float = 150.0                    # REC2 reach within this of the outlet's end point ...
+    match_m_per_sqrt_km2: float = 20.0        # ... or, for big rivers, within this x sqrt(area)
+    match_max_m: float = 1_000.0              # (wide flat valleys: our line and REC2's can be far apart)
+    match_ratio: tuple[float, float] = (1 / 3, 3.0)   # REC2 cumulative area / outlet area
     snap_m: float = 100.0                     # a reach of ours this close to the REC2 path is on it
     step_m: float = 20.0                      # spacing of the points along the REC2 path
     max_walk_m: float = 10_000.0              # how far down REC2 to look
@@ -107,9 +109,10 @@ class Rec2Graph:
         return cls.from_frame(pyogrio.read_dataframe(path, columns=["nzsegment", "HydroID", "NextDownID",
                                                                      "cum_area_km2"]))
 
-    def match(self, xy: np.ndarray, area: np.ndarray, radius_m: float, ratio: tuple[float, float]):
-        """Index of the REC2 reach at each point (-1 none): within ``radius_m``, cumulative area within
-        ``ratio`` of ``area``, scored by distance and by how far the areas differ."""
+    def match(self, xy: np.ndarray, area: np.ndarray, radius_m, ratio: tuple[float, float]):
+        """Index of the REC2 reach at each point (-1 none): within ``radius_m`` (one value or one per
+        point), cumulative area within ``ratio`` of ``area``, scored by distance and by how far the areas
+        differ."""
         pts = shapely.points(xy)
         pi, gi = self.tree.query(pts, predicate="dwithin", distance=radius_m)
         out = np.full(len(xy), -1, dtype=np.int64)
@@ -147,6 +150,10 @@ class Rec2Graph:
 
 
 # ---------------------------------------------------------------------------- relinking
+def _radius(p: RelinkParams, area):
+    return np.clip(p.match_m_per_sqrt_km2 * np.sqrt(area), p.match_m, p.match_max_m)
+
+
 def relink_outlets(down: np.ndarray, area: np.ndarray, end_xy: np.ndarray, eligible: np.ndarray,
                    seg_xy: np.ndarray, seg_row: np.ndarray, rec2: Rec2Graph, key: np.ndarray | None = None,
                    length: np.ndarray | None = None, params: RelinkParams | None = None
@@ -190,7 +197,7 @@ def relink_outlets(down: np.ndarray, area: np.ndarray, end_xy: np.ndarray, eligi
             m += length[x]
             x = int(up[x])
     chain_o, chain_x, chain_m = np.array(chain_o), np.array(chain_x, dtype=np.int64), np.array(chain_m)
-    hit = rec2.match(end_xy[chain_x], area[chain_x], p.match_m, p.match_ratio)
+    hit = rec2.match(end_xy[chain_x], area[chain_x], _radius(p, area[chain_x]), p.match_ratio)
     start = {}
     for o, x, m, r in zip(chain_o.tolist(), chain_x.tolist(), chain_m.tolist(), hit.tolist(), strict=True):
         if r >= 0 and o not in start:
@@ -203,7 +210,7 @@ def relink_outlets(down: np.ndarray, area: np.ndarray, end_xy: np.ndarray, eligi
         rec = {"row": int(o), "area_km2": float(A), "end_x": float(end_xy[o, 0]), "end_y": float(end_xy[o, 1]),
                "rec2_nzsegment": int(rec2.nzseg[r0]) if r0 >= 0 else -1, "rec2_from_m": m0, "status": "",
                "target": -1, "first_hit": -1, "along_m": np.nan, "snap_m": np.nan, "up_m": 0.0, "via_head": False,
-               "area_ratio": np.nan, "rec2_sea_m": np.nan, "largest_too_small_km2": np.nan}
+               "area_ratio": np.nan, "rec2_sea_m": np.nan, "largest_too_small_km2": np.nan, "head_off_path": -1}
         recs.append(rec)
         if r0 < 0:
             rec["status"] = "no REC2 reach near the outlet's river"
@@ -237,8 +244,8 @@ def relink_outlets(down: np.ndarray, area: np.ndarray, end_xy: np.ndarray, eligi
             if cands:
                 chosen = (k, *min(cands))
                 break
+        rec["largest_too_small_km2"] = small if small > 0 else np.nan
         if chosen is None:
-            rec["largest_too_small_km2"] = small if small > 0 else np.nan
             rec["status"] = ("would make a cycle" if cycle else "REC2 reaches the sea first" if sea
                              else "no reach on the REC2 path" if small == 0 else "reaches on the REC2 path too small")
             continue
@@ -248,13 +255,16 @@ def relink_outlets(down: np.ndarray, area: np.ndarray, end_xy: np.ndarray, eligi
         if not p.head_excess[0] <= excess[j] / A <= p.head_excess[1]:
             while walked < p.max_up_m:
                 u = up[x]
-                if u < 0 or area[u] < lo * A:
+                if u < 0 or area[u] < lo * A or new[u] != down[u]:   # not into a river linked here
                     break
                 x = int(u)
                 walked += length[x]
                 if p.head_excess[0] <= excess[x] / A <= p.head_excess[1]:
-                    if np.hypot(*(pts - end_xy[x]).T).min() <= 2 * p.snap_m:   # still on the REC2 path
+                    # still along the REC2 path (as far off it as a match may be)
+                    if np.hypot(*(pts - end_xy[x]).T).min() <= max(2 * p.snap_m, _radius(p, A)):
                         target = x
+                    else:
+                        rec["head_off_path"] = int(x)
                     break
         new[o] = target
         parent[o] = find(root[target])

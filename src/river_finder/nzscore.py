@@ -1,7 +1,8 @@
 """Score the national tiles: one pooled model for all of NZ, outputs per river-guide region.
 
 1. Merge every tile's core segments (``nz.merge_segments``), stitching downstream links across
-   tile edges, and give each segment its river-guide region (``national.assign_regions``).
+   tile edges and reconnecting the rest along REC2 (``relink.py``), and give each segment its
+   river-guide region (``national.assign_regions``).
 2. Split into one frame per region (``down_seg`` re-indexed within the region).
 3. Label known runs. For now these are the reference rivers of ``regions/*.toml``, matched by
    name *inside that reference region's box* (the same names recur elsewhere in NZ).
@@ -65,10 +66,10 @@ class NationalLabels:
         return (listed & sized).astype(int), held
 
 
-def national_frames(tiles=None) -> dict[str, gpd.GeoDataFrame]:
+def national_frames(tiles=None, log=print) -> dict[str, gpd.GeoDataFrame]:
     from .nz import merge_segments
 
-    g = merge_segments(tiles)
+    g = merge_segments(tiles, log=log)
     g["region"] = assign_regions(g.geometry.interpolate(0.5, normalized=True))
     frames = {}
     for name in FILTER_ORDER:
@@ -90,7 +91,7 @@ def region_dir(name: str):
 
 def score_national(tiles=None, params: RunParams | None = None, log=print) -> dict:
     params = params or RunParams()
-    frames = national_frames(tiles)
+    frames = national_frames(tiles, log=log)
     log(f"segments: {sum(len(f) for f in frames.values())} in {len(frames)} regions")
     ha_defaults = {m: default_ha_ramp(list(frames.values()), m) for m in ("melton", "height_to_width")}
     if params.ha_ramp is None:

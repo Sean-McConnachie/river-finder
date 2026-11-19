@@ -116,6 +116,13 @@ def national_table(rebuild: bool = False, log=print) -> pd.DataFrame:
     t["down"] = t["down_gid"].map(pos).fillna(-1).astype(np.int64).to_numpy()
     t = _finish(t, np.concatenate(xs), np.concatenate(ys))
     t["guide_region"] = t["region"]
+    if (nz_dir() / "tiles").exists() and (nz_dir() / "rec2.gpkg").exists():
+        # ``nz score`` already relinks (nz.merge_segments); this catches segments_scored.gpkg files written
+        # before it did. A second pass links nothing new.
+        from .relink import relink_table
+
+        t, lg = relink_table(t, nz_dir() / "tiles", nz_dir() / "rec2.gpkg", log=log)
+        lg.to_csv(nz_dir() / "segments_table_relink_log.csv", index=False)
     t.to_pickle(cache)
     return t
 
