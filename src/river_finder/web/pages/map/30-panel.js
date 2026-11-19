@@ -3,7 +3,7 @@
 
    Layer files register nodes with M.defineGroup / M.defineLayer:
      M.defineLayer({id, label, parent, colors: [{key, token | hex, label}], defaultOn, swatch: "line" | "dot" | "area",
-                    apply(on, colorOf), count(), note, link})
+                    apply(on, colorOf), count(), note, link, legend, legendKey() → Node (legend key of a layer without colours)})
    A layer shows when it and every group above it are on (as in QGIS). */
 (() => {
   "use strict";
@@ -122,9 +122,10 @@
     if (!legendEl) return;
     const blocks = [];
     const bl = M.basemapLegend?.(); if (bl) blocks.push(bl);
-    M.order.map((id) => M.nodes.get(id)).filter((n) => n.type === "layer" && M.isVisible(n.id) && n.colors.length).forEach((n) => {
+    M.order.map((id) => M.nodes.get(id)).filter((n) => n.type === "layer" && M.isVisible(n.id) && (n.colors.length || n.legendKey)).forEach((n) => {
       blocks.push(el("div", { class: "map-legend-row" },
-        el("span", { class: "map-node-swatches" }, ...n.colors.map((c) => el("span", { class: `map-key map-key--${n.swatch}`, style: `--sw:${M.colorOf(n.id, c.key)}`, title: c.label || "" }))),
+        el("span", { class: "map-node-swatches" }, ...(n.legendKey ? [n.legendKey()]
+          : n.colors.map((c) => el("span", { class: `map-key map-key--${n.swatch}`, style: `--sw:${M.colorOf(n.id, c.key)}`, title: c.label || "" })))),
         el("span", { text: n.legend || n.label })));
     });
     const b = M.BASEMAPS.find((x) => x.id === M.prefs.basemap);

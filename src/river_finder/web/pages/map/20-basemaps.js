@@ -142,7 +142,11 @@
     M.addLayer({ id: "catch", type: "raster", source: "catch", layout: { visibility: "none" }, paint: { "raster-fade-duration": 0, "raster-opacity": M.catchSettings().opacity } }, "overlay");
     applyBasemap();
     M.drawCatchLegend?.();
+    areaHooks.forEach((fn) => { try { fn(R); } catch (e) { console.error(e); } });
   }
+  const areaHooks = [];
+  /** Run fn(R) once a region's area grid is decoded (M.areaGrid() is then that region's). */
+  M.onAreaGrid = (fn) => areaHooks.push(fn);
   M.onRegion((R) => loadRegionImages(R).catch((e) => { console.error(e); RF.util.toast("Could not draw the terrain for this region."); }));
   // Artifact host: no tile servers, so the satellite base map is the region's pre-rendered image (webdata.write_satellite).
   M.onRegion((R) => {

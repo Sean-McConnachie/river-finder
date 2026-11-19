@@ -51,6 +51,7 @@
   const byScore = ["+", 0.6, ["*", 0.6, ["get", "t"]]];
   const predWidth = (add = 0) => ["interpolate", ["linear"], ["zoom"], 8, ["+", add, ["*", 2, byScore]], 13, ["+", add, ["*", 4, byScore]], 16, ["+", add, ["*", 7, byScore]]];
   const casing = () => (M.isDark() ? "#0b0f0d" : "#ffffff");
+  M.casing = casing;
 
   M.layerInits = M.layerInits || [];
   M.layerInits.push(() => {
@@ -169,6 +170,7 @@
     // labels: LINZ names (their lines are smooth Topo50 centrelines); REC2 chains when there is no LINZ file
     M.map.getSource("src-names").setData(L ? { type: "FeatureCollection", features: feats.filter((f) => f.properties.named).map((f) => ({ type: "Feature", properties: { n: f.properties.n }, geometry: f.geometry })) } : buildNames(R));
     applyLinz(); applyNet(M.isVisible("net"), (k) => M.colorOf("net", k)); M.renderTree();
+    M.flow?.orientLinz(); // 55-flow.js: turn the lines to run downstream
   }
 
   M.onRegion((R) => {
@@ -194,6 +196,7 @@
     const on = M.isVisible("known") && bins.length > 0 && srcs.length > 0;
     ["known-line", "known-casing"].forEach((l) => { M.map.setFilter(l, filter); M.vis(l, on); });
     M.map.setPaintProperty("known-line", "line-color", color);
+    M.flow?.sync();
   }
   function applyPred() {
     if (!M.ready || !M.map.getLayer("pred-line")) return;
@@ -201,17 +204,20 @@
     const f = listed ? ["all"] : ["==", ["get", "listed"], 0];
     ["pred-line", "pred-casing"].forEach((l) => { M.map.setFilter(l, f); M.vis(l, on); });
     M.map.setPaintProperty("pred-line", "line-color", ["interpolate", ["linear"], ["get", "t"], 0, M.colorOf("pred", "lo"), 0.5, M.colorOf("pred", "mid"), 1, M.colorOf("pred", "hi")]);
+    M.flow?.sync();
   }
   function applyNet(on, colorOf) {
     if (!M.ready || !M.map.getLayer("net-line")) return;
     // stand in for the LINZ lines where a region has none (no LDS key at build time)
     M.vis("net-line", on || (M.isVisible("linz") && !M.linz));
     M.map.setPaintProperty("net-line", "line-color", on ? colorOf("c") : M.colorOf("linz"));
+    M.flow?.sync();
   }
   function applyLinz() {
     if (!M.ready || !M.map.getLayer("linz-line")) return;
     M.vis("linz-line", M.isVisible("linz"));
     M.map.setPaintProperty("linz-line", "line-color", M.colorOf("linz"));
+    M.flow?.sync();
   }
   function applyNames(on) { if (M.ready) M.vis("names-label", on); }
 

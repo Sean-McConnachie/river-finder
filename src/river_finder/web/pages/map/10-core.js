@@ -11,13 +11,14 @@
   M.isPhone = () => window.matchMedia("(max-width: 720px)").matches;
 
   // ---------- layer slots: groups are drawn in this order (bottom to top) ----------
-  // Each group is closed by an invisible anchor layer; addLayer(def, group) inserts before it.
+  // Each group is closed by an invisible anchor layer; addLayer(def, group) inserts before it, or before
+  // the layer `before` when that is on the map (to place a layer between two of its group).
   // "catchment" (the shaded catchment of the selection) sits under every line, so rivers stay visible on it.
   M.SLOTS = ["base", "terrain", "overlay", "regions", "catchment", "network", "access", "rivers", "points", "select", "labels"];
   M.initSlots = () => M.SLOTS.forEach((s) => M.map.addLayer({ id: `slot-${s}`, type: "background", layout: { visibility: "none" } }));
-  M.addLayer = (def, group) => {
+  M.addLayer = (def, group, before) => {
     if (M.map.getLayer(def.id)) M.map.removeLayer(def.id);
-    M.map.addLayer(def, `slot-${group}`);
+    M.map.addLayer(def, before && M.map.getLayer(before) ? before : `slot-${group}`);
   };
   M.setSource = (id, spec) => {
     const src = M.map.getSource(id);
