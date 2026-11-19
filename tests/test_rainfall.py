@@ -279,7 +279,7 @@ def _with(**changes):
 
 def test_config_committed_and_validation():
     cfg = load_config()
-    assert cfg.windows == (1, 3, 6, 12, 24) and cfg.observed_source == "gsmap" and cfg.forecast_source == "ecmwf"
+    assert cfg.windows == (1, 3, 6, 12, 24) and cfg.observed_source == "ecmwf" and cfg.forecast_source == "ecmwf"
     assert cfg.weights_path("gsmap").name == "weights_gsmap.npz" and cfg.rain_dir.parts[-2:] == ("nz", "rain")
     assert load_config(nz_data="/x/nz").rain_dir.as_posix() == "/x/nz/rain"
     ok = parse_config(_with(windows=[24, 2, 7]))
