@@ -440,15 +440,16 @@ def _relink(g: gpd.GeoDataFrame, log=print) -> None:
     """Reconnect, in place, the segments that left their tile and found no segment to stitch to."""
     import shapely
 
-    from .relink import Rec2Graph, describe_log, relink_outlets, roots
+    from .relink import Rec2Graph, describe_log, relink_outlets, roots, tile_local_km2
 
     gid = g["gid"].to_numpy(np.int64)
     pos = pd.Series(np.arange(len(g)), index=gid)
     down = pd.Series(g["down_gid"].to_numpy()).map(pos).fillna(-1).astype(np.int64).to_numpy()
     xy, ix = shapely.get_coordinates(g.geometry.to_numpy(), return_index=True)
+    local = tile_local_km2(nz_dir() / "tiles", gid)     # pixel local areas: which reaches lack area
     new, lg = relink_outlets(down, g["area_km2"].to_numpy(float), g[["end_x", "end_y"]].to_numpy(float),
                              g["exits_core"].to_numpy(bool), xy, ix, Rec2Graph.read(nz_dir() / "rec2.gpkg"),
-                             key=gid, length=g["length_m"].to_numpy(float))
+                             local_km2=local, key=gid, length=g["length_m"].to_numpy(float))
     if (roots(new) < 0).any():
         raise RuntimeError("relink made a cycle")
     g["down_gid"] = np.where(new >= 0, gid[np.maximum(new, 0)], -1)

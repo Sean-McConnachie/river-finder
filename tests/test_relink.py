@@ -3,11 +3,13 @@
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+import rasterio
 import shapely
+from rasterio.transform import from_origin
 from shapely.geometry import LineString
 
 from river_finder import nz
-from river_finder.relink import Rec2Graph, check_network, relink_outlets, relink_table, roots
+from river_finder.relink import Rec2Graph, check_network, relink_outlets, relink_table, roots, tile_local_km2
 
 # Our reaches: name -> (line, area km2, downstream name or None, left its tile's core, tile).
 # 1. Tile edge at x = 1000: A's river ends at (1010, 0); B routed it 60 m north, so the 24 m stitch found
@@ -17,6 +19,8 @@ from river_finder.relink import Rec2Graph, check_network, relink_outlets, relink
 # 3. Flat valley: e1 ends at the edge; B's continuation f0-f1 runs 150 m off REC2 and only f2 comes within
 #    the snap distance, so the link must climb from f2 to the top of the continuation, f0.
 # 4. A coastal mouth (g0, not eligible) and an edge outlet whose only downstream reach is too small (h0).
+# 5. k0's REC2 path passes m0, a bigger river whose catchment is complete (its cells supply all its area):
+#    k0 does not drain there in the next tile's routing, so linking would count k0's area twice.
 SEGS = {
     "a0": ([(0, 0), (300, 0)], 10.0, "a1", False, "A"),
     "a1": ([(300, 0), (600, 0)], 10.5, "a2", False, "A"),
@@ -37,7 +41,10 @@ SEGS = {
     "g0": ([(0, 30000), (500, 30000)], 8.0, None, False, "A"),
     "h0": ([(0, 40000), (1000, 40000)], 40.0, None, True, "A"),
     "h1": ([(1000, 40000), (2000, 40000)], 30.0, None, False, "B"),
+    "k0": ([(0, 50000), (1000, 50000)], 20.0, None, True, "A"),
+    "m0": ([(1000, 50050), (2000, 50050)], 100.0, None, False, "B"),
 }
+HEADS = {"b0": 0.2, "d0": 2.0, "f0": 0.2}   # area came in as a REC2 inflow; their own cells: this much
 # REC2: (nzsegment, line, cumulative area, next nzsegment or None)
 REC2 = [
     (1, [(0, 30), (1000, 30)], 11.0, 2), (2, [(1000, 30), (2000, 30)], 12.0, None),
@@ -45,6 +52,7 @@ REC2 = [
     (20, [(0, 20000), (1000, 20000)], 31.0, 21), (21, [(1000, 20000), (2500, 20000)], 32.0, None),
     (30, [(0, 30000), (600, 30000)], 8.0, None),
     (40, [(0, 40000), (1000, 40000)], 40.0, 41), (41, [(1000, 40000), (2000, 40000)], 41.0, None),
+    (50, [(0, 50000), (1000, 50000)], 20.0, 51), (51, [(1000, 50000), (2000, 50000)], 120.0, None),
 ]
 
 
@@ -65,10 +73,18 @@ def _network(names):
     return pos, down, area, end, elig, xy, ix, lines
 
 
-def _run(names, **kw):
+def _local_km2(names, down, area):
+    # pixel local areas: a reach's own cells supply its area minus its upstream reaches' (heads: HEADS)
+    loc = area - np.bincount(down[down >= 0], weights=area[down >= 0], minlength=len(names))
+    return np.array([HEADS.get(k, v) for k, v in zip(names, loc, strict=True)])
+
+
+def _run(names, pixels=True, **kw):
     pos, down, area, end, elig, xy, ix, _ = _network(names)
+    rank = {k: i for i, k in enumerate(sorted(names))}
     new, log = relink_outlets(down, area, end, elig, xy, ix, Rec2Graph.from_frame(_rec2()),
-                              key=np.array([hash(k) % 10_000 for k in names]), **kw)
+                              local_km2=_local_km2(names, down, area) if pixels else None,
+                              key=np.array([rank[k] for k in names]), **kw)
     return pos, down, new, log.set_index(log["row"].map({v: k for k, v in pos.items()}))
 
 
@@ -81,11 +97,23 @@ def test_relinks_across_tile_edge_lake_and_flat_valley():
     assert log.loc["e1", "first_hit"] == pos["f2"] and log.loc["e1", "via_head"]
     assert new[pos["g0"]] == -1                 # a coastal mouth is not eligible
     assert new[pos["h0"]] == -1 and log.loc["h0", "status"] == "reaches on the REC2 path too small"
+    assert new[pos["k0"]] == -1 and log.loc["k0", "status"] == "reaches on the REC2 path already complete"
     changed = np.flatnonzero(new != down)
     assert set(changed) == {pos["a2"], pos["c1"], pos["e1"]}
     assert (log["status"] == "linked").sum() == 3
     r = check_network(new, np.array([SEGS[k][1] for k in names]))
     assert r["in_cycles"] == 0 and r["reach_no_outlet"] == 0 and r["decreases"] == 0
+    # pixel local areas summed down the new network give every reach its area_km2
+    pos_, down_, area, *_ = _network(names)
+    acc = check_network(new, area, _local_km2(names, down_, area))["_summed_local_km2"]
+    for k in ("b0", "b2", "d1", "f2"):
+        assert abs(acc[pos[k]] - SEGS[k][1]) < 0.25
+
+
+def test_without_pixel_areas_a_complete_river_is_not_detected():
+    pos, _, new, log = _run(list(SEGS), pixels=False)
+    assert new[pos["a2"]] == pos["b0"] and new[pos["e1"]] == pos["f0"]
+    assert new[pos["k0"]] == pos["m0"]       # by area alone, m0 looks like k0's way on
 
 
 def test_links_do_not_depend_on_row_order():
@@ -130,13 +158,24 @@ def test_no_cycle_when_two_outlets_point_into_each_other():
 
 
 def _write_tiles(tmp_path, names):
+    """Each tile's segments_core.gpkg, and a local_catchment_core.tif (100 m cells, 0.01 km2) holding as
+    many cells of each reach's gid as its pixel local area."""
     tiles = tmp_path / "tiles"
     lines = {k: LineString(SEGS[k][0]) for k in names}
     gid = {k: (1 if SEGS[k][4] == "A" else 2) * 1_000_000 + i for i, k in enumerate(names)}
+    _, down, area, *_ = _network(names)
+    loc = dict(zip(names, _local_km2(names, down, area), strict=True))
     for tile in ("A", "B"):
         ks = [k for k in names if SEGS[k][4] == tile]
         d = tiles / tile
         d.mkdir(parents=True)
+        cells = np.concatenate([np.full(round(loc[k] / 0.01), gid[k], dtype=np.int64) for k in ks])
+        lc = np.full(200 * 200, -1, dtype=np.int64)
+        lc[:len(cells)] = cells
+        with rasterio.open(d / "local_catchment_core.tif", "w", driver="GTiff", width=200, height=200, count=1,
+                           dtype="int64", nodata=-1, crs="EPSG:2193",
+                           transform=from_origin(0, 60000, 100, 100)) as dst:
+            dst.write(lc.reshape(200, 200), 1)
         gpd.GeoDataFrame({"gid": [gid[k] for k in ks], "end_x": [SEGS[k][0][-1][0] for k in ks],
                           "end_y": [SEGS[k][0][-1][1] for k in ks], "exits_core": [SEGS[k][3] for k in ks],
                           "length_m": [lines[k].length for k in ks]},
@@ -157,6 +196,10 @@ def test_relink_table_keeps_rows_and_columns(tmp_path):
         "down": [pos[SEGS[k][2]] if SEGS[k][2] else -1 for k in order],
         "area_km2": [SEGS[k][1] for k in order], "river": order, "vi": np.arange(len(order))[::-1],
         "up": -1})
+    loc = tile_local_km2(tmp_path / "tiles", t["gid"].to_numpy())
+    _, down, area, *_ = _network(names)
+    want = dict(zip(names, _local_km2(names, down, area), strict=True))
+    assert np.allclose(loc, [want[k] for k in order])
     fixed, log = relink_table(t, tmp_path / "tiles", tmp_path / "rec2.gpkg", log=lambda m: None)
     same = [c for c in t.columns if c not in ("down", "down_gid", "up")]
     pd.testing.assert_frame_equal(fixed[same], t[same])

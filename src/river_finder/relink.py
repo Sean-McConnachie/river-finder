@@ -4,21 +4,31 @@
 tile within ``stitch_m`` (24 m) whose area is 0.7 to 3 times its own. About 640 of the 7,300
 national outlets fail that test although the river goes on:
 
-- the two tiles route the river along different lines, mostly across lakes and flat valley floors
-  (Lake Wakatipu's Frankton Arm at the head of the Kawarau, the Waikato at Horotiu: 25 m and 500 m);
 - the reach joins a much bigger river just across the edge (area ratio above 3);
-- the neighbour tile's version of the reach ends in its halo, so no reach of the next tile passes
-  near the end point.
+- the two tiles route the river along different lines, mostly across lakes and flat valley floors
+  (Lake Wakatipu's Frankton Arm at the head of the Kawarau: 25 m; the Waikato at Horotiu: 500 m), or
+  the next tile's version of the reach ends in its halo, so nothing of that tile is within 24 m;
+- the next tile's version of the river has much less area (ratio below 0.7).
 
-The other outlets drain into the sea (DEM nodata, which is all connected to the open sea).
+Every other outlet drains into the sea (DEM nodata, which is all connected to the open sea).
 
-The fix follows REC2. For each outlet that left its tile's core: find the REC2 reach at its end point,
-walk REC2 downstream (through lakes and across tile edges), and take the first reach of ours that lies
-on that path and drains at least (1 - ``area_tol``) of the outlet's area. When that reach is part of
-the river's continuation in the next tile, the link goes to the top of that continuation: the reach
-whose area came from the REC2 inflow at the tile edge (its own area minus its upstream reaches' is
-about the outlet's area). A link is never made into the outlet's own catchment (no cycles), and every
-link and every refusal is logged with its reason.
+The fix follows REC2. For each outlet that left its tile's core:
+
+1. find the REC2 reach at its end point (or, where our line and REC2's part on a flat, further up the
+   outlet's own river);
+2. walk REC2 downstream from there (through lakes and across tile edges) and take the first reach of
+   ours on that path that drains at least (1 - ``area_tol``) of the outlet's area and still lacks at
+   least half of it: its ``area_km2`` counts area that no reach upstream of it supplies, the REC2 inflow
+   its tile added at the edge in place of the outlet's catchment. A reach that is already complete is
+   skipped (the outlet joins further down, or the next tile lost the inflow and joining would count the
+   outlet's catchment twice);
+3. climb from that reach to the top of the continuation, following the missing area, to the reach
+   where the inflow came in.
+
+"Lacks" uses the pixel local areas (``local_km2``: area of the cells that first drain into each reach,
+from the tiles' ``local_catchment_core.tif``): missing(x) = area_km2(x) - local areas summed over x's
+catchment. A link is never made into the outlet's own catchment (no cycles), and every link and every
+refusal is logged with its reason.
 
 Areas do not change: each tile already added the REC2 inflow at its edge, so a reach's ``area_km2``
 includes its whole catchment. What was wrong is only which reach drains into which.
@@ -27,6 +37,7 @@ includes its whole catchment. What was wrong is only which reach drains into whi
 from __future__ import annotations
 
 import math
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -46,8 +57,8 @@ class RelinkParams:
     step_m: float = 20.0                      # spacing of the points along the REC2 path
     max_walk_m: float = 10_000.0              # how far down REC2 to look
     area_tol: float = 0.05                    # target area >= (1 - area_tol) x outlet area
-    head_excess: tuple[float, float] = (0.5, 1.5)   # top of the continuation: own minus upstream area / outlet
-    max_up_m: float = 5_000.0                 # how far up the continuation to look for its top
+    missing_frac: float = 0.5                 # the target must lack at least this share of the outlet's area
+    max_up_m: float = 5_000.0                 # how far up the continuation to climb to its top
     max_chain_m: float = 3_000.0              # no REC2 reach at the end point: try the outlet's own river this
                                               # far upstream (our line and REC2's can part on flats)
 
@@ -62,8 +73,6 @@ def roots(down: np.ndarray) -> np.ndarray:
         if np.array_equal(nr, r):
             break
         r = nr
-    else:
-        r = r.copy()
     return np.where(down[r] < 0, r, -1)
 
 
@@ -71,6 +80,17 @@ def local_area(down: np.ndarray, area: np.ndarray) -> np.ndarray:
     """Each reach's area minus the areas of the reaches draining into it."""
     ok = down >= 0
     return area - np.bincount(down[ok], weights=area[ok], minlength=len(down))
+
+
+def accumulate(down: np.ndarray, values: np.ndarray) -> np.ndarray:
+    """``values`` summed over each reach's catchment (the reach and everything upstream of it)."""
+    from .reaches import upstream_order
+
+    acc = np.asarray(values, dtype=float).copy()
+    for i in upstream_order(np.asarray(down, dtype=np.int64)):
+        if down[i] >= 0:
+            acc[down[i]] += acc[i]
+    return acc
 
 
 def upstream_main(down: np.ndarray, area: np.ndarray, key: np.ndarray) -> np.ndarray:
@@ -155,15 +175,17 @@ def _radius(p: RelinkParams, area):
 
 
 def relink_outlets(down: np.ndarray, area: np.ndarray, end_xy: np.ndarray, eligible: np.ndarray,
-                   seg_xy: np.ndarray, seg_row: np.ndarray, rec2: Rec2Graph, key: np.ndarray | None = None,
-                   length: np.ndarray | None = None, params: RelinkParams | None = None
-                   ) -> tuple[np.ndarray, pd.DataFrame]:
+                   seg_xy: np.ndarray, seg_row: np.ndarray, rec2: Rec2Graph, local_km2: np.ndarray | None = None,
+                   key: np.ndarray | None = None, length: np.ndarray | None = None,
+                   params: RelinkParams | None = None) -> tuple[np.ndarray, pd.DataFrame]:
     """New ``down`` (row indices, -1 outlet) with eligible outlets reconnected, and a log with one row per
     eligible outlet (``status`` "linked" or why not).
 
     ``end_xy``: each reach's downstream end (NZTM). ``seg_xy`` / ``seg_row``: the vertices of every reach
-    line and the row each belongs to. ``key``: a stable id per row (``gid``) so the result does not depend
-    on row order. ``length``: reach lengths in m (for how far up a continuation to look).
+    line and the row each belongs to. ``local_km2``: pixel local area of each reach; without it every
+    reach counts as lacking its whole area and the target is the top of the continuation by area alone.
+    ``key``: a stable id per row (``gid``) so the result does not depend on row order. ``length``: reach
+    lengths in m (how far to climb).
     """
     p = params or RelinkParams()
     down = np.asarray(down, dtype=np.int64)
@@ -181,7 +203,11 @@ def relink_outlets(down: np.ndarray, area: np.ndarray, end_xy: np.ndarray, eligi
             x = parent[x]
         return x
 
-    excess = local_area(down, area)
+    # inflow[x]: area of x that neither its upstream reaches nor its own cells supply (a REC2 inflow added
+    # at a tile edge); missing[x]: the same summed over x's catchment.
+    inflow = local_area(down, area) - (np.asarray(local_km2, dtype=float) if local_km2 is not None else 0.0)
+    missing = accumulate(down, inflow)
+    ups = pd.Series(np.flatnonzero(down >= 0)).groupby(down[down >= 0]).agg(list).to_dict()
     up = upstream_main(down, area, key)
     tree = cKDTree(seg_xy)
     todo = np.flatnonzero(np.asarray(eligible, bool) & (down < 0))
@@ -196,21 +222,23 @@ def relink_outlets(down: np.ndarray, area: np.ndarray, end_xy: np.ndarray, eligi
             chain_m.append(m)
             m += length[x]
             x = int(up[x])
-    chain_o, chain_x, chain_m = np.array(chain_o), np.array(chain_x, dtype=np.int64), np.array(chain_m)
+    chain_x = np.array(chain_x, dtype=np.int64)
     hit = rec2.match(end_xy[chain_x], area[chain_x], _radius(p, area[chain_x]), p.match_ratio)
     start = {}
-    for o, x, m, r in zip(chain_o.tolist(), chain_x.tolist(), chain_m.tolist(), hit.tolist(), strict=True):
+    for o, x, m, r in zip(chain_o, chain_x.tolist(), chain_m, hit.tolist(), strict=True):
         if r >= 0 and o not in start:
             start[o] = (x, m, r)
     lo = 1.0 - p.area_tol
     recs = []
     for o in todo.tolist():
         A = area[o]
+        need = p.missing_frac * A
         x0, m0, r0 = start.get(o, (-1, np.nan, -1))
         rec = {"row": int(o), "area_km2": float(A), "end_x": float(end_xy[o, 0]), "end_y": float(end_xy[o, 1]),
                "rec2_nzsegment": int(rec2.nzseg[r0]) if r0 >= 0 else -1, "rec2_from_m": m0, "status": "",
                "target": -1, "first_hit": -1, "along_m": np.nan, "snap_m": np.nan, "up_m": 0.0, "via_head": False,
-               "area_ratio": np.nan, "rec2_sea_m": np.nan, "largest_too_small_km2": np.nan, "head_off_path": -1}
+               "area_ratio": np.nan, "target_missing_km2": np.nan, "rec2_sea_m": np.nan,
+               "largest_too_small_km2": np.nan, "largest_complete_km2": np.nan}
         recs.append(rec)
         if r0 < 0:
             rec["status"] = "no REC2 reach near the outlet's river"
@@ -221,61 +249,68 @@ def relink_outlets(down: np.ndarray, area: np.ndarray, end_xy: np.ndarray, eligi
         # Only path points at or below the outlet's end: the walk may start upstream, on the outlet's river.
         k0 = int(np.argmin(np.hypot(pts[:, 0] - end_xy[o, 0], pts[:, 1] - end_xy[o, 1]))) if x0 != o else 0
         hits = tree.query_ball_point(pts, p.snap_m)
-        chosen, cycle, small = None, False, 0.0
+        chosen, cycle, small, complete = None, False, 0.0, 0.0
         for k, h in enumerate(hits):
             if not h or k < k0:
                 continue
             h = np.asarray(h)
-            rows = seg_row[h]
             d = np.hypot(seg_xy[h, 0] - pts[k, 0], seg_xy[h, 1] - pts[k, 1])
             best = {}
-            for j, dj in zip(rows.tolist(), d.tolist(), strict=True):
+            for j, dj in zip(seg_row[h].tolist(), d.tolist(), strict=True):
                 if j != o and dj < best.get(j, np.inf):
                     best[j] = dj
             cands = []
             for j, dj in best.items():
                 if area[j] < lo * A:
                     small = max(small, area[j])
-                    continue
-                if find(root[j]) == o:      # in the outlet's own catchment
-                    cycle |= root[j] != o       # ... only through an earlier link
-                    continue
-                cands.append((dj + 100.0 * abs(math.log(area[j] / A)), key[j], j, dj))
+                elif find(root[j]) == o:        # in the outlet's own catchment
+                    cycle |= root[j] != o       # ... through an earlier link
+                elif missing[j] < need:
+                    complete = max(complete, area[j])
+                else:
+                    cands.append((dj + 100.0 * abs(math.log(area[j] / A)), key[j], j, dj))
             if cands:
                 chosen = (k, *min(cands))
                 break
         rec["largest_too_small_km2"] = small if small > 0 else np.nan
+        rec["largest_complete_km2"] = complete if complete > 0 else np.nan
         if chosen is None:
-            # too small: the next tile has the river but with much less area (its REC2 inflow went astray)
+            # too small: the next tile has the river but with much less area (its REC2 inflow went astray);
+            # complete: the reaches there already have all their area (the outlet's would count twice)
             rec["status"] = ("would make a cycle" if cycle else
-                             "reaches on the REC2 path too small" if small >= 0.1 * A else
+                             "reaches on the REC2 path too small" if small >= 0.1 * A and small >= complete else
+                             "reaches on the REC2 path already complete" if complete > 0 else
                              "REC2 reaches the sea first" if sea else "no reach on the REC2 path")
             continue
         k, _, _, j, dj = chosen
-        # Climb the continuation to its top: the reach that got the REC2 inflow at the tile edge.
-        target, x, walked = j, j, 0.0
-        if not p.head_excess[0] <= excess[j] / A <= p.head_excess[1]:
-            while walked < p.max_up_m:
-                u = up[x]
-                if u < 0 or area[u] < lo * A or new[u] != down[u]:   # not into a river linked here
-                    break
-                x = int(u)
-                walked += length[x]
-                if p.head_excess[0] <= excess[x] / A <= p.head_excess[1]:
-                    # still along the REC2 path (as far off it as a match may be)
-                    if np.hypot(*(pts - end_xy[x]).T).min() <= max(2 * p.snap_m, _radius(p, A)):
-                        target = x
-                    else:
-                        rec["head_off_path"] = int(x)
-                    break
+        # The top of the continuation: upstream of j, along reaches that still lack the area, the reach
+        # where an inflow of about the outlet's area came in. None found (the continuation joined a bigger
+        # river before the edge of the next tile's core): j itself.
+        head, stack, seen = None, [(j, 0.0)], {j}
+        while stack and len(seen) < 2000:
+            x, w = stack.pop()
+            if need <= inflow[x] <= A / p.missing_frac:
+                head = min(head or (np.inf,), (abs(math.log(inflow[x] / A)), w, key[x], x))
+                continue
+            for u in ups.get(x, ()):
+                wu = w + length[u]
+                if (u not in seen and area[u] >= lo * A and missing[u] >= need and new[u] == down[u]
+                        and wu <= p.max_up_m):
+                    seen.add(u)
+                    stack.append((u, wu))
+        target, walked = (head[3], head[1]) if head else (j, 0.0)
         new[o] = target
         parent[o] = find(root[target])
-        excess[target] -= A
-        if up[target] < 0 or area[o] > area[up[target]] or (area[o] == area[up[target]] and key[o] < key[up[target]]):
-            up[target] = o
+        claimed = A - missing[o]              # the outlet supplies its area, less what it lacks itself
+        inflow[target] -= A
+        x = target
+        while x >= 0:
+            missing[x] -= claimed
+            x = new[x]
+        ups.setdefault(target, []).append(o)
         rec.update(status="linked", target=int(target), first_hit=int(j), along_m=float(along[k] - along[k0]),
-                   snap_m=float(dj), up_m=float(walked) if target != j else 0.0, via_head=bool(target != j),
-                   area_ratio=float(area[target] / A))
+                   snap_m=float(dj), up_m=float(walked), via_head=bool(target != j), area_ratio=float(area[target] / A),
+                   target_missing_km2=float(missing[target] + claimed))
     return new, pd.DataFrame(recs)
 
 
@@ -295,6 +330,7 @@ def check_network(down: np.ndarray, area: np.ndarray, local_km2: np.ndarray | No
     sizes = pd.cut(pd.Series(area[out]), bins, right=False).value_counts().sort_index()
     ok = down >= 0
     dec = np.flatnonzero(ok & (area[np.maximum(down, 0)] < area * (1 - tol)))
+    la = local_area(down, area)
     res = {
         "reaches": n, "outlets": int(out.sum()),
         "outlets_by_area_km2": {f"{int(b.left)}-{int(b.right) if b.right < 1e9 else 'inf'}": int(v)
@@ -303,14 +339,11 @@ def check_network(down: np.ndarray, area: np.ndarray, local_km2: np.ndarray | No
         "in_cycles": int(n - len(order)),
         "reach_no_outlet": int((roots(down) < 0).sum()),
         "decreases": int(len(dec)),
-        "local_km2_total": round(float(local_area(down, area).sum()), 1),
-        "local_km2_negative": int((local_area(down, area) < -1e-6).sum()),
+        "local_km2_total": round(float(la.sum()), 1),
+        "local_km2_negative": int((la < -1e-6).sum()),
     }
     if local_km2 is not None:
-        acc = np.asarray(local_km2, dtype=float).copy()
-        for i in order:
-            if down[i] >= 0:
-                acc[down[i]] += acc[i]
+        acc = accumulate(down, local_km2)
         big = area >= 10.0
         ratio = acc[big] / area[big]
         q = np.quantile(ratio, [0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99])
@@ -320,13 +353,15 @@ def check_network(down: np.ndarray, area: np.ndarray, local_km2: np.ndarray | No
             "within_5pct": round(float((np.abs(ratio - 1) <= 0.05).mean()), 4),
             "within_10pct": round(float((np.abs(ratio - 1) <= 0.10).mean()), 4),
             "below_50pct": int((ratio < 0.5).sum()),
+            "above_110pct": int((ratio > 1.1).sum()),
         }
+        res["pixel_km2_total"] = round(float(np.sum(local_km2)), 1)
         res["_summed_local_km2"] = acc
     res["_decreases"] = dec
     return res
 
 
-# ---------------------------------------------------------------------------- the national table
+# ---------------------------------------------------------------------------- the national tiles
 def tile_segments(tiles_dir: Path, gids: np.ndarray, log=print):
     """End points, ``exits_core``, lengths and line vertices of the tiles' core segments, aligned to
     ``gids``. Returns (end_xy, exits_core, length_m, seg_xy, seg_row)."""
@@ -357,18 +392,48 @@ def tile_segments(tiles_dir: Path, gids: np.ndarray, log=print):
     return end, exits, length, np.concatenate(xs), np.concatenate(rows)
 
 
-def relink_table(t: pd.DataFrame, tiles_dir: Path, rec2_path: Path, params: RelinkParams | None = None,
-                 log=print) -> tuple[pd.DataFrame, pd.DataFrame]:
+def tile_local_km2(tiles_dir: Path, gids: np.ndarray, strip_rows: int = 1024, workers: int = 4) -> np.ndarray:
+    """Pixel local area (km2) of each reach: the cells of the tiles' ``local_catchment_core.tif`` that
+    hold its gid. Aligned to ``gids``; reaches with no cell get 0."""
+    import rasterio
+    from rasterio.windows import Window
+
+    gids = np.asarray(gids, dtype=np.int64)
+    order = np.argsort(gids)
+    sg = gids[order]
+
+    def one(path: Path) -> np.ndarray:
+        out = np.zeros(len(gids))
+        with rasterio.open(path) as ds:
+            px = abs(ds.transform.a * ds.transform.e) / 1e6
+            for r0 in range(0, ds.height, strip_rows):
+                a = ds.read(1, window=Window(0, r0, ds.width, min(strip_rows, ds.height - r0))).ravel()
+                v, c = np.unique(a[a >= 0], return_counts=True)
+                k = np.searchsorted(sg, v)
+                ok = (k < len(sg)) & (sg[np.minimum(k, len(sg) - 1)] == v)
+                np.add.at(out, order[k[ok]], c[ok] * px)
+        return out
+
+    paths = sorted(Path(tiles_dir).glob("*/local_catchment_core.tif"))
+    with ThreadPoolExecutor(workers) as ex:
+        return np.sum(list(ex.map(one, paths)), axis=0) if paths else np.zeros(len(gids))
+
+
+def relink_table(t: pd.DataFrame, tiles_dir: Path, rec2_path: Path, local_km2: np.ndarray | None = None,
+                 params: RelinkParams | None = None, log=print) -> tuple[pd.DataFrame, pd.DataFrame]:
     """The national table with outlets that left their tile reconnected. Only ``down``, ``down_gid`` and
-    ``up`` change; rows, gids and every other column stay as they are. Returns (table, log)."""
+    ``up`` change; rows, gids and every other column stay as they are. ``local_km2`` (pixel local areas,
+    table order) is read from the tiles when not given. Returns (table, log)."""
     from .models import _upstream_main
 
     gid = t["gid"].to_numpy(np.int64)
     end, exits, length, seg_xy, seg_row = tile_segments(tiles_dir, gid, log=log)
+    if local_km2 is None:
+        local_km2 = tile_local_km2(tiles_dir, gid)
+        log(f"relink: pixel local areas, {local_km2.sum():.0f} km2")
     rec2 = Rec2Graph.read(rec2_path)
-    down0 = t["down"].to_numpy(np.int64)
-    down, lg = relink_outlets(down0, t["area_km2"].to_numpy(float), end, exits, seg_xy, seg_row, rec2, key=gid,
-                              length=length, params=params)
+    down, lg = relink_outlets(t["down"].to_numpy(np.int64), t["area_km2"].to_numpy(float), end, exits, seg_xy,
+                              seg_row, rec2, local_km2=local_km2, key=gid, length=length, params=params)
     t = t.copy()
     t["down"] = down
     t["down_gid"] = np.where(down >= 0, gid[np.maximum(down, 0)], -1)
@@ -382,9 +447,9 @@ def describe_log(lg: pd.DataFrame, t: pd.DataFrame) -> pd.DataFrame:
     """Add gids, names and coordinates to a ``relink_outlets`` log."""
     lg = lg.copy()
     gid = t["gid"].to_numpy()
-    r = lg["row"].to_numpy()
+    r = lg["row"].to_numpy(dtype=np.int64)
     lg.insert(0, "gid", gid[r])
-    tg = lg["target"].to_numpy()
+    tg = lg["target"].to_numpy(dtype=np.int64)
     lg["target_gid"] = np.where(tg >= 0, gid[np.maximum(tg, 0)], -1)
     for c in ("river", "region", "lon", "lat"):
         if c in t:
