@@ -24,6 +24,8 @@
     layers: '<path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/>',
     pin: '<path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12Z"/><circle cx="12" cy="9" r="2.5"/>',
     river: '<path d="M3 6c3 0 3 3 6 3s3-3 6-3 3 3 6 3M3 12c3 0 3 3 6 3s3-3 6-3 3 3 6 3"/>',
+    // a catchment: the basin outline and its streams joining at the outlet
+    catchment: '<path d="M12 21 5 15.5 3.5 9 7.5 4l4.5 1.5L16.5 4l4 5-1.5 6.5Z"/><path d="M12 21v-8.5M12 12.5 8.5 9M12 15.5l3.5-4"/>',
     logo: '<path d="M4 20c2.5-5 6-6.5 8-8.5S14.5 6 13 3"/><path d="M11 20c2.5-3 6-4 7.5-6S20 9 19 6" opacity=".55"/>',
   };
   const icon = (name, cls = "") =>

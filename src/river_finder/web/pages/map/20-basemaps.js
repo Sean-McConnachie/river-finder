@@ -193,17 +193,26 @@
     if (Object.keys(patch).some((k) => k !== "opacity")) M.redrawCatch();
   };
 
+  /** The region's decoded grids once drawn: {R, area (8-bit log code), trunc (0/255)} on the heat-map grid, or null. */
+  M.areaGrid = () => (C ? { R: C.R, area: C.area, trunc: C.trunc } : null);
+  /** Index of the heat-map grid pixel (row * width + column) under a map point, or -1 outside the region. */
+  M.pixelOf = (R, lngLat) => {
+    const p = window.maplibregl.MercatorCoordinate.fromLngLat(lngLat);
+    const E = 20037508.342789244, x = p.x * 2 * E - E, y = E - p.y * 2 * E;
+    const pw = (R.merc[2] - R.merc[0]) / R.width, ph = (R.merc[3] - R.merc[1]) / R.height;
+    const q = Math.floor((x - R.merc[0]) / pw), r = Math.floor((R.merc[3] - y) / ph);
+    return q < 0 || r < 0 || q >= R.width || r >= R.height ? -1 : r * R.width + q;
+  };
+
   /** Catchment area at a map point: {km2, trunc, channel: {km2, lon, lat} | null}, or null off land.
    *  Every land point has an area (down to one cell); a much larger channel within ~3 px is also given,
    *  because a finger rarely lands exactly on a 1 px stream. */
   M.areaAt = (lngLat) => {
     if (!C) return null;
-    const R = C.R, p = window.maplibregl.MercatorCoordinate.fromLngLat(lngLat);
-    const E = 20037508.342789244, x = p.x * 2 * E - E, y = E - p.y * 2 * E;
+    const R = C.R, E = 20037508.342789244, i0 = M.pixelOf(R, lngLat);
+    if (i0 < 0) return null;
     const pw = (R.merc[2] - R.merc[0]) / R.width, ph = (R.merc[3] - R.merc[1]) / R.height;
-    const q = Math.floor((x - R.merc[0]) / pw), r = Math.floor((R.merc[3] - y) / ph);
-    if (q < 0 || r < 0 || q >= R.width || r >= R.height) return null;
-    const i0 = r * R.width + q, c0 = C.area[i0];
+    const q = i0 % R.width, r = (i0 - q) / R.width, c0 = C.area[i0];
     if (c0 < 1) return null;
     const km2 = (c) => 10 ** (R.code.log_min + (c - 2) * R.code.step);
     const here = c0 >= 2 ? km2(c0) : 0;
@@ -222,6 +231,9 @@
     return { km2: here, trunc: C.trunc[i0] > 0, channel, pixelM: Math.round(pw * Math.cos(lngLat.lat * Math.PI / 180)) };
   };
 
+  const basemapHooks = [];
+  /** Run fn(id) whenever the base map in use changes (e.g. to adapt an overlay's paint). */
+  M.onBasemap = (fn) => basemapHooks.push(fn);
   /** Show the chosen base map. */
   function applyBasemap() {
     const id = M.prefs.basemap, map = M.map; if (!map) return;
@@ -234,6 +246,7 @@
     M.vis("catch", use.startsWith("catch"));
     paintHillshade();
     document.querySelector(".map-root")?.setAttribute("data-basemap", use);
+    basemapHooks.forEach((fn) => { try { fn(use); } catch (e) { console.error(e); } });
   }
   M.setBasemap = (id) => {
     const prevCatch = M.prefs.basemap.startsWith("catch");

@@ -12,7 +12,8 @@
 
   // ---------- layer slots: groups are drawn in this order (bottom to top) ----------
   // Each group is closed by an invisible anchor layer; addLayer(def, group) inserts before it.
-  M.SLOTS = ["base", "terrain", "overlay", "regions", "network", "access", "rivers", "catchment", "points", "select", "labels"];
+  // "catchment" (the shaded catchment of the selection) sits under every line, so rivers stay visible on it.
+  M.SLOTS = ["base", "terrain", "overlay", "regions", "catchment", "network", "access", "rivers", "points", "select", "labels"];
   M.initSlots = () => M.SLOTS.forEach((s) => M.map.addLayer({ id: `slot-${s}`, type: "background", layout: { visibility: "none" } }));
   M.addLayer = (def, group) => {
     if (M.map.getLayer(def.id)) M.map.removeLayer(def.id);

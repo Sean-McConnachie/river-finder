@@ -1,5 +1,6 @@
 /* Selection on the map: tap anything drawn to highlight it and get a short card; "Details" opens the
-   full-screen detail view (RF.detail), which closes back to the same map view.
+   full-screen detail view (RF.detail), which closes back to the same map view; "Show catchment" shades
+   what drains into the river (45-catchment.js) until the selection changes.
    Layer files register:
      M.clickable({layers: [layerIds], priority, feature(mapFeature) → feature reference})
      M.card[kind] = (feature) → {eyebrow, title, lines: [Node|string]}
@@ -107,13 +108,19 @@
     const actions = el("div", { class: "rf-row map-card-actions" });
     if (!def.noDetails) actions.append(el("button", { type: "button", class: "rf-btn rf-btn--primary", onclick: (e) => RF.detail.open(f, { opener: e.currentTarget }) }, "Details"));
     if (M.geometryOf(f)) actions.append(el("button", { type: "button", class: "rf-btn", onclick: () => M.zoomTo(f) }, "Zoom to"));
+    if (M.catchment?.offers(f)) actions.append(M.catchment.button(f)); // 45-catchment.js
     cardEl.replaceChildren(el("div", { class: "map-card-head" },
       el("div", { class: "map-card-titles" }, el("span", { class: "rf-eyebrow", text: def.eyebrow || "" }), el("strong", { class: "map-card-title", text: def.title || "" })), close),
-    ...(def.lines || []).filter(Boolean).map((l) => el("div", { class: "map-card-line" }, l)), actions);
+    ...[...(def.lines || []), ...(M.catchment?.lines(f) || [])].filter(Boolean).map((l) => el("div", { class: "map-card-line" }, l)), actions);
     cardEl.hidden = false;
   }
   /** Draw the open card again (e.g. once the model scores it shows have loaded). kind: only a card of that kind. */
-  M.refreshCard = (kind) => { if (shown && cardEl && !cardEl.hidden && (!kind || shown.kind === kind)) renderCard(shown); };
+  M.refreshCard = (kind) => {
+    if (!shown || !cardEl || cardEl.hidden || (kind && shown.kind !== kind)) return;
+    const btns = () => [...cardEl.querySelectorAll("button")], at = btns().indexOf(document.activeElement);
+    renderCard(shown);
+    if (at >= 0) btns()[at]?.focus(); // keep keyboard focus on the same button
+  };
 
   M.zoomTo = (f) => {
     const cs = coordsOf(M.geometryOf(f)); if (!cs.length) return;
@@ -124,6 +131,7 @@
 
   /** Highlight a feature, show its card, and optionally zoom to it. */
   M.select = (f, opts = {}) => {
+    if (!M.catchment?.shown(f)) M.catchment?.clear(); // a shaded catchment belongs to its selection
     const g = M.geometryOf(f);
     M.map.getSource("sel")?.setData({ type: "FeatureCollection", features: g ? [{ type: "Feature", properties: {}, geometry: g }] : [] });
     renderCard(f);
@@ -131,6 +139,7 @@
     if (opts.fit) M.zoomTo(f);
   };
   M.clearSelection = () => {
+    M.catchment?.clear();
     M.map?.getSource("sel")?.setData({ type: "FeatureCollection", features: [] });
     if (cardEl) cardEl.hidden = true;
     shown = null;
