@@ -246,8 +246,10 @@ def relink_outlets(down: np.ndarray, area: np.ndarray, end_xy: np.ndarray, eligi
                 break
         rec["largest_too_small_km2"] = small if small > 0 else np.nan
         if chosen is None:
-            rec["status"] = ("would make a cycle" if cycle else "REC2 reaches the sea first" if sea
-                             else "no reach on the REC2 path" if small == 0 else "reaches on the REC2 path too small")
+            # too small: the next tile has the river but with much less area (its REC2 inflow went astray)
+            rec["status"] = ("would make a cycle" if cycle else
+                             "reaches on the REC2 path too small" if small >= 0.1 * A else
+                             "REC2 reaches the sea first" if sea else "no reach on the REC2 path")
             continue
         k, _, _, j, dj = chosen
         # Climb the continuation to its top: the reach that got the REC2 inflow at the tile edge.
