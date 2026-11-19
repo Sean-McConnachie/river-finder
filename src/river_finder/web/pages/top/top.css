@@ -2,3 +2,53 @@
 .top-end { justify-content: space-between; }
 /* "Show more" moves focus to the first new row; keep its ring inside the scrolling table */
 .top-table tbody tr:focus-visible { outline-offset: -2px; }
+/* Text for screen readers only (spoken column headers; on phones the whole header row) */
+.top-vh {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+
+/* Phones: each row is a list item that fits the card.
+     1  River name [pill]          SCORE 87
+        6.2 km · 30 m/km · flood 12 m³/s
+        [      Map      ] [    Details    ]
+   The table stays a table for screen readers: explicit roles in top.js, headers visually hidden. */
+@media (max-width: 720px) {
+  .top-table, .top-table tbody { display: block; }
+  .top-table thead {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+  .top-table tbody tr {
+    --top-gutter: 32px;   /* rank column; the second and third lines start here */
+    display: flex; flex-wrap: wrap; align-items: baseline;
+    padding: var(--sp-3) 0 var(--sp-3) var(--top-gutter); border-bottom: 1px solid var(--line);
+  }
+  .top-table tbody tr:last-child { border-bottom: 0; }
+  .top-table tbody tr::after { content: ""; order: 3; flex-basis: 100%; }   /* line break after name and score */
+  .top-table tbody td { padding: 0; border: 0; }
+  .top-table td.top-rank {
+    flex: none; min-width: var(--top-gutter); margin-left: calc(-1 * var(--top-gutter));
+    padding-right: var(--sp-2); color: var(--muted);
+  }
+  .top-table td.top-name { order: 1; flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; }
+  .top-table td.top-name strong { font-size: var(--fs-md); font-weight: 650; margin-right: 2px; }
+  .top-table td.top-score { order: 2; flex: none; padding-left: var(--sp-3); font-size: var(--fs-md); font-weight: 650; white-space: nowrap; }
+  .top-table td.top-score::before {
+    content: attr(data-label); content: attr(data-label) / "";
+    margin-right: 6px; font: 600 var(--fs-xs)/1 var(--font-ui); letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted);
+  }
+  /* second line: km · m/km · flood, each kept whole (a long line wraps between them) */
+  .top-table td.top-km, .top-table td.top-grad, .top-table td.top-flood { order: 4; margin-top: 2px; white-space: nowrap; }
+  .top-table td.top-km::after, .top-table td.top-grad::after, .top-table td.top-flood::after,
+  .top-table td.top-grad::before, .top-table td.top-flood::before { font-family: var(--font-ui); color: var(--muted); }
+  .top-table td.top-km::after { content: " km"; content: " km" / ""; }
+  .top-table td.top-grad::after { content: " m/km"; content: " m/km" / ""; }
+  .top-table td.top-flood::after { content: " m³/s"; content: " m³/s" / ""; }
+  .top-table td.top-grad::before { content: "\00a0·\00a0 "; content: "\00a0·\00a0 " / ""; }
+  .top-table td.top-flood::before { content: "\00a0·\00a0 flood "; content: "\00a0·\00a0 flood " / ""; }
+  /* third line: two equal buttons */
+  .top-table td.top-act { order: 5; flex-basis: 100%; margin-top: var(--sp-2); }
+  .top-table td.top-act .rf-row { max-width: 400px; }
+  .top-table td.top-act .rf-btn { flex: 1 1 0; }
+}

@@ -8,17 +8,26 @@
   const PAGE = 20;   // rows shown first, then added each time the end of the list comes into view
   let root = null, list = null, regionSel = null, token = 0, io = null, rewind = false;
 
+  // Columns: header shown on desktop, header spoken (data-label), cell class. Below 720 px top.css turns
+  // each row into a two-line list item; the headers stay in the accessibility tree (visually hidden).
+  const COLS = [["#", "Rank", "n top-rank"], ["River", "River", "top-name"], ["km", "km", "n top-km"], ["m/km", "m/km", "n top-grad"],
+    ["Flood m³/s", "Flood m³/s", "n top-flood"], ["Score", "Score", "n top-score"], ["", "Actions", "top-act"]];
+  /** One cell of column k (explicit role: some browsers drop table semantics once the display changes). */
+  const cell = (k, ...kids) => el("td", { class: COLS[k][2], role: "cell", "data-label": COLS[k][1] }, ...kids);
+  const head = () => el("thead", { role: "rowgroup" }, el("tr", { role: "row" }, ...COLS.map(([h, label, c]) =>
+    el("th", { class: c.startsWith("n") ? "n" : null, role: "columnheader", scope: "col" },
+      h === label ? h : [h ? el("span", { "aria-hidden": "true", text: h }) : null, el("span", { class: "top-vh", text: label })]))));
+
   /** Stop watching the end of the list (before each re-render, so an old observer never fires). */
   function unwatch() { io?.disconnect(); io = null; }
 
   function row(r, i) {
-    return el("tr", {},
-      el("td", { class: "n", text: i + 1 }),
-      el("td", {}, el("strong", { text: r.name }), " ",
+    return el("tr", { role: "row" },
+      cell(0, String(i + 1)),
+      cell(1, el("strong", { text: r.name }), " ",
         el("span", { class: `rf-pill ${r.status === "listed" ? "" : r.status === "heldout" ? "rf-pill--warn" : "rf-pill--ok"}`, text: r.status === "listed" ? "In guides" : r.status === "heldout" ? "Test river" : "Not in guides" })),
-      el("td", { class: "n", text: r.len.toFixed(1) }), el("td", { class: "n", text: fmt.grad(r.grad) }),
-      el("td", { class: "n", text: fmt.flow(r.maf) }), el("td", { class: "n", text: r.score.toFixed(0) }),
-      el("td", {}, el("div", { class: "rf-row", style: "flex-wrap:nowrap" },
+      cell(2, r.len.toFixed(1)), cell(3, fmt.grad(r.grad)), cell(4, fmt.flow(r.maf)), cell(5, r.score.toFixed(0)),
+      cell(6, el("div", { class: "rf-row", style: "flex-wrap:nowrap" },
         el("button", { type: "button", class: "rf-btn", onclick: () => RF.go("map", { select: r }) }, "Map"),
         el("button", { type: "button", class: "rf-btn", onclick: (e) => RF.detail.open(r, { opener: e.currentTarget }) }, "Details"))));
   }
@@ -34,7 +43,7 @@
       if (my !== token) return;
       const runs = RF.runs.find(R, { model }), total = runs.length;
       if (!total) { list.replaceChildren(el("div", { class: "rf-empty", text: "No runs pass the current run-finder settings in this region." })); return; }
-      const tb = el("tbody");
+      const tb = el("tbody", { role: "rowgroup" });
       const count = el("p", { class: "rf-note", "aria-live": "polite" });
       const more = el("button", { type: "button", class: "rf-btn", onclick: () => {
         const first = next(); if (first) { first.tabIndex = -1; first.focus(); }   // keyboard and screen readers continue at the new rows
@@ -56,9 +65,7 @@
         return tb.children[from];
       }
       next();
-      list.replaceChildren(el("div", { class: "rf-tablewrap" }, el("table", { class: "rf-table top-table" },
-        el("thead", {}, el("tr", {}, ...[["#", "n"], ["River"], ["km", "n"], ["m/km", "n"], ["Flood m³/s", "n"], ["Score", "n"], [""]].map(([h, c]) => el("th", { class: c || null, text: h })))),
-        tb)), end);
+      list.replaceChildren(el("div", { class: "rf-tablewrap" }, el("table", { class: "rf-table top-table", role: "table" }, head(), tb)), end);
       // A new list starts at the top, so the end is not already in view from the old scroll position.
       if (root.hidden) rewind = true; else root.scrollTop = 0;
       if (shown < total && "IntersectionObserver" in window) {
