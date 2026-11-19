@@ -11,8 +11,10 @@ segments = "segments_table.pkl"  # one row per reach: the row order of every cat
 rain = "rain"                    # outputs: weights_<grid>.npz (+ .json), obs_<source>.npz, fc_<source>.npz (+ .json)
 
 [observed]
-source = "gsmap"      # source family that feeds the observed metric: the satellite family (gsmap) | ecmwf
-compare = ["ecmwf"]   # other families kept in their own observed buffers, for side-by-side comparison
+source = "ecmwf"      # source family that feeds the observed metric: ecmwf | the satellite family (gsmap, to become
+                      # IMERG). ECMWF is the main observed source: satellite ingestion is deferred (rf-t26.2, 2026-11-19)
+                      # until the storm validation shows it beats ECMWF against the gauges.
+compare = []          # other families kept in their own observed buffers, for side-by-side comparison
 
 [forecast]
 source = "ecmwf"      # source family that feeds "rain in the next x hours"
