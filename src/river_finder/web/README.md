@@ -34,11 +34,17 @@ uv run river-finder run kaimai karangahake tutamoe   # reference regions, ~15 mi
 uv run river-finder nz viewer                        # region data files -> data/viewer_nz/ (refs only if no national scan)
 uv run river-finder external all                     # waterfalls, roads, tracks (~1 min for the refs)
 LINZ_LDS_KEY=... uv run river-finder web data        # known sections, roads/tracks, gauges, LINZ rivers (key: LDS, never committed)
+uv run river-finder web data --only linz             # only <region>_linz.json, from the cached LINZ lines (no key, no network)
 uv run river-finder web build                        # -> data/web/index.html + artifact.html (+ data files)
 uv run river-finder web serve                        # http://localhost:8000/
 ```
 
 `web build` takes a second, so rebuild after each edit.
+
+LINZ rivers (`<region>_linz.json`, `linz.py`): the map draws NZ Topo50 river lines with their LINZ names,
+but not unnamed headwater lines (Strahler order 1) that drain less than 2 km², where the modelled
+channels also stop. That keeps the largest region near 7 MB (2.5 MB gzipped) instead of 47 MB.
+Coordinates are integer steps of `q` degrees from the previous point (`50-rivers.js` decodes them).
 
 Publishing:
 

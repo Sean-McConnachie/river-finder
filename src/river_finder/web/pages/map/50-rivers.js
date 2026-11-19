@@ -38,7 +38,7 @@
   M.defineLayer({ id: "pred-listed", parent: "pred", label: "Include runs already in the guides", defaultOn: false, swatch: "none",
     count: () => runs.filter((r) => r.status === "listed").length, apply: applyPred });
 
-  M.defineLayer({ id: "linz", parent: "rivers", label: "LINZ rivers", note: "NZ Topo50 river lines with LINZ names", defaultOn: true,
+  M.defineLayer({ id: "linz", parent: "rivers", label: "LINZ rivers", note: "NZ Topo50 river lines with LINZ names (not unnamed headwaters under 2 km²)", defaultOn: true,
     link: "https://data.linz.govt.nz/layer/103632-nz-river-name-lines-pilot/",
     colors: [{ key: "c", token: "--river-linz" }], legend: "LINZ river (NZ River Name Lines)", count: () => M.linz?.lines.length ?? null, apply: applyLinz });
   M.defineLayer({ id: "net", parent: "rivers", label: "Modelled channels", note: "From the LINZ elevation model (shown when LINZ lines are missing)", defaultOn: false,
@@ -154,15 +154,20 @@
   }
   M.runs = () => runs;
 
-  // LINZ river lines (river_finder.linz): <id>_linz.json = {names, types, lines: [[type, name | -1, section id, flat lon/lat]]}
+  // LINZ river lines (river_finder.linz): <id>_linz.json = {names, types, q, lines: [[type, name | -1, section id, flat]]}.
+  // flat: integer lon/lat steps of q degrees, each point relative to the one before (the first to 0, 0);
+  // files without q hold plain lon/lat. Unnamed headwater lines under 2 km² are left out of the file.
   M.linz = null;
   async function loadLinz(R) {
     let L = null;
     try { const r = await fetch(`${R.id}_linz.json`); if (r.ok) L = await r.json(); } catch (e) { L = null; }
     if (M.R !== R) return;
     M.linz = L;
+    const q = L?.q || 0;
     const feats = (L?.lines || []).map(([t, n, sid, flat], i) => {
-      const c = []; for (let j = 0; j < flat.length; j += 2) c.push([flat[j], flat[j + 1]]);
+      const c = [];
+      if (q) for (let j = 0, x = 0, y = 0; j < flat.length; j += 2) { x += flat[j]; y += flat[j + 1]; c.push([x * q, y * q]); }
+      else for (let j = 0; j < flat.length; j += 2) c.push([flat[j], flat[j + 1]]);
       return { type: "Feature", properties: { i, t, n: n >= 0 ? L.names[n] : "", named: n >= 0, sid }, geometry: { type: "LineString", coordinates: c } };
     });
     M.linzFeats = feats;

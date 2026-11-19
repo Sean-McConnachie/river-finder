@@ -218,6 +218,9 @@ def main(argv: list[str] | None = None) -> None:
                          "--data; build: the pages; serve: localhost; pages: stage the site for GitHub Pages "
                          "(--push to publish)")
     pw.add_argument("--push", action="store_true", help="pages: force-push the staged site to the gh-pages branch")
+    pw.add_argument("--only", nargs="+", choices=["sections", "access", "gauges", "linz", "satellite"],
+                    help="data: run only these steps (e.g. --only linz rebuilds <region>_linz.json from the cached "
+                         "LINZ lines, no network)")
     pw.add_argument("--data", type=Path, default=REPO_ROOT / "data" / "viewer_nz",
                     help="region data files (from nz viewer / models viewer / external attach)")
     pw.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "web")
@@ -253,11 +256,11 @@ def main(argv: list[str] | None = None) -> None:
             from .linz import write_linz
             from .webdata import write_access, write_gauges, write_satellite, write_sections
 
-            write_sections(args.data)
-            write_access(args.data)
-            write_gauges(args.data)
-            write_linz(args.data)
-            write_satellite(args.data)
+            steps = {"sections": write_sections, "access": write_access, "gauges": write_gauges, "linz": write_linz,
+                     "satellite": write_satellite}
+            for k, step in steps.items():
+                if not args.only or k in args.only:
+                    step(args.data)
         elif args.step == "build":
             out = webapp.build(args.out, args.data if args.data.exists() else None, args.basemaps_key)
             print(f"web -> {out['site']} and {out['artifact'].name} ({out['regions']} regions, "
