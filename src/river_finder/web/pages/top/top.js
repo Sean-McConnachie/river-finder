@@ -1,6 +1,6 @@
 /* Top rivers page (#top): connects the map browser and the model interface.
-   PLACEHOLDER. Owned by the Top-rivers agent: see docs/ui/top-rivers.md and beads issue rf-aq6.5.
-   Everything below is a starting point that shows the RF contract working; replace it freely.
+   Owned by the Top-rivers agent: see docs/ui/top-rivers.md and beads issue rf-aq6.5. Ranking, paging
+   (20 at a time, more on scroll) and the phone layout work; the rest of the brief is still open.
    Only edit files under src/river_finder/web/pages/top/. */
 (() => {
   "use strict";
@@ -87,14 +87,10 @@
       el("header", { class: "rf-stack" },
         el("span", { class: "rf-eyebrow", text: "Ranking" }),
         el("h1", { text: "Top rivers" }),
-        el("p", { class: "rf-note", text: "The best-scoring rivers for the current model, region by region. Each one opens on the map or in full detail." }),
-        el("span", { class: "rf-status", text: "Placeholder: this page is being built" })),
+        el("p", { class: "rf-note", text: "The best-scoring rivers for the current model, region by region. Each one opens on the map or in full detail." })),
       regions.length ? el("section", { class: "rf-panel rf-stack" },
         el("div", { class: "rf-row" }, el("label", { for: "top-region", text: "Region" }), regionSel),
-        list) : el("div", { class: "rf-empty", text: "No regions in this build. Run the pipeline, then river-finder web build." }),
-      el("section", { class: "rf-panel rf-stack" },
-        el("h2", { text: "For the agent building this page" }),
-        el("p", { class: "rf-note", html: "Brief: <span class=\"num\">docs/ui/top-rivers.md</span>. Contract: <span class=\"num\">src/river_finder/web/README.md</span>. Edit only <span class=\"num\">src/river_finder/web/pages/top/</span>." }))));
+        list) : el("div", { class: "rf-empty", text: "No regions in this build. Run the pipeline, then river-finder web build." })));
     if (regions.length) refresh();
   }
 
