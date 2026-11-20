@@ -149,35 +149,38 @@ def _topo_order(down):  # pragma: no cover - compiled
     return order[:tail]
 
 
+# Accumulation kernels on a (k, n) array: one pass per row j over the order; ``down_o = down[order]``
+# makes the downstream look-ups sequential. 20 float64 rows of 1.1 M reaches take ~0.1 s.
 @njit(cache=True)
-def _acc_sum(order, down, a):  # pragma: no cover - compiled
-    k = a.shape[1]
-    for i in order:
-        d = down[i]
-        if d >= 0:
-            for j in range(k):
-                a[d, j] += a[i, j]
-
-
-@njit(cache=True)
-def _acc_max(order, down, a):  # pragma: no cover - compiled
-    k = a.shape[1]
-    for i in order:
-        d = down[i]
-        if d >= 0:
-            for j in range(k):
-                if a[i, j] > a[d, j]:
-                    a[d, j] = a[i, j]
+def _acc_sum(order, down_o, a):  # pragma: no cover - compiled
+    for j in range(a.shape[0]):
+        row = a[j]
+        for t in range(order.size):
+            d = down_o[t]
+            if d >= 0:
+                row[d] += row[order[t]]
 
 
 @njit(cache=True)
-def _acc_or(order, down, a):  # pragma: no cover - compiled
-    k = a.shape[1]
-    for i in order:
-        d = down[i]
-        if d >= 0:
-            for j in range(k):
-                a[d, j] |= a[i, j]
+def _acc_max(order, down_o, a):  # pragma: no cover - compiled
+    for j in range(a.shape[0]):
+        row = a[j]
+        for t in range(order.size):
+            d = down_o[t]
+            if d >= 0:
+                v = row[order[t]]
+                if v > row[d]:
+                    row[d] = v
+
+
+@njit(cache=True)
+def _acc_or(order, down_o, a):  # pragma: no cover - compiled
+    for j in range(a.shape[0]):
+        row = a[j]
+        for t in range(order.size):
+            d = down_o[t]
+            if d >= 0:
+                row[d] |= row[order[t]]
 
 
 @njit(cache=True)
@@ -208,11 +211,12 @@ def topo_order(down: np.ndarray) -> np.ndarray:
 
 
 def accumulate(order: np.ndarray, down: np.ndarray, a: np.ndarray, how: str = "sum") -> np.ndarray:
-    """Upstream accumulation of ``a`` (``(n,)`` or ``(n, k)``) in place: sum, max or bitwise or."""
-    two = a if a.ndim == 2 else a.reshape(-1, 1)
-    if not two.flags.c_contiguous:
-        raise ValueError("accumulate needs a C-contiguous array")
-    {"sum": _acc_sum, "max": _acc_max, "or": _acc_or}[how](order, down, two)
+    """Upstream accumulation of ``a`` (``(n,)`` or ``(k, n)``, one row per quantity) in place, in
+    topological ``order``: each row's value goes into its downstream row (``how``: sum, max or bitwise or)."""
+    two = a if a.ndim == 2 else a.reshape(1, -1)
+    if not two.flags.c_contiguous or two.shape[1] != down.size:
+        raise ValueError("accumulate needs a C-contiguous (k, n) array, n = rows of down")
+    {"sum": _acc_sum, "max": _acc_max, "or": _acc_or}[how](order, down[order].astype(np.int32), two)
     return a
 
 
@@ -746,17 +750,16 @@ def compute_totals(net: Network, buffers: dict[str, HourlyBuffer], windows=(1, 3
     timing["local_s"] = round(time.perf_counter() - t0, 3)
     t1 = time.perf_counter()
     K = len(local)
-    s = np.empty((n, 2 * W * K), dtype=np.float64)       # m3, then area-hours missing
-    mx = np.empty((n, W * K), dtype=np.uint8)             # hours missing
-    bits = np.empty((n, 2 * W * K), dtype=np.uint8)       # products, then scale
+    # one row per quantity, kind j and window i (c = j * W + i): local volume and missing area-hours (sums),
+    # missing hours (max), product and scale bits (or)
+    s = np.empty((2 * W * K, n), dtype=np.float64)
+    mx = np.empty((W * K, n), dtype=np.uint8)
+    bits = np.empty((2 * W * K, n), dtype=np.uint8)
     for j, lo in enumerate(local.values()):
-        for i in range(W):
-            c = j * W + i
-            s[:, c] = lo.m3[i]
-            s[:, W * K + c] = net.area_m2 * lo.n_missing[i]
-            mx[:, c] = lo.n_missing[i]
-            bits[:, c] = lo.products[i]
-            bits[:, W * K + c] = lo.scale[i]
+        c = slice(j * W, (j + 1) * W)
+        c2 = slice(W * K + j * W, W * K + (j + 1) * W)
+        s[c], mx[c], bits[c], bits[c2] = lo.m3, lo.n_missing, lo.products, lo.scale
+        np.multiply(lo.n_missing, net.area_m2, out=s[c2])
     timing["pack_s"] = round(time.perf_counter() - t1, 3)
     t2 = time.perf_counter()
     order, down = net.order, net.down
@@ -767,33 +770,29 @@ def compute_totals(net: Network, buffers: dict[str, HourlyBuffer], windows=(1, 3
     t3 = time.perf_counter()
     A = net.up_area_m2
     has_area = A > 0
+    A1 = np.where(has_area, A, 1.0)
     kinds = {}
     is_down = down >= 0
     out_rows = ~is_down
     for j, (kind, lo) in enumerate(local.items()):
         buf = use[kind]
-        mm = np.empty((W, n), np.float32)
-        mf = np.empty((W, n), np.float32)
+        c, c2 = slice(j * W, (j + 1) * W), slice(W * K + j * W, W * K + (j + 1) * W)
+        mm = np.where(has_area, s[c] / A1 * 1000.0, lo.mm).astype(np.float32)
+        mf = np.where(has_area, s[c2] / (np.asarray(xs, dtype=np.float64)[:, None] * A1),
+                      (mx[c] > 0)).astype(np.float32)
         info_w = {}
         slots = _slots(buf, lo.hours)
         for i, x in enumerate(xs):
-            c = j * W + i
-            m3 = s[:, c]
-            mm[i] = np.where(has_area, m3 / np.where(has_area, A, 1.0) * 1000.0, lo.mm[i])
-            mf[i] = np.where(has_area, s[:, W * K + c] / (x * np.where(has_area, A, 1.0)),
-                             (mx[:, c] > 0).astype(np.float64))
-            # checks: every reach = its tributaries + its own local volume; outlets hold all local volume
+            m3 = s[j * W + i]
+            # checks: every reach = its tributaries + its own local volume; the outlets hold all local volume
             trib = np.bincount(down[is_down], weights=m3[is_down], minlength=n)
-            resid = np.abs(m3 - trib - lo.m3[i])
-            scale_ = np.maximum(np.abs(m3), 1.0)
-            total_local = float(lo.m3[i].sum())
-            info_w[str(x)] = _window_info(kind, x, slots, mx[:, c], mm[i], m3, net, {
-                "mass_balance_max_rel_err": float((resid / scale_).max()) if n else 0.0,
-                "outlets_m3": float(m3[out_rows].sum()), "local_m3": total_local,
-                "outlets_vs_local_rel_err": abs(float(m3[out_rows].sum()) - total_local) / max(total_local, 1.0)})
-        k = KindTotals(kind, xs, mm, mx[:, j * W:(j + 1) * W].T.copy(), mf,
-                       bits[:, j * W:(j + 1) * W].T.copy(), bits[:, W * K + j * W:W * K + (j + 1) * W].T.copy(),
-                       lo.tags, slots, {})
+            resid = np.abs(m3 - trib - lo.m3[i]) / np.maximum(np.abs(m3), 1.0)
+            total_local, at_outlets = float(lo.m3[i].sum()), float(m3[out_rows].sum())
+            info_w[str(x)] = _window_info(kind, x, slots, mx[j * W + i], mm[i], m3, net, {
+                "mass_balance_max_rel_err": float(resid.max()) if n else 0.0,
+                "outlets_m3": at_outlets, "local_m3": total_local,
+                "outlets_vs_local_rel_err": abs(at_outlets - total_local) / max(total_local, 1.0)})
+        k = KindTotals(kind, xs, mm, mx[c], mf, bits[c], bits[c2], lo.tags, slots, {})
         k.info = _kind_info(kind, buf, scaled, now_hour, (anchor or {}).get(kind), info_w)
         kinds[kind] = k
     timing["finish_s"] = round(time.perf_counter() - t3, 3)
