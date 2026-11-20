@@ -1,0 +1,112 @@
+{
+ "format": "river-finder rain viewer map v1",
+ "rows_digest": "6c8d0b45c128cfe4",
+ "regions": [
+  {
+   "id": "northland",
+   "title": "Northland",
+   "name": "Northland",
+   "n": 24098
+  },
+  {
+   "id": "auckland",
+   "title": "Auckland",
+   "name": "Auckland",
+   "n": 7523
+  },
+  {
+   "id": "waikato",
+   "title": "Waikato",
+   "name": "Waikato",
+   "n": 58473
+  },
+  {
+   "id": "bay-of-plenty",
+   "title": "Bay of Plenty",
+   "name": "Bay of Plenty",
+   "n": 29689
+  },
+  {
+   "id": "gisborne",
+   "title": "Gisborne",
+   "name": "Gisborne",
+   "n": 18325
+  },
+  {
+   "id": "hawkes-bay",
+   "title": "Hawke's Bay",
+   "name": "Hawke's Bay",
+   "n": 33234
+  },
+  {
+   "id": "taranaki",
+   "title": "Taranaki",
+   "name": "Taranaki",
+   "n": 18875
+  },
+  {
+   "id": "wanganui",
+   "title": "Wanganui",
+   "name": "Wanganui",
+   "n": 35092
+  },
+  {
+   "id": "manawatu",
+   "title": "Manawatu",
+   "name": "Manawatu",
+   "n": 18822
+  },
+  {
+   "id": "wellington",
+   "title": "Wellington",
+   "name": "Wellington",
+   "n": 18301
+  },
+  {
+   "id": "tasman",
+   "title": "Tasman",
+   "name": "Tasman",
+   "n": 20562
+  },
+  {
+   "id": "marlborough",
+   "title": "Marlborough",
+   "name": "Marlborough",
+   "n": 20293
+  },
+  {
+   "id": "west-coast",
+   "title": "West Coast",
+   "name": "West Coast",
+   "n": 47897
+  },
+  {
+   "id": "canterbury",
+   "title": "Canterbury",
+   "name": "Canterbury",
+   "n": 109254
+  },
+  {
+   "id": "otago",
+   "title": "Otago",
+   "name": "Otago",
+   "n": 71159
+  },
+  {
+   "id": "southland",
+   "title": "Southland",
+   "name": "Southland",
+   "n": 63139
+  }
+ ],
+ "omitted": {
+  "kaimai": "5 m reference area with its own reach network: no clean reach-for-reach link to the national reaches (2026-11-20: only 82-87 % of its viewer reaches lie within 150 m of a national reach, and 80-87 % of those have an upstream area within 25 %); its national region has the rain",
+  "karangahake": "5 m reference area with its own reach network: no clean reach-for-reach link to the national reaches (2026-11-20: only 82-87 % of its viewer reaches lie within 150 m of a national reach, and 80-87 % of those have an upstream area within 25 %); its national region has the rain",
+  "tutamoe": "5 m reference area with its own reach network: no clean reach-for-reach link to the national reaches (2026-11-20: only 82-87 % of its viewer reaches lie within 150 m of a national reach, and 80-87 % of those have an upstream area within 25 %); its national region has the rain"
+ },
+ "rows": "network.npz: the rows of region <name> with vi >= 0, sorted by vi (UpstreamTotals.viewer_rows)",
+ "source": {
+  "file": "regions_index.json",
+  "mtime": "2026-11-20T01:08:44Z"
+ }
+}

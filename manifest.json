@@ -1,0 +1,116 @@
+{
+ "format": "river-finder rain inputs v1",
+ "created": "2026-11-20T06:10:22Z",
+ "code": "24607b5cbf57ecd7ea125fb41ce587aa0ea17250",
+ "national_build": {
+  "segments_table": {
+   "file": "segments_table.pkl",
+   "mtime": "2026-11-20T00:38:06Z",
+   "bytes": 310906233
+  },
+  "weights": {
+   "ecmwf": {
+    "built": "2026-11-20T01:17:48Z",
+    "rows_digest": "6c8d0b45c128cfe4",
+    "grid": {
+     "name": "ecmwf",
+     "lon0": 165.8,
+     "lat0": -33.8,
+     "dlon": 0.1,
+     "dlat": -0.1,
+     "nx": 133,
+     "ny": 141
+    }
+   }
+  },
+  "network_built": "2026-11-20T01:41:58+00:00",
+  "viewer_index": {
+   "file": "regions_index.json",
+   "mtime": "2026-11-20T01:08:44Z"
+  }
+ },
+ "rows": 1104794,
+ "rows_digest": "6c8d0b45c128cfe4",
+ "down_digest": "02f27f16e9d99704",
+ "network_flags": {
+  "outlet": 6824,
+  "tile_edge_outlet": 175,
+  "tile_edge_outlet_gt200km2": 26,
+  "drains_to_tile_edge": 149855,
+  "area_short": 28259
+ },
+ "config": {
+  "windows": [
+   1,
+   3,
+   6,
+   12,
+   24
+  ],
+  "observed": "ecmwf",
+  "forecast": "ecmwf",
+  "grids": {
+   "ecmwf": {
+    "name": "ecmwf",
+    "lon0": 165.8,
+    "lat0": -33.8,
+    "dlon": 0.1,
+    "dlat": -0.1,
+    "nx": 133,
+    "ny": 141
+   }
+  },
+  "ecmwf_reader": "openmeteo-s3",
+  "obs_leads": [
+   1,
+   6
+  ],
+  "obs_runs": 5
+ },
+ "regions": [
+  "northland",
+  "auckland",
+  "waikato",
+  "bay-of-plenty",
+  "gisborne",
+  "hawkes-bay",
+  "taranaki",
+  "wanganui",
+  "manawatu",
+  "wellington",
+  "tasman",
+  "marlborough",
+  "west-coast",
+  "canterbury",
+  "otago",
+  "southland"
+ ],
+ "omitted": {
+  "kaimai": "5 m reference area with its own reach network: no clean reach-for-reach link to the national reaches (2026-11-20: only 82-87 % of its viewer reaches lie within 150 m of a national reach, and 80-87 % of those have an upstream area within 25 %); its national region has the rain",
+  "karangahake": "5 m reference area with its own reach network: no clean reach-for-reach link to the national reaches (2026-11-20: only 82-87 % of its viewer reaches lie within 150 m of a national reach, and 80-87 % of those have an upstream area within 25 %); its national region has the rain",
+  "tutamoe": "5 m reference area with its own reach network: no clean reach-for-reach link to the national reaches (2026-11-20: only 82-87 % of its viewer reaches lie within 150 m of a national reach, and 80-87 % of those have an upstream area within 25 %); its national region has the rain"
+ },
+ "files": [
+  {
+   "path": "rain/weights_ecmwf.npz",
+   "bytes": 17815976,
+   "sha256": "e76c114cb32b4c0b3ea488c6a16167290c052161e036ce3ac2925ae06f66466d"
+  },
+  {
+   "path": "rain/weights_ecmwf.json",
+   "bytes": 1242,
+   "sha256": "f51924dcfd3389965b666009c40f5546ade13623b2b0c962f2f89a49548f31aa"
+  },
+  {
+   "path": "rain/network.npz",
+   "bytes": 17012279,
+   "sha256": "d05dd49da0da8aec33b8d834640e987b2bbfe363ad180576a0dc023929886b2f"
+  },
+  {
+   "path": "rain/viewer.json",
+   "bytes": 2684,
+   "sha256": "c43bc3aff92400e0139cb2b1d0d4b6fa122765d6061d87f24853238c979b6199"
+  }
+ ],
+ "total_bytes": 34832181
+}
