@@ -27,8 +27,8 @@ Inputs: ``river-finder rain inputs --out DIR``
   and network build times, viewer index time), row digests, config values and code commit.
 
 The config (``config/rainfall.toml``: windows, grid, reader) comes from the job's code checkout; the
-manifest records the values the inputs were built with, and ``rain ecmwf`` refuses weights whose grid
-differs from the config's.
+manifest records the values the inputs were built with; ``rain inputs`` and ``rain ecmwf`` refuse
+weights whose grid differs from the config's.
 
 Published files: ``river-finder rain publish --out DIR`` (the contract for the map, rf-t26.10)
 ------------------------------------------------------------------------------------------------
@@ -48,7 +48,7 @@ Published files: ``river-finder rain publish --out DIR`` (the contract for the m
      "units": {...}, "products": {"ECMWF_OBS": "...", ...}, "flags": {"1": {"name", "doc"}, ...},
      "attribution": "...", "licences": [{"name", "licence", "url"}],
      "regions": [{"id": "canterbury", "title": "Canterbury", "file": "canterbury.bin.gz", "n": 109254,
-                  "bytes": 532113, "raw_bytes": 2731810, "sha256": "..."}],
+                  "bytes": 462243, "raw_bytes": 2516554, "sha256": "..."}],   # bytes: the .gz file
      "omitted": {"kaimai": "..."}, "summary": "...", "inputs": {...}, "job": {...}}
 
 ``<region id>.bin.gz``: one gzip member (``mtime`` 0) holding a little-endian binary file:
@@ -59,8 +59,8 @@ offset  type      content
 0       4 bytes   magic ``RFR1``
 4       uint32    ``H``: length of the header (UTF-8 JSON)
 8       uint32    ``D``: offset of the data block (``12 + H`` rounded up to 8)
-12      H bytes   header JSON
-D       ...       columns, ``n`` values each, at ``D + field.off``
+12      H bytes   header JSON, then zeros up to ``D``
+D       ...       columns, ``n`` values each, at ``D + field.off`` (aligned to their size)
 ======  ========  =======================================================================
 
 The header repeats ``schema``, ``region``, ``n``, ``generated``, ``now``, ``windows`` and the run times,
