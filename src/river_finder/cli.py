@@ -221,6 +221,9 @@ def _rain(args):
         now = parse_hour(args.now) if args.now else None
         pipeline.run_ecmwf(cfg, run=args.run, obs=args.obs or both, fc=args.fc or both, reader=args.reader, now=now,
                            cache=not args.no_cache, log=log)
+    elif args.step == "totals":
+        pipeline.run_totals(cfg, windows=args.windows, scaled=not args.raw, rebuild_network=args.rebuild_network,
+                            log=log)
     else:
         pipeline.status(cfg, log=print)
 
@@ -296,12 +299,18 @@ def main(argv: list[str] | None = None) -> None:
     pl.add_argument("--models", nargs="*", help="cv: only these model ids (default: the whole zoo)")
     pl.add_argument("--repeats", type=int, default=5, help="cv: repeats of the 5-fold split")
     pl.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz")
-    pr = sub.add_parser("rain", help="rainfall per catchment: weights | ecmwf | status "
+    pr = sub.add_parser("rain", help="rainfall per catchment: weights | ecmwf | totals | status "
                                      "(see src/river_finder/rainfall/)")
-    pr.add_argument("step", choices=["weights", "ecmwf", "status"],
+    pr.add_argument("step", choices=["weights", "ecmwf", "totals", "status"],
                     help="weights: grid-cell -> local-catchment matrices into <data>/rain/; ecmwf: ECMWF IFS observed "
-                         "proxy and next-24-h forecast into <data>/rain/obs_ecmwf.npz and fc_ecmwf.npz; status: "
-                         "config, weight files and buffers")
+                         "proxy and next-24-h forecast into <data>/rain/obs_ecmwf.npz and fc_ecmwf.npz; totals: "
+                         "upstream mm and m3 per reach and window from the current buffers into <data>/rain/totals.npz "
+                         "(+ .json); status: config, weight files, buffers and totals")
+    pr.add_argument("--windows", type=int, nargs="+", default=None,
+                    help="totals: windows in hours, any of 1..24 (default: windows in config/rainfall.toml)")
+    pr.add_argument("--raw", action="store_true", help="totals: sum the raw values instead of the gauge-scaled ones")
+    pr.add_argument("--rebuild-network", action="store_true",
+                    help="totals: rebuild <data>/rain/network.npz from segments_table.pkl even if it looks current")
     pr.add_argument("--grid", choices=["gsmap", "ecmwf", "all"], default="all", help="weights: which grid(s)")
     pr.add_argument("--run", default="latest", help="ecmwf: 'latest' or a run YYYYMMDDHH (UTC, 00/06/12/18)")
     pr.add_argument("--obs", action="store_true", help="ecmwf: fill the observed buffer (ECMWF_OBS) only")

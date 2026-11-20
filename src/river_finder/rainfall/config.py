@@ -74,6 +74,16 @@ class RainConfig:
         return self.rain_dir / f"{'obs' if kind == 'observed' else 'fc'}_{family}.npz"
 
     @property
+    def totals_path(self) -> Path:
+        """Upstream totals of the observed and forecast sources (rf-t26.6), ``totals.npz`` + ``.json``."""
+        return self.rain_dir / "totals.npz"
+
+    @property
+    def network_path(self) -> Path:
+        """The reach network the totals run on (``upstream.Network``), cached from the segment table."""
+        return self.rain_dir / "network.npz"
+
+    @property
     def cache_dir(self) -> Path | None:
         """Decoded-field cache of the ECMWF readers (None when ``ecmwf.cache`` is empty)."""
         return self.rain_dir / self.ecmwf.cache if self.ecmwf.cache else None

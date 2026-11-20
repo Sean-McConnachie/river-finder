@@ -69,11 +69,12 @@ from .config import EcmwfConfig, RainConfig, load_config
 from .grid import ECMWF_GLOBAL, GSMAP_GLOBAL, GridSpec, hour_index, hour_time
 from .pipeline import ingest, open_buffer
 from .sources import PRODUCTS, HourlyField, Product, RainfallSource, SyntheticSource
+from .upstream import KindTotals, Network, UpstreamTotals, compute_totals, topo_order
 from .weights import CatchmentWeights, build_weights
 
 __all__ = [
     "DEFAULT_WINDOWS", "ECMWF_GLOBAL", "GSMAP_GLOBAL", "PRODUCTS", "SLOTS", "CatchmentWeights", "EcmwfConfig",
-    "GridSpec", "HourlyBuffer", "HourlyField", "Product", "PutResult", "RainConfig", "RainfallSource", "ScaleFactors",
-    "SyntheticSource", "WindowTotal", "build_weights", "hour_index", "hour_time", "ingest", "load_config",
-    "open_buffer",
+    "GridSpec", "HourlyBuffer", "HourlyField", "KindTotals", "Network", "Product", "PutResult", "RainConfig",
+    "RainfallSource", "ScaleFactors", "SyntheticSource", "UpstreamTotals", "WindowTotal", "build_weights",
+    "compute_totals", "hour_index", "hour_time", "ingest", "load_config", "open_buffer", "topo_order",
 ]

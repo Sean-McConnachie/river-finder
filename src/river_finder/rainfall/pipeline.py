@@ -110,6 +110,16 @@ def status(cfg: RainConfig, log=print) -> None:
             log(f"{kind} {fam}: {span}, {len(held)}/{len(rows)} hours held {prods}"
                 + (f", runs {runs}{age}" if runs else "")
                 + f", missing {[r['hour'] for r in rows if not r['product']]}")
+    tj = cfg.totals_path.with_suffix(".json")
+    if not tj.exists():
+        log(f"upstream totals: none yet ({cfg.totals_path.name}; river-finder rain totals)")
+        return
+    m = json.loads(tj.read_text())
+    parts = []
+    for kind, k in m.get("kinds", {}).items():
+        when = k.get("window_end") if kind == "observed" else k.get("start")
+        parts.append(f"{kind} {k.get('family', '')} windows {k['windows']} at {when}")
+    log(f"upstream totals {m['created']}: {m['rows']} reaches; " + "; ".join(parts))
 
 
 # --- ECMWF (rf-t26.3) ------------------------------------------------------------------------------
@@ -228,3 +238,117 @@ def run_ecmwf(cfg: RainConfig, run: str = "latest", obs: bool = True, fc: bool =
     log(f"download total: {http.stats.bytes / 1e6:.1f} MB in {http.stats.requests} requests "
         f"({http.stats.retries} retries), {http.stats.seconds:.1f} s on the wire; by host {http.stats.by_host}")
     return report
+
+
+# --- upstream totals (rf-t26.6) ---------------------------------------------------------------------
+def _weights_file(cfg: RainConfig) -> Path:
+    for fam in (cfg.observed_source, cfg.forecast_source, *cfg.grids):
+        p = cfg.weights_path(fam)
+        if p.exists():
+            return p
+    raise SystemExit(f"no weights_<grid>.npz in {cfg.rain_dir} (river-finder rain weights)")
+
+
+def load_network(cfg: RainConfig, rebuild: bool = False, log=print):
+    """``<rain>/network.npz``, rebuilt from the segment table, weights and relink logs when it is missing,
+    older than the table (size or mtime differ) or for other rows than the weights. Without the table
+    (an hourly job elsewhere) the saved network is used as long as its rows match the weights."""
+    from .upstream import Network, network_from_files
+
+    wpath = _weights_file(cfg)
+    with np.load(wpath, allow_pickle=False) as z:
+        w_digest = json.loads(str(z["meta"]))["rows_digest"]
+    path, table = cfg.network_path, cfg.segments_path
+    why = "rebuild asked" if rebuild else None
+    if why is None and path.exists():
+        net = Network.load(path)
+        if net.rows_digest != w_digest:
+            why = f"{path.name} rows differ from {wpath.name}"
+        elif table.exists():
+            st = table.stat()
+            if (net.meta.get("table_size"), net.meta.get("table_mtime")) != (st.st_size, st.st_mtime):
+                why = f"{table.name} changed since {path.name} was built"
+        if why is None:
+            log(f"network: {path} ({net.n} reaches, built {net.meta.get('built')})")
+            return net
+    elif why is None:
+        why = f"no {path.name}"
+    if not table.exists():
+        raise SystemExit(f"{why}, and no {table} to build it from")
+    log(f"network: building from {table.name} ({why})")
+    net = network_from_files(wpath, table, cfg.nz_data / "relink_log.csv", cfg.nz_data / "unresolved_gt200.csv",
+                             log=log)
+    if net.rows_digest != w_digest:
+        raise SystemExit(f"{table} rows differ from {wpath}: rebuild the weights (river-finder rain weights)")
+    net.save(path)
+    log(f"network -> {path} ({path.stat().st_size / 1e6:.1f} MB)")
+    return net
+
+
+def _log_area_check(c: dict, log) -> None:
+    log(f"area check (upstream pixel area / table area_km2): pixel {c['pixel_km2_total']:,.0f} km2 at outlets vs "
+        f"table {c['table_km2_at_outlets']:,.0f} km2; {c['edge_outlets']} tile-edge outlets hold "
+        f"{c['edge_outlets_pixel_km2']:,.0f} km2 of pixels; {c['area_short_reaches']} reaches area_short "
+        f"({c['area_short_reaches_gt100km2']} over 100 km2)")
+    for k, v in c["by_size"].items():
+        q = v["ratio_q01_q05_q25_q50_q75_q95_q99"]
+        log(f"  {k:>14}: {v['reaches']:>7} reaches, ratio q01 {q[0]:.3f} q05 {q[1]:.3f} median {q[3]:.4f} "
+            f"q95 {q[5]:.3f} q99 {q[6]:.3f}; within 1/5/10 %: {v['within_1pct']:.1%} / {v['within_5pct']:.1%} / "
+            f"{v['within_10pct']:.1%}")
+
+
+def run_totals(cfg: RainConfig, windows=None, scaled: bool = True, rebuild_network: bool = False,
+               now: datetime | None = None, log=print):
+    """Upstream totals from the current observed and forecast buffers -> ``<rain>/totals.npz`` + ``.json``."""
+    from .upstream import compute_totals
+
+    t0 = time.perf_counter()
+    net = load_network(cfg, rebuild_network, log=log)
+    t_net = time.perf_counter() - t0
+    flags = net.meta.get("flags") or net.flag_counts()
+    log(f"network flags: {flags}")
+    if "area_check" in net.meta:
+        _log_area_check(net.meta["area_check"], log)
+    t1 = time.perf_counter()
+    bufs = {}
+    for kind, fam in (("observed", cfg.observed_source), ("forecast", cfg.forecast_source)):
+        p = cfg.buffer_path(kind, fam)
+        if not p.exists():
+            log(f"{kind}: no buffer {p.name} (river-finder rain ecmwf); skipped")
+            continue
+        bufs[kind] = HourlyBuffer.load(p)
+    if not bufs:
+        raise SystemExit(f"no buffers in {cfg.rain_dir}: run river-finder rain ecmwf first")
+    t_buf = time.perf_counter() - t1
+    now_h = hour_index(floor_hour(now or datetime.now(UTC)))
+    xs = tuple(windows) if windows else cfg.windows
+    tot = compute_totals(net, bufs, xs, scaled=scaled, now_hour=now_h)
+    for kind, fam in (("observed", cfg.observed_source), ("forecast", cfg.forecast_source)):
+        if kind in tot.kinds:
+            tot.kinds[kind].info.update(family=fam, buffer=str(cfg.buffer_path(kind, fam)))
+    t2 = time.perf_counter()
+    tot.meta["seconds"].update(network_s=round(t_net, 2), buffers_s=round(t_buf, 2))
+    tot.meta["now"] = _hour(now_h)
+    path = tot.save(cfg.totals_path)
+    t_save = time.perf_counter() - t2
+    tot.meta["seconds"]["save_s"] = round(t_save, 2)
+    path.with_suffix(".json").write_text(json.dumps(tot.meta, indent=1))
+    sec = tot.meta["seconds"]
+    for kind, k in tot.kinds.items():
+        i = k.info
+        when = (f"window end {i['window_end']} ({i.get('hours_behind_now')} h before now)" if kind == "observed"
+                else f"from {i['start']} (run {i.get('run')}, {i.get('hours_since_start')} h ago)")
+        log(f"{kind} ({i.get('family')}, products {list(k.product_tags)}, scaled={i['scaled']}): {when}")
+        for x, w in i["windows_info"].items():
+            c = w["checks"]
+            area = float(net.up_area_m2[net.down < 0].sum())
+            mean = c["outlets_m3"] / area * 1000 if area else 0.0
+            mx, mb = w["max_mm"], w["max_mm_ge_100km2"] or {}
+            log(f"  {x:>2} h {w['start']} .. {w['end']}: {c['outlets_m3'] / 1e6:,.1f} Mm3 at outlets (mean "
+                f"{mean:.2f} mm), max {mx['mm']:.1f} mm (gid {mx['gid']}, {mx['up_area_km2']:.2f} km2), max over "
+                f">= 100 km2 {mb.get('mm', float('nan')):.1f} mm (gid {mb.get('gid')}, {mb.get('up_area_km2')} km2); "
+                f"{w['reaches_incomplete']} reaches incomplete, missing hours {len(w['missing_hours'])}; "
+                f"balance err {c['mass_balance_max_rel_err']:.1e}")
+    log(f"totals -> {path} ({path.stat().st_size / 1e6:.1f} MB): network {sec['network_s']} s, buffers "
+        f"{sec['buffers_s']} s, compute {sec['total_s']} s (accumulate {sec['accumulate_s']} s), save {t_save:.1f} s")
+    return tot
