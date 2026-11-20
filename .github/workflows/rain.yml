@@ -9,7 +9,8 @@ name: Live rain
 # unless they are older than STALE_HOURS. Anything else fails.
 on:
   schedule:
-    - cron: "23 * * * *"     # hourly at :23 (GitHub is busiest at :00; scheduled runs can start late)
+    - cron: "23 * * * *"     # hourly at :23 (GitHub is busiest at :00; scheduled runs can start late).
+                             # A schedule registers when this file is pushed to the default branch (main).
   workflow_dispatch:
 
 permissions:
