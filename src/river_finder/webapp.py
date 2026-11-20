@@ -3,8 +3,8 @@
 The app is plain CSS and JavaScript with no bundler or npm step. ``render`` concatenates, in order:
 
 - CSS: ``core/tokens.css``, ``core/base.css``, ``vendor/*.css``, then each page's ``pages/<id>/*.css``;
-- JS: ``core/rf.js``, ``core/data.js``, ``core/runs.js``, ``core/detail.js``, ``core/chart.js``, each page's
-  ``pages/<id>/*.js`` (files in name order), then ``core/start.js``;
+- JS: ``core/rf.js``, ``core/data.js``, ``core/rain.js``, ``core/runs.js``, ``core/detail.js``, ``core/chart.js``,
+  each page's ``pages/<id>/*.js`` (files in name order), then ``core/start.js``;
 
 into ``web/shell.html`` together with the build payload (regions index, model registry) as JSON.
 Pages are independent folders, so several people (or agents) can work on different pages at once;
@@ -13,9 +13,14 @@ the shared contract is ``window.RF`` (see ``web/README.md``).
 ``build`` writes two pages next to the region data files (from ``river-finder nz viewer``,
 ``models viewer`` and ``external attach``, default ``data/viewer_nz``):
 
-- ``index.html``: standalone document for GitHub Pages or local serving (LINZ Basemaps enabled);
+- ``index.html``: standalone document for GitHub Pages or local serving (LINZ Basemaps and live rain enabled);
 - ``artifact.html``: body-only fragment for a claude.ai artifact, whose host adds the document
-  skeleton and blocks every external request (no tile servers), so the page uses its own terrain.
+  skeleton and blocks every external request (no tile servers, no live rain), so the page uses its own terrain.
+
+Live rain (``core/rain.js``, bead rf-t26.10) is read at run time from ``RAIN_BASE``: the ``rain`` branch the
+hourly job publishes (``rainfall/live.py``). ``--rain-base`` or ``$RIVER_FINDER_RAIN_BASE`` point the site at
+another copy, e.g. ``python -m http.server`` over the output of ``river-finder rain publish`` (CORS needed
+from another port); an empty value leaves live rain out.
 """
 
 from __future__ import annotations
@@ -32,7 +37,7 @@ from pathlib import Path
 from .regions import REPO_ROOT
 
 CORE_CSS = ("core/tokens.css", "core/base.css")
-CORE_JS = ("core/rf.js", "core/data.js", "core/runs.js", "core/detail.js", "core/chart.js")
+CORE_JS = ("core/rf.js", "core/data.js", "core/rain.js", "core/runs.js", "core/detail.js", "core/chart.js")
 START_JS = "core/start.js"
 PAGES = ("map", "top", "models", "info")
 # External scripts the page loads (artifact CSP: cdnjs and a few other CDNs only; exact versions).
@@ -40,6 +45,9 @@ PAGES = ("map", "top", "models", "info")
 LIBS: tuple[str, ...] = ("https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.js",)
 PAGE_FILES = ("index.html", "artifact.html", "index_fragment.html")
 TARGETS = ("site", "artifact")
+# Live rain files (index.json, <region>.bin.gz) published hourly by .github/workflows/rain.yml.
+RAIN_BASE = "https://raw.githubusercontent.com/Sean-McConnachie/river-finder/rain/"
+RAIN_ENV = "RIVER_FINDER_RAIN_BASE"
 # Files only the artifact uses: page fragments (index, ML page) and the per-region satellite images
 # (the site streams satellite tiles instead).
 ARTIFACT_ONLY = ("_sat.jpg", "_fragment.html")
@@ -96,13 +104,22 @@ def _commit() -> str:
         return ""
 
 
-def payload(index: list[dict], target: str, basemaps_key: str = "") -> dict:
-    """Everything the page embeds as ``#rf-data``."""
+def rain_base(value: str | None = None) -> str:
+    """The live-rain base URL for the site: ``value``, else ``$RIVER_FINDER_RAIN_BASE``, else ``RAIN_BASE``
+    (always ending in "/"; empty: no live rain)."""
+    v = value if value is not None else os.environ.get(RAIN_ENV, RAIN_BASE)
+    v = v.strip()
+    return v if not v or v.endswith("/") else v + "/"
+
+
+def payload(index: list[dict], target: str, basemaps_key: str = "", rain: str = "") -> dict:
+    """Everything the page embeds as ``#rf-data``. ``rain``: live-rain base URL (site only)."""
     from .models import list_cards, viewer_models
 
     return {
         "app": {"target": target, "built": time.strftime("%Y-%m-%d"), "commit": _commit(),
-                "basemapsKey": basemaps_key if target == "site" else ""},
+                "basemapsKey": basemaps_key if target == "site" else "",
+                "rainBase": rain if target == "site" else ""},
         "regions": index,
         "model": model_summary(),
         "registry": viewer_models() if list_cards() else None,
@@ -161,8 +178,10 @@ def _link_data(src: Path, dst: Path) -> int:
     return n
 
 
-def build(out_dir: Path, data_dir: Path | None = None, basemaps_key: str | None = None) -> dict:
-    """Write ``index.html`` and ``artifact.html`` into ``out_dir`` with the data files of ``data_dir``."""
+def build(out_dir: Path, data_dir: Path | None = None, basemaps_key: str | None = None,
+          rain: str | None = None) -> dict:
+    """Write ``index.html`` and ``artifact.html`` into ``out_dir`` with the data files of ``data_dir``.
+    ``rain``: live-rain base URL for the site (default: ``rain_base()``; "" leaves it out)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     index: list[dict] = []
     files = 0
@@ -173,7 +192,7 @@ def build(out_dir: Path, data_dir: Path | None = None, basemaps_key: str | None 
     write_static(out_dir)
     key = basemaps_key if basemaps_key is not None else os.environ.get("LINZ_BASEMAPS_KEY", "")
     site = out_dir / "index.html"
-    site.write_text(document(render(payload(index, "site", key))), encoding="utf-8")
+    site.write_text(document(render(payload(index, "site", key, rain_base(rain)))), encoding="utf-8")
     art = out_dir / "artifact.html"
     art.write_text(render(payload(index, "artifact")), encoding="utf-8")
     return {"site": site, "artifact": art, "regions": len(index), "data_files": files}

@@ -182,7 +182,8 @@
     M.linzFeats = null;
     if (!M.map.getSource("src-known")) return;
     M.map.getSource("src-known").setData(buildKnown(R));
-    M.map.getSource("src-net").setData(buildNet(R));
+    M.netData = buildNet(R); // 57-rain.js adds the rain of each reach to these features
+    M.map.getSource("src-net").setData(M.netData);
     M.linz = null; M.map.getSource("src-linz").setData(EMPTY); M.map.getSource("src-names").setData(EMPTY);
     loadLinz(R);
     runs = []; scored = null; M.map.getSource("src-pred").setData(EMPTY);

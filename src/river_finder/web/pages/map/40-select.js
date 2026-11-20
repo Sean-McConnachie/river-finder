@@ -2,7 +2,7 @@
    full-screen detail view (RF.detail), which closes back to the same map view; "Show catchment" shades
    what drains into the river (45-catchment.js) until the selection changes.
    Layer files register:
-     M.clickable({layers: [layerIds], priority, feature(mapFeature) → feature reference})
+     M.clickable({layers: [layerIds], priority, feature(mapFeature, event, allHits) → feature reference | null})
      M.card[kind] = (feature) → {eyebrow, title, lines: [Node|string]}
      M.geometry[kind] = (feature) → GeoJSON geometry (for highlight and zoom)
    Owner: map agent. */
@@ -67,7 +67,7 @@
     const tol = window.matchMedia("(pointer: coarse)").matches ? 14 : 6;
     const [c, hits] = query(e.point, tol);
     if (c) {
-      const f = await c.feature(hits[0], e);
+      const f = await c.feature(hits[0], e, hits);
       if (f) { M.select(f, { fit: false }); return; }
     }
     // nothing drawn here: another region's outline when zoomed out, else the catchment area at this land point
@@ -111,7 +111,7 @@
     if (M.catchment?.offers(f)) actions.append(M.catchment.button(f)); // 45-catchment.js
     cardEl.replaceChildren(el("div", { class: "map-card-head" },
       el("div", { class: "map-card-titles" }, el("span", { class: "rf-eyebrow", text: def.eyebrow || "" }), el("strong", { class: "map-card-title", text: def.title || "" })), close),
-    ...[...(def.lines || []), ...(M.catchment?.lines(f) || [])].filter(Boolean).map((l) => el("div", { class: "map-card-line" }, l)), actions);
+    ...[...(def.lines || []), ...(M.rain?.lines(f) || []), ...(M.catchment?.lines(f) || [])].filter(Boolean).map((l) => el("div", { class: "map-card-line" }, l)), actions);
     cardEl.hidden = false;
   }
   /** Draw the open card again (e.g. once the model scores it shows have loaded). kind: only a card of that kind. */

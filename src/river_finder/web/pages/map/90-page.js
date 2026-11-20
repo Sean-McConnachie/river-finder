@@ -60,7 +60,8 @@
       '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a>',
       'Guides <a href="https://www.riverguide.co.nz/" target="_blank" rel="noopener">NZ RiverGuide</a> CC BY-SA 3.0 NZ',
       M.S2_ATTR,
-    ] }), "bottom-right");
+      RF.rain?.enabled ? 'Rain <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noopener">ECMWF</a> via <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> CC BY 4.0' : null,
+    ].filter(Boolean) }), "bottom-right");
     map.on("load", () => {
       container.querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show");
       M.initSlots();

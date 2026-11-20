@@ -4,11 +4,11 @@ Four pages in one app: **Map** (`#map`), **Top rivers** (`#top`), **Models** (`#
 Plain CSS and JavaScript, no bundler: `river-finder web build` (`src/river_finder/webapp.py`) inlines
 everything into one page and writes it twice:
 
-- `data/web/index.html`: standalone site (GitHub Pages, local serving). LINZ Basemaps tiles work here.
+- `data/web/index.html`: standalone site (GitHub Pages, local serving). LINZ Basemaps tiles and live rain work here.
 - `data/web/artifact.html`: fragment for a claude.ai artifact. That host adds the `<html>/<head>`
   skeleton and **blocks every external request** except scripts from cdnjs/jsdelivr/unpkg and Google
-  Fonts, so no tile servers, no `fetch` to other hosts, no iframes. Region data files are published
-  next to the page and fetched with relative URLs.
+  Fonts, so no tile servers, no `fetch` to other hosts (so no live rain: the map says so), no iframes. Region
+  data files are published next to the page and fetched with relative URLs.
 
 ## Ownership
 
@@ -24,7 +24,7 @@ issue under epic `rf-aq6`) for any change to `core/`, `shell.html` or `webapp.py
 | `pages/top/` | Top-rivers agent | rf-aq6.5, brief `docs/ui/top-rivers.md` |
 
 Build order: `core/tokens.css`, `core/base.css`, `vendor/*.css`, `pages/<id>/*.css`; then
-`core/rf.js`, `core/data.js`, `core/runs.js`, `core/detail.js`, `core/chart.js`, `pages/<id>/*.js` (name order),
+`core/rf.js`, `core/data.js`, `core/rain.js`, `core/runs.js`, `core/detail.js`, `core/chart.js`, `pages/<id>/*.js` (name order),
 `core/start.js`. A page may have several files; they load in name order.
 
 ## Build and preview
@@ -38,6 +38,11 @@ uv run river-finder web data --only linz             # only <region>_linz.json, 
 uv run river-finder web build                        # -> data/web/index.html + artifact.html (+ data files)
 uv run river-finder web serve                        # http://localhost:8000/
 ```
+
+Live rain is fetched by the page itself, every 15 min, from the `rain` branch the hourly job publishes
+(`docs/live-rain.md`; nothing to build). `web build --rain-base URL` (or `$RIVER_FINDER_RAIN_BASE`) points the
+site at another copy, e.g. the output of `river-finder rain publish --out DIR` served with CORS from another
+port; `--rain-base ""` leaves live rain out.
 
 `web build` takes a second, so rebuild after each edit.
 
@@ -104,7 +109,7 @@ Stable unless noted. Anything not listed here is internal.
 | `RF.setModel(id)` | emits `model` |
 | `RF.setRunParams(params \| null)` | merge over defaults (null resets); emits `runs` |
 | `RF.select(feature)` | emits `select` |
-| `RF.on(evt, fn)` → `unsubscribe` | events: `ready`, `page`, `region`, `model`, `runs`, `select`, `detail-close` |
+| `RF.on(evt, fn)` → `unsubscribe` | events: `ready`, `page`, `region`, `model`, `runs`, `select`, `detail-close`, `rain` |
 | `RF.go(pageId, params)` | open a page; e.g. `RF.go("map", {select: feature})` zooms the map to it and highlights it |
 
 ### Data: `RF.data`
@@ -152,6 +157,35 @@ see `webdata.py`), `falls`
 | `fallsN`, `fallsH` | mapped waterfalls on the reach, tallest height m |
 
 `S.rivers` (names), `S.listed` (rivers named in the guides), `S.sections` (known sections).
+
+### Live rain: `RF.rain`
+
+Upstream rain per reach from the hourly job (`core/rain.js`; file format and reference decoder in
+`src/river_finder/rainfall/live.py`, the job in `docs/live-rain.md`). The files live under `RF.config.rainBase`
+(standalone site only): `index.json` and one `<region>.bin.gz` per national region, loaded on demand and
+refreshed about every 15 min while the page is visible. Nothing throws into the page: a failed fetch, an index
+over 12 h old, a reach count that differs from the site's (rain inputs from another national build) or a 5 m
+reference area (not published) all end in an error state with a message for people.
+
+| | |
+|---|---|
+| `RF.rain.enabled` | live rain is configured for this page (site build with a rain URL, a browser with `DecompressionStream`) |
+| `RF.rain.region(id)` → `Promise<RainData>` | load once, then cached; rejects with `{code, message}`: `host` (artifact), `off`, `browser`, `reference`, `missing`, `mismatch`, `stale`, `network`, `format` |
+| `RF.rain.state(id)` | synchronous snapshot for rendering, starts no fetch: `{status: "idle" \| "loading" \| "ok" \| "error", data, code, message}` |
+| `RF.rain.at(data, reach)` | one reach: `{reach, area (km²), flags, past: {x: w}, next: {x: w}}`, `w = {mm, m3, miss, products, scale}`; `mm`/`m3` null = no value |
+| `RF.rain.span(data, "past" \| "next", x)` | `{start, end}` Dates of window `x` (past windows end at `head.observed.window_end`, which lags now; next ones start at `head.forecast.start`) |
+| `RF.rain.windows` | `[1, 3, 6, 12, 24]` (hours) |
+| `RF.rain.time(t, {day})`, `RF.rain.age(t)` | `"07:00 NZDT"` (weekday added when not today in NZ), `"12 min ago"` |
+| `RF.rain.fmt.{mm, m3}` | `"12.3"`; `"850"`, `"3.4k"`, `"4.1M"` |
+| `RF.rain.decode(bytes)` → `Promise<{head, cols}>` | the decoder (gzip or plain); `cols[k]`: typed array per reach, or the constant |
+
+`RainData`: `{id, n, head (the file's header: generated, now, observed, forecast, products, attribution, fields),
+cols, index (index.json: runs, windows, products, flags, attribution, licences), sha, generated (Date)}`. Element
+`i` is the region's reach `i` (viewer order, as `Region.segments`). `m3 = mm × area_km2 × 1000`. Flags: 16 = part
+of the catchment is cut off at a tile edge (the total reads low). The past windows are ECMWF short-lead hours
+standing in for observed rain: model data, not gauged; say so wherever rain is shown, with the window times.
+`RF.on("rain", ({region, tick}) => …)`: a region's state changed (loaded, failed, refreshed); `tick: true` comes
+once a minute only so that shown ages can move on.
 
 ### Runs: `RF.runs`
 
@@ -204,4 +238,5 @@ no dual axes). `RF.chart.placeholder(title, message)`, `RF.chart.ticks(lo, hi, n
 `el(tag, props, ...children)`, `esc`, `icon(name)`, `fmt.{km2, flow, grad, km, dist, coord, int}`,
 `copy(text)`, `copyable(text)` (value with a Copy button), `toast(msg)`, `css(token)`, `debounce`,
 `toNZTM(lat, lon)`, `decodeGray(src, w, h)`, `b64bytes(text)`. `RF.dialog({title, body, actions})`,
-`RF.store.get/set/remove`, `RF.config` (`target`: `"site"` or `"artifact"`, `built`, `commit`).
+`RF.store.get/set/remove`, `RF.config` (`target`: `"site"` or `"artifact"`, `built`, `commit`, `basemapsKey` and
+`rainBase`: site only, empty on the artifact).

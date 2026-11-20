@@ -35,3 +35,13 @@
 .det-gaugebtn { display: flex; justify-content: space-between; gap: var(--sp-2); align-items: baseline; text-align: left; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--accent); font: 500 var(--fs-sm) var(--font-ui); cursor: pointer; }
 .det-gaugebtn:hover { border-color: var(--accent); }
 @media (pointer: coarse) { .det-gaugebtn { min-height: var(--touch); } }
+/* Rain (57-rain.js) */
+.det-rain-box { display: grid; gap: var(--sp-3); min-width: 0; }
+.det-rain-table { width: auto; min-width: min(100%, 420px); }
+.det-rain-table th.det-rain-grp { text-align: center; text-transform: none; letter-spacing: 0; font-size: var(--fs-xs); color: var(--fg); border-bottom-color: var(--line-strong); }
+.det-rain-table tbody th { text-transform: none; letter-spacing: 0; font-size: var(--fs-sm); color: var(--fg); font-family: var(--font-data); }
+.det-rain-table td.n, .det-rain-table th.n { padding-left: 14px; }
+.det-rain-table tr.det-rain-cur > * { background: var(--accent-soft); }
+.det-rain-caveats { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; font-size: var(--fs-sm); color: var(--muted); max-width: 75ch; }
+.det-rain-attr a { overflow-wrap: anywhere; }
+@media (max-width: 720px) { .det-rain-table th, .det-rain-table td { padding: 6px 7px; } .det-rain-table td.n, .det-rain-table th.n { padding-left: 8px; } }

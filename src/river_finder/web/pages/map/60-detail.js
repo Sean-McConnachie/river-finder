@@ -182,10 +182,11 @@
       el("div", { class: "det-summary" }, pills, ...desc, gen, apart),
       section("Key numbers", statsTable(st, score)),
       section("Long profile", ...profile(S, st.stem, highlight), stemNote),
+      M.rain?.section(f, R), // 57-rain.js: live rain at the outlet (null without live rain)
       section("Flow rate", RF.chart.placeholder("Flow rate over time",
         `To do: live and historical flow need the river gauges (planned). For now the best guide is the NIWA mean annual flood at the bottom${many ? " of the largest piece" : ""}: ${fmt.flow(st.maf)} m³/s.`)),
       section("Put-in and take-out", el("div", { class: "det-coords" }, ...coords)),
-    ];
+    ].filter(Boolean);
     if (sec?.hazards?.length || sec?.deaths) {
       body.push(section("Hazards", el("div", { class: "rf-row" }, ...(sec.hazards || []).map((h) => el("span", { class: "rf-pill rf-pill--warn", text: h }))),
         sec.deaths ? el("p", { class: "rf-note", text: `Fatalities recorded on or near this section: ${sec.deaths}. See the sources.` }) : null,

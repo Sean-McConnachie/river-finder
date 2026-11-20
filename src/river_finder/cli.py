@@ -309,6 +309,9 @@ def main(argv: list[str] | None = None) -> None:
     pw.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "web")
     pw.add_argument("--basemaps-key", default=None, help="LINZ Basemaps API key for the standalone site "
                                                           "(default: $LINZ_BASEMAPS_KEY)")
+    pw.add_argument("--rain-base", default=None,
+                    help="build: live-rain base URL for the standalone site (default: $RIVER_FINDER_RAIN_BASE, else "
+                         "the rain branch on raw.githubusercontent.com; '' leaves live rain out)")
     pw.add_argument("--port", type=int, default=8000)
     pl = sub.add_parser("ml", help="ML evaluation and page: table | explore | cv | page | audit | all "
                                    "(see src/river_finder/ml.py, mlpage.py)")
@@ -380,7 +383,7 @@ def main(argv: list[str] | None = None) -> None:
                 if not args.only or k in args.only:
                     step(args.data)
         elif args.step == "build":
-            out = webapp.build(args.out, args.data if args.data.exists() else None, args.basemaps_key)
+            out = webapp.build(args.out, args.data if args.data.exists() else None, args.basemaps_key, args.rain_base)
             print(f"web -> {out['site']} and {out['artifact'].name} ({out['regions']} regions, "
                   f"{out['data_files']} data files)")
         elif args.step == "pages":

@@ -3,13 +3,19 @@
 
    Layer files register nodes with M.defineGroup / M.defineLayer:
      M.defineLayer({id, label, parent, colors: [{key, token | hex, label}], defaultOn, swatch: "line" | "dot" | "area",
-                    apply(on, colorOf), count(), note, link, legend, legendKey() → Node (legend key of a layer without colours)})
+                    apply(on, colorOf), count(), note (text, or a function → text), link, legend,
+                    legendKey() → Node (legend key of a layer without colours), rowKey() → Node (key in its tree row),
+                    legendBlock() → Node | null (a whole legend block instead of a row; mini: true also puts it in the
+                    mini legend), controls() → Node (shown under the row while the node is on)})
+   M.layerNotes: short notes under the tree (e.g. a layer this host cannot show).
    A layer shows when it and every group above it are on (as in QGIS). */
 (() => {
   "use strict";
   const RF = window.RF, M = RF.mapkit, { el, icon, fmt } = RF.util;
   M.nodes = new Map();
   M.order = [];
+  M.layerNotes = [];
+  const noteOf = (n) => (typeof n.note === "function" ? n.note() : n.note);
 
   M.defineGroup = (g) => { const n = Object.assign({ type: "group", defaultOn: true, colors: [] }, g); M.nodes.set(n.id, n); M.order.push(n.id); return n; };
   M.defineLayer = (l) => { const n = Object.assign({ type: "layer", defaultOn: false, colors: [], swatch: "line" }, l); M.nodes.set(n.id, n); M.order.push(n.id); return n; };
@@ -102,27 +108,36 @@
       cb.indeterminate = on && onCount > 0 && onCount < all.length;
     }
     cb.addEventListener("change", () => { M.prefs.layers[n.id] = cb.checked; M.savePrefs(); M.applyLayers(); M.renderTree(); });
-    const count = n.count ? n.count() : null;
+    const count = n.count ? n.count() : null, note = noteOf(n);
     const row = el("div", { class: `map-node map-node--${n.type}`, style: `--depth:${depth}`, "data-off": String(!M.isVisible(n.id)) },
       cb, el("label", { for: `lyr-${n.id}`, class: "map-node-label" }, el("span", { text: n.label }),
-        n.note ? el("span", { class: "map-node-note", text: n.note }) : null),
+        note ? el("span", { class: "map-node-note", dataset: { nodeNote: n.id }, text: note }) : null),
       count !== null && count !== undefined ? el("span", { class: "map-node-count num", text: fmt.int(count) }) : null,
-      el("span", { class: "map-node-swatches" }, ...n.colors.map((c) => swatchButton(n, c))),
+      el("span", { class: "map-node-swatches" }, ...n.colors.map((c) => swatchButton(n, c)), n.rowKey ? n.rowKey() : null),
       n.link ? el("a", { class: "map-node-link", href: n.link, target: "_blank", rel: "noopener", "aria-label": `Source for ${n.label}`, html: icon("external") }) : null);
-    return [row, ...kids.flatMap((k) => nodeRow(k, depth + 1))];
+    const ctl = n.controls && M.isVisible(n.id) ? n.controls() : null;
+    return [row, ...(ctl ? [el("div", { class: "map-node-ctl", style: `--depth:${depth}` }, ctl)] : []), ...kids.flatMap((k) => nodeRow(k, depth + 1))];
   }
 
   M.renderTree = () => {
     if (!treeEl) return;
     const roots = children(null);
-    treeEl.replaceChildren(...roots.flatMap((n) => nodeRow(n, 0)));
+    treeEl.replaceChildren(...roots.flatMap((n) => nodeRow(n, 0)), ...M.layerNotes.map((t) => el("p", { class: "rf-note map-tree-note", text: t })));
   };
+  /** Update a node's note in place (keeps focus in the tree). */
+  M.updateNote = (id) => { const n = M.nodes.get(id), e = treeEl?.querySelector(`[data-node-note="${id}"]`); if (n && e) e.textContent = noteOf(n) || ""; };
 
   M.renderLegend = () => {
     if (!legendEl) return;
     const blocks = [];
     const bl = M.basemapLegend?.(); if (bl) blocks.push(bl);
-    M.order.map((id) => M.nodes.get(id)).filter((n) => n.type === "layer" && M.isVisible(n.id) && (n.colors.length || n.legendKey)).forEach((n) => {
+    const minis = [];
+    M.order.map((id) => M.nodes.get(id)).filter((n) => n.type === "layer" && M.isVisible(n.id) && (n.colors.length || n.legendKey || n.legendBlock)).forEach((n) => {
+      if (n.legendBlock) {
+        const b = n.legendBlock(); if (b) blocks.push(b);
+        const m = n.mini && n.legendBlock(); if (m) minis.push(m);
+        return;
+      }
       blocks.push(el("div", { class: "map-legend-row" },
         el("span", { class: "map-node-swatches" }, ...(n.legendKey ? [n.legendKey()]
           : n.colors.map((c) => el("span", { class: `map-key map-key--${n.swatch}`, style: `--sw:${M.colorOf(n.id, c.key)}`, title: c.label || "" })))),
@@ -132,7 +147,7 @@
     blocks.push(el("p", { class: "rf-note", text: `Base map: ${b ? b.label : "–"}. ${b?.note || ""}` }));
     legendEl.replaceChildren(...blocks);
     const mini = document.querySelector(".map-minilegend");
-    if (mini) { const x = M.basemapLegend?.(); mini.replaceChildren(...(x ? [x] : [])); mini.hidden = !x; }
+    if (mini) { const x = M.basemapLegend?.(), all = [...(x ? [x] : []), ...minis]; mini.replaceChildren(...all); mini.hidden = !all.length; }
   };
   M.drawCatchLegend = () => M.renderLegend();
 

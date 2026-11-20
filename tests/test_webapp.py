@@ -103,3 +103,69 @@ def test_area_code_covers_every_land_cell():
     assert c[0] == 0 and c[1] == 0 and (c[2:] >= 2).all()  # one cell already has an area code
     back = decode_area(c[2:])
     assert np.all(np.abs(np.log10(back) - np.log10(a[2:])) <= CODE_STEP / 2 + 1e-9)
+
+
+def test_site_payload_has_the_rain_url_and_the_artifact_none(tmp_path, monkeypatch):
+    monkeypatch.delenv(webapp.RAIN_ENV, raising=False)
+    assert webapp.rain_base() == webapp.RAIN_BASE and webapp.RAIN_BASE.startswith("https://raw.githubusercontent.com/")
+    assert webapp.rain_base("http://localhost:8891") == "http://localhost:8891/" and webapp.rain_base("") == ""
+    monkeypatch.setenv(webapp.RAIN_ENV, "http://localhost:9/rain/")
+    assert webapp.rain_base() == "http://localhost:9/rain/"
+    res = webapp.build(tmp_path / "web", None, basemaps_key="", rain="http://localhost:8891/")
+    assert '"rainBase":"http://localhost:8891/"' in res["site"].read_text()
+    assert '"rainBase":""' in res["artifact"].read_text()  # the artifact host blocks other hosts
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_rain_decoder_matches_the_reference_decoder(tmp_path):
+    """core/rain.js reads what rainfall/live.py writes: nulls, constant fields, log areas, u8 bits; gzip or plain."""
+    import gzip
+
+    import numpy as np
+
+    from river_finder.rainfall import live
+
+    n = 7
+
+    def mm(k, x):
+        return {"k": f"{k}_mm_{x}h", "kind": "u16null", "scale": 0.1, "add": 0.0, "of": k, "x": x}
+
+    cols = [({"k": "area_km2", "kind": "u16log", "scale": live.AREA_SCALE, "add": live.AREA_ADD},
+             live.quantize_area(np.array([1e-5, 0.3, 2, 45, 300, 3000, 1e5]))),
+            (mm("obs", 24), live.quantize_mm(np.array([0, 0.1, 0.5, 12.34, np.nan, 250, 6553.4]))),
+            (mm("fc", 24), live.quantize_mm(np.full(n, np.nan))),  # constant: no forecast
+            (mm("fc", 6), live.quantize_mm(np.full(n, 2.5))),
+            ({"k": "flags", "kind": "u8"}, np.array([0, 1, 2, 8, 16, 0, 1], np.uint8)),
+            ({"k": "obs_prod_24h", "kind": "u8", "of": "observed", "x": 24}, np.ones(n, np.uint8))]
+    raw = live.encode_region({"schema": 1, "region": "r1", "n": n, "generated": "2026-11-20T21:52:26Z",
+                              "windows": [6, 24]}, cols)
+    (tmp_path / "r1.bin.gz").write_bytes(gzip.compress(raw, mtime=0))
+    (tmp_path / "r1.bin").write_bytes(raw)
+    head, want = live.decode_region(raw)
+    rain = webapp.web_root().joinpath("core/rain.js").read_text()
+    (tmp_path / "run.mjs").write_text(
+        "import fs from 'node:fs';\n"
+        "globalThis.window = { RF: { config: { target: 'site', rainBase: 'x/' }, state: {}, emit() {} } };\n"
+        "globalThis.document = { visibilityState: 'visible', addEventListener() {} };\n"
+        f"(0, eval)({json.dumps(rain)});\n"
+        "const out = {};\n"
+        "for (const f of ['r1.bin.gz', 'r1.bin']) {\n"
+        "  const { head, cols } = await window.RF.rain.decode(fs.readFileSync(new URL(f, import.meta.url)));\n"
+        "  out[f] = Object.fromEntries(head.fields.map((x) => { const c = cols[x.k];\n"
+        "    return [x.k, c == null || typeof c === 'number' ? { const: c }\n"
+        "      : Array.from(c, (v) => (Number.isNaN(v) ? null : v))]; }));\n"
+        "}\n"
+        "out.m3 = [850, 3400, 120000, 4.1e6, 1.2e8].map(window.RF.rain.fmt.m3);\n"
+        "console.log(JSON.stringify(out));\n")
+    r = subprocess.run(["node", str(tmp_path / "run.mjs")], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    got = json.loads(r.stdout)
+    for f in ("r1.bin.gz", "r1.bin"):
+        for spec in head["fields"]:
+            k, g = spec["k"], got[f][spec["k"]]
+            if "const" in g:
+                a = np.full(n, np.nan if g["const"] is None else g["const"], dtype=float)
+            else:
+                a = np.array([np.nan if v is None else v for v in g], dtype=float)
+            np.testing.assert_allclose(a, want[k].astype(float), rtol=1e-6, equal_nan=True, err_msg=f"{f} {k}")
+    assert got["m3"] == ["850", "3.4k", "120k", "4.1M", "120M"]
