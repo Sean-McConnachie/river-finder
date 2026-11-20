@@ -102,6 +102,9 @@ uv run river-finder rain ecmwf [--run latest|YYYYMMDDHH] [--obs] [--fc] [--reade
                                           # observed proxy (leads 1-6 of 5 runs) + next 24 h -> data/nz/rain/obs|fc_ecmwf.npz + .json (~1 min, ~35 MB)
 uv run river-finder rain totals [--windows 1 2 ..] [--raw]  # upstream mm + m3 per reach and window (past/next x h) down the
                                           # network, missing-hour/product/scale flags -> data/nz/rain/totals.npz + .json (~10 s; rainfall/upstream.py)
+uv run river-finder rain inputs --out DIR; rain publish --out DIR  # live rain (docs/live-rain.md): the hourly job's inputs (~35 MB,
+                                          # branch rain-inputs; refresh after a national rebuild) and per-region rain files + index.json
+                                          # (branch rain, force-pushed hourly by .github/workflows/rain.yml; format in rainfall/live.py)
 ```
 
 Web app: `src/river_finder/web/` (contract and ownership in `web/README.md`; page briefs in

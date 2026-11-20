@@ -32,6 +32,10 @@ Modules
   window, upstream volume (m³) and mean depth (mm) summed over every local catchment upstream, with
   the missing hours, products and scale factors that reached it; method, flags and checks in its
   docstring.
+- :mod:`.live` (rf-t26.9): the hourly GitHub Actions job's fixed inputs (``rain inputs``: weights,
+  network, viewer map, manifest; the ``rain-inputs`` branch) and the files it publishes (``rain
+  publish``: ``index.json`` + one ``<region>.bin.gz`` per site region; the ``rain`` branch). The
+  file format, the contract for the map layer, is in its docstring; ``docs/live-rain.md`` has the job.
 
 Data flow
 ---------
@@ -78,8 +82,11 @@ Every hour (children 2 and 3 provide the sources)::
 - rf-t26.6 (upstream, done): ``compute_totals(net, {"observed": obs, "forecast": fc}, windows)``
   sums ``WindowTotal.m3(area_m2)`` down ``net.down`` in topological order; upstream mm = upstream m³ /
   upstream pixel area. Tile-edge outlets (rf-t26.11) end their totals and are flagged.
-- rf-t26.9 (publishing): per region, ``rows = t.viewer_rows()[region]`` lists the viewer reaches in
-  ``vi`` order, so ``t.mm(kind, x)[rows]`` (or ``t.frame(rows)``) is indexed by ``vi`` directly.
+- rf-t26.9 (publishing, done): per region, ``rows = t.viewer_rows()[region]`` lists the viewer
+  reaches in ``vi`` order, so ``t.mm(kind, x)[rows]`` is indexed by ``vi`` directly; ``live.publish``
+  packs them per region; ``.github/workflows/rain.yml`` runs ``rain ecmwf``, ``rain totals`` and ``rain
+  publish`` every hour from the ``rain-inputs`` branch (``rain ecmwf`` exits 75 when ECMWF is late or
+  unreachable, and the job then keeps the last files).
 """
 
 from .buffer import DEFAULT_WINDOWS, SLOTS, HourlyBuffer, PutResult, ScaleFactors, WindowTotal
