@@ -8,19 +8,21 @@
     mm_up[r] = m3_up[r] / A_up[r] * 1000
 
 with ``m3[c] = mm[c] / 1000 * area_m2[c]``: ``mm[c]`` is the window sum of the hourly buffer
-(:class:`.buffer.HourlyBuffer`, hours without a value count 0 and are flagged) and ``area_m2`` the
-pixel area of each local catchment (:class:`.weights.CatchmentWeights`). ``A_up`` is the pixel area,
-not the table's ``area_km2``, so ``mm_up`` is the mean depth over exactly the ground that was counted.
-A reach whose upstream holds no pixel at all (fallback rows, none today) takes its own local depth.
+(:class:`.buffer.HourlyBuffer`, the same numbers as ``window(x)`` / ``ahead(x)``; hours without a
+value count 0 and are flagged) and ``area_m2`` the pixel area of each local catchment
+(:class:`.weights.CatchmentWeights`; it does not depend on the grid). ``A_up`` is the pixel area, not
+the table's ``area_km2``, so ``mm_up`` is the mean depth over exactly the ground that was counted. A
+reach whose upstream holds no pixel at all (fallback rows, none today) takes its own local depth.
 
 **Method.** ``down`` (row of the next reach downstream, -1 at an outlet) makes the network a forest.
-:func:`topo_order` (Kahn's algorithm, numba) lists every row before the row it drains into; a row
-missing from the order sits on a cycle, which raises. Accumulation is one numba pass in that order
-that adds each row's values into its downstream row (``_acc_sum``; ``_acc_max`` and ``_acc_or`` for
-the flags). All windows of both kinds are columns of one ``(n, k)`` array, so a national run of
-1.1 M reaches, 5 windows x 2 kinds, takes ~0.1 s after the buffers are read; the order takes 15 ms.
+:func:`topo_order` (Kahn's algorithm, numba, 15 ms for 1.1 M rows) lists every row before the row it
+drains into; a row missing from the order sits on a cycle, which raises. :func:`accumulate` runs one
+numba pass per quantity in that order, adding each row's value into its downstream row (sum; max for
+the missing hours, bitwise or for the bit fields). The quantities are the rows of one ``(k, n)`` array:
+volume and missing area-hours per kind and window. Nationally (5 windows x 2 kinds) the accumulation
+takes ~0.2 s; the whole computation ~1.5 s after the buffers are read (~1 s), saving ~2.5 s.
 
-**Flags per reach and window** (``KindTotals``; arrays ``(windows, n)``):
+**Flags per reach and window** (:class:`KindTotals`; arrays ``(windows, n)``):
 
 - ``miss_hours`` (uint8): the most hours missing from any one catchment upstream (max-accumulated);
   0 = every catchment upstream has every hour of the window.
@@ -33,40 +35,54 @@ the flags). All windows of both kinds are columns of one ``(n, k)`` array, so a 
   in the summary; the bits only drop a product whose hours had no value anywhere upstream.
 - ``scale`` (uint8 bits): ``RAW`` (1) = some catchment-hour upstream used factor version 0 (unscaled),
   ``SCALED`` (2) = some used a version > 0 (gauge-scaled, rf-t26.5); 3 = mixed, 0 = no value. The
-  exact versions per hour and region are in the slot arrays; with ``up_regions`` (bit per region
+  exact versions per hour and region are in the slot arrays; with ``up_regions`` (a bit per region
   upstream) :meth:`UpstreamTotals.provenance` lists every hour's product, run, lead and the factor
-  versions that reached a reach. Totals use the scaled values unless computed with ``scaled=False``.
+  versions that reached a reach. Totals sum the scaled values unless computed with ``scaled=False``.
+
+Per window the metadata also keeps the hours, missing hours, products, sources, runs, leads and
+factor versions, the reaches incomplete, the largest depth and volume and two checks: every reach
+equals its tributaries plus its own local volume, and the outlets hold all local volume.
 
 **Network flags per reach** (``flags``, uint8; :class:`Network`):
 
-- ``OUTLET`` (1): ``down < 0``.
+- ``OUTLET`` (1): ``down < 0`` (6,824 nationally).
 - ``EDGE`` (2): an outlet that leaves its tile at a tile edge and that the relink (rf-t26.8,
-  ``relink_log.csv``) could not reconnect: the river goes on in the next tile, but totals stop here.
-  175 today.
-- ``EDGE_BIG`` (4): an ``EDGE`` outlet over 200 km², the 26 big rivers of rf-t26.11
+  ``relink_log.csv``, status other than ``linked``) could not reconnect: the river goes on in the
+  next tile, but its totals stop here. 175 outlets holding 34,564 km² of pixels.
+- ``EDGE_BIG`` (4): the ``EDGE`` outlets over 200 km², the 26 big rivers of rf-t26.11
   (``unresolved_gt200.csv``): the upper Whanganui, the Tongariro/Taupo system, the Ruamahanga, lakes
-  Hawea, Wakatipu and Te Anau split by tiles. The rivers below them miss that water.
-- ``ABOVE_EDGE`` (8): the reach drains to an ``EDGE`` outlet (its own total is complete).
-- ``AREA_SHORT`` (16): ``A_up`` is short of the table's ``area_km2`` by at least 10 % and 1 km²:
-  the tile added REC2 inflow area at an edge whose pixels drain to an ``EDGE`` outlet in another
-  tile, or land pixels drain to no kept reach. These reaches' ``mm_up`` is the depth over the part
-  that was counted, and ``m3_up`` misses the rest.
+  Hawea, Wakatipu and Te Anau split by tiles. The rivers below them miss that water: the Clutha
+  mouth counts 18,924 km² of pixels for 20,904 km² in the table, without Lake Hawea (1,304 km²,
+  outlet 503016542) and part of Wakatipu (587 km², 403018735).
+- ``ABOVE_EDGE`` (8): the reach drains to an ``EDGE`` outlet (its own total is complete as far as it
+  goes; it is the rivers below the edge that lack it).
+- ``AREA_SHORT`` (16): ``A_up`` is short of the table's ``area_km2`` by at least 5 % and 1 km²: the
+  tile added REC2 inflow area at an edge whose pixels drain to an ``EDGE`` outlet in another tile.
+  Such a reach's ``mm_up`` is the depth over the part that was counted; ``m3_up`` misses the rest.
 
-**Consistency** (:meth:`Network.area_check`): ``A_up`` against the table's ``area_km2``, by size
-class, with the totals at the outlets; the misses come from the tile-edge losses and unresolved
-outlets above and from land pixels that drain into no kept reach (``land_unassigned`` of the
-weights build).
+**Consistency** (:meth:`Network.area_check`, in ``totals.json``): ``A_up`` against the table's
+``area_km2`` by size class. The median ratio is 0.999-1.000 in every class; 92-96 % of reaches below
+1,000 km² are within 5 %, but only 64 % of those above (the big rivers cross tile edges). At the
+outlets the table holds 278,599 km², the pixels 257,985 km²: 9,491 km² of land pixels drain into no
+kept reach (``land_unassigned`` of the weights build), and the other ~11,100 km² of table area lies
+beyond the land pixels: mostly REC2 inflow counted twice, in the tile that added it at its edge and at
+the unresolved outlet whose pixels it stands for. The
+pixel area can also exceed the table's: the Grey's last reaches carry 3,927 km² in the table but
+4,370 km² of pixels drain to them (the downstream tile's routing lost part of the inflow, the
+relinked pixels did not).
 
 **Files** (in ``<rain>``):
 
 - ``network.npz``: the :class:`Network` (gid, down, vi, regions, local and upstream pixel areas,
-  flags, topological order), built from ``segments_table.pkl``, the weights and the relink logs and
-  rebuilt when the table changes. It lets an hourly job run without the 300 MB table.
+  flags, topological order), built from ``segments_table.pkl``, the weights and the relink logs, and
+  rebuilt when the table changes (size or mtime). An hourly job can run from it without the 300 MB
+  table.
 - ``totals.npz`` (+ ``totals.json``): :class:`UpstreamTotals`, a self-contained snapshot: the
-  per-reach network fields plus, per kind (``observed``, ``forecast``), ``mm``, ``miss_hours``,
-  ``miss_frac``, ``products`` and ``scale`` per window and the slot provenance. ``m3`` is derived as
-  ``mm / 1000 * up_area_m2``. The ``.json`` has the windows, run times, sources, products per
-  window, checks and creation time.
+  per-reach network fields (gid, down, vi, region, upstream pixel and table areas, flags,
+  up_regions) plus, per kind (``obs_*``, ``fc_*``), ``mm``, ``miss_hours``, ``miss_frac``,
+  ``products`` and ``scale`` per window and the slot provenance. ``m3`` is derived as
+  ``mm / 1000 * up_area_m2``. The ``.json`` holds the windows, the sources, runs and products per
+  window, the window ends and their age, the checks, timings and the creation time.
 
 **API**::
 
@@ -74,10 +90,11 @@ weights build).
     t.mm("observed", 24), t.m3("forecast", 6)       # arrays over all reaches
     t.at(row)                                       # dict: mm, m3 and flags per kind and window
     t.for_gids([gid, ...])                          # DataFrame, one row per gid
-    for region, rows in t.viewer_rows().items():    # viewer reaches (vi >= 0) in vi order
+    for region, rows in t.viewer_rows().items():    # viewer reaches (vi >= 0) of each region, in vi order
         df = t.frame(rows)                          # row j of df is the reach with vi == j
 
-``river-finder rain totals`` recomputes ``totals.npz`` from the current buffers.
+``river-finder rain totals [--windows ...] [--raw]`` recomputes ``totals.npz`` from the current
+buffers.
 """
 
 from __future__ import annotations
@@ -111,11 +128,11 @@ FLAG_DOC = {
     "tile_edge_outlet": "outlet at a tile edge that the relink (rf-t26.8) could not reconnect: totals stop here",
     "tile_edge_outlet_gt200km2": "tile-edge outlet over 200 km2, one of the 26 rivers of rf-t26.11",
     "drains_to_tile_edge": "the reach drains to a tile-edge outlet",
-    "area_short": "upstream pixel area >= 10 % and >= 1 km2 short of the table's area_km2: the total misses part "
+    "area_short": "upstream pixel area >= 5 % and >= 1 km2 short of the table's area_km2: the total misses part "
                   "of the catchment (tile-edge losses)",
 }
 EDGE_BIG_KM2 = 200.0
-SHORT_FRAC, SHORT_KM2 = 0.10, 1.0
+SHORT_FRAC, SHORT_KM2 = 0.05, 1.0
 RAW, SCALED = 1, 2
 SCALE_NAMES = {0: "none", RAW: "raw", SCALED: "scaled", RAW | SCALED: "mixed"}
 

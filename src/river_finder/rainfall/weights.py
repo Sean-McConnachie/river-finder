@@ -32,8 +32,9 @@ error on random pixels of every tile against the exact transform and stores the 
 flagged ``fallback``: its depth is the local cell's, its volume 0. Land pixels draining into no
 kept segment (coastal slivers, tile edges) are counted in the build stats.
 
-Upstream totals (rf-t26.6) use ``down`` (row index of the downstream catchment, -1 at an outlet)
-and ``area_m2``: upstream m³ = sum of local m³ upstream, upstream mm = upstream m³ / upstream area.
+Upstream totals (rf-t26.6, :mod:`.upstream`) use ``area_m2`` and the segment table's ``down`` (row
+index of the downstream catchment, -1 at an outlet; ``down`` here is the copy taken when the weights
+were built): upstream m³ = sum of local m³ upstream, upstream mm = upstream m³ / upstream area.
 """
 
 from __future__ import annotations

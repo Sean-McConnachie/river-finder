@@ -27,6 +27,11 @@ Modules
   ``tp`` by range request, 3-hourly steps split evenly); the time steps found, the comparison
   behind the choice, which leads make ``ECMWF_OBS`` and how ``ECMWF_FC`` is filled are in its
   docstring.
+- :mod:`.upstream` (rf-t26.6): ``Network`` (the reach forest in topological order, pixel areas,
+  viewer index, flags for outlets the tile edges cut off) and ``UpstreamTotals``: per reach and
+  window, upstream volume (m³) and mean depth (mm) summed over every local catchment upstream, with
+  the missing hours, products and scale factors that reached it; method, flags and checks in its
+  docstring.
 
 Data flow
 ---------
@@ -40,6 +45,16 @@ covers them), each with a ``.json`` report giving the source, run, lead and prod
 the run's age and the download. Re-running replaces hours, never adds to them; decoded fields are
 cached under ``data/nz/rain/cache/``. ``--run YYYYMMDDHH`` picks a run, ``--obs`` / ``--fc`` one
 buffer, ``--reader`` the other reader.
+
+After each fill: ``river-finder rain totals`` adds the observed and forecast windows down the river
+network into ``totals.npz`` (+ ``.json``; ``--windows`` for any of 1..24 h, ``--raw`` for unscaled
+values), from ``network.npz``, which it builds from ``segments_table.pkl`` when the table changes
+(~10 s in all, ~1.5 s of it computing)::
+
+    t = UpstreamTotals.load(cfg.totals_path)
+    t.mm("observed", 24); t.m3("forecast", 6); t.at(row); t.for_gids(gids)
+    for region, rows in t.viewer_rows().items():   # vi >= 0, sorted by vi
+        t.frame(rows)                              # obs_mm_24h, fc_miss_hours_6h, ... one row per reach
 
 Every hour (children 2 and 3 provide the sources)::
 
@@ -60,8 +75,11 @@ Every hour (children 2 and 3 provide the sources)::
 - rf-t26.5 (scaling): build ``ScaleFactors(family, buffer.regions, factor, version)`` and pass them
   to ``ingest``; ``buffer.apply_factors`` re-scales hours already held. Regions are the segment
   table's ``region`` column (river-guide regions, which follow the councils), ``buffer.region_of``.
-- rf-t26.6 (upstream): ``WindowTotal.m3(w.area_m2)`` gives local volumes; add them down
-  ``w.down`` in topological order; upstream mm = upstream m³ / upstream area (sum of ``w.area_m2``).
+- rf-t26.6 (upstream, done): ``compute_totals(net, {"observed": obs, "forecast": fc}, windows)``
+  sums ``WindowTotal.m3(area_m2)`` down ``net.down`` in topological order; upstream mm = upstream m³ /
+  upstream pixel area. Tile-edge outlets (rf-t26.11) end their totals and are flagged.
+- rf-t26.9 (publishing): per region, ``rows = t.viewer_rows()[region]`` lists the viewer reaches in
+  ``vi`` order, so ``t.mm(kind, x)[rows]`` (or ``t.frame(rows)``) is indexed by ``vi`` directly.
 """
 
 from .buffer import DEFAULT_WINDOWS, SLOTS, HourlyBuffer, PutResult, ScaleFactors, WindowTotal

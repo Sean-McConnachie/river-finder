@@ -100,6 +100,8 @@ uv run river-finder models train --kind gbm --recipe gbm_terrain --name v3  # Li
 uv run river-finder rain weights --grid gsmap|ecmwf|all; rain status  # rainfall: 0.1° cell -> local-catchment weights -> data/nz/rain/ (~4 min; config/rainfall.toml)
 uv run river-finder rain ecmwf [--run latest|YYYYMMDDHH] [--obs] [--fc] [--reader openmeteo-s3|ecmwf-s3]  # ECMWF IFS hourly rain:
                                           # observed proxy (leads 1-6 of 5 runs) + next 24 h -> data/nz/rain/obs|fc_ecmwf.npz + .json (~1 min, ~35 MB)
+uv run river-finder rain totals [--windows 1 2 ..] [--raw]  # upstream mm + m3 per reach and window (past/next x h) down the
+                                          # network, missing-hour/product/scale flags -> data/nz/rain/totals.npz + .json (~10 s; rainfall/upstream.py)
 ```
 
 Web app: `src/river_finder/web/` (contract and ownership in `web/README.md`; page briefs in
