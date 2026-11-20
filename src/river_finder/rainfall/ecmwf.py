@@ -66,8 +66,10 @@ Observed proxy (``ECMWF_OBS``)
 Each hour comes from the newest run whose lead for that hour lies in ``[ecmwf] obs_leads`` (default
 1-6 h: with a run every 6 h these tile the timeline, and are the shortest leads there are;
 ERA5 similarly builds its accumulations from forecast steps 1-12 h). Spin-up in the first hours
-of IFS precipitation is small. The window ends 6 h after the latest run (its last short lead):
-0-6 h before "now" with Open-Meteo, 3-10 h with the GRIB reader, given their publication delays.
+of IFS precipitation is small. The window ends 6 h after the latest run (its last short lead), or at
+"now" if that is earlier: 0-6 h before "now" with Open-Meteo, 3-10 h with the GRIB reader, given their
+publication delays (Open-Meteo can publish lead 6 before that hour has ended; the hour then waits for
+the next fetch, and the forecast holds it meanwhile).
 Raise the upper lead (e.g. 12) to fill those hours from longer leads: the buffer keeps the newest
 run for each hour, so an hour written from lead 7-12 is replaced by lead 1-6 of the next run.
 ``obs_runs`` runs are considered (the latest and the ones before it): with leads 1-6, 4 runs cover
@@ -528,13 +530,19 @@ Plan = dict[int, tuple[datetime, int]]  # valid hour -> (run, lead)
 
 
 def obs_plan(reader: Reader, latest: datetime, leads: tuple[int, int], n_runs: int,
-             hours: int = SLOTS) -> tuple[Plan, list[int], int]:
+             hours: int = SLOTS, now_hour: int | None = None) -> tuple[Plan, list[int], int]:
     """Observed proxy: for each hour of the ``hours`` ending at ``latest + leads[1]``, the newest of the
     ``n_runs`` runs up to ``latest`` whose lead for it lies in ``leads`` and is published.
+
+    ``now_hour`` caps the last hour: Open-Meteo publishes lead 6 a few minutes before that hour ends
+    (the 00z run's 06:00Z file was out by 05:50Z on 2026-11-20), and an hour that has not ended yet is
+    not observed (it is the forecast's first hour).
 
     Returns (plan, hours with no run, last hour)."""
     lo, hi = leads
     end = hour_index(latest) + hi
+    if now_hour is not None:
+        end = min(end, int(now_hour))
     runs = [latest - timedelta(hours=RUN_EVERY * k) for k in range(n_runs)]
     plan, missing = {}, []
     for h in range(end - hours + 1, end + 1):

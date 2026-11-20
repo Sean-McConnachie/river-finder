@@ -213,7 +213,7 @@ def run_ecmwf(cfg: RainConfig, run: str = "latest", obs: bool = True, fc: bool =
         latest = explicit or find_run(rd, now, lambda r: range(lo, hi + 1), ec.search_hours)
         if latest is None:
             raise SourceUnavailable(f"no {name} run with leads {lo}-{hi} h published in the last {ec.search_hours} h")
-        plan, missing, end = obs_plan(rd, latest, (lo, hi), ec.obs_runs)
+        plan, missing, end = obs_plan(rd, latest, (lo, hi), ec.obs_runs, now_hour=now_h)
         buf = open_buffer(cfg, "observed", "ecmwf", w)
         log(f"observed: ECMWF_OBS from leads {lo}-{hi} h of {ec.obs_runs} runs up to {run_label(latest)}; "
             f"window ends {_hour(end)} ({now_h - end} h before now)")

@@ -74,8 +74,8 @@ if it does not, the rain inputs predate the site's data and the file must not be
 
 Fields (``<p>`` = ``obs`` | ``fc``, ``<x>`` = each window):
 
-- ``area_km2`` (u16log, scale 2e-4, add -3; 0.05 % steps): upstream pixel area the depths are
-  averaged over. Volume: ``m3 = mm / 1000 * area_km2 * 1e6`` (``= mm * area_km2 * 1000``).
+- ``area_km2`` (u16log, scale 2e-4, add -5; 0.05 % steps from 1e-5 km²): upstream pixel area the
+  depths are averaged over. Volume: ``m3 = mm / 1000 * area_km2 * 1e6`` (``= mm * area_km2 * 1000``).
 - ``<p>_mm_<x>h`` (u16null, scale 0.1): upstream rain, mm (mean depth over the reach's whole upstream
   catchment), past ``x`` h (``obs``, ending ``observed.window_end``) or next ``x`` h (``fc``, from
   ``forecast.start``); 0.1 mm steps, to 6553.4 mm; null = no value (e.g. no forecast this hour).
@@ -114,6 +114,7 @@ from pathlib import Path
 import numpy as np
 
 from .config import RainConfig
+from .grid import GridSpec
 from .sources import PRODUCTS
 from .upstream import FLAG_DOC, FLAG_NAMES, KINDS, PREFIX, Network, UpstreamTotals, network_from_files
 
@@ -123,7 +124,7 @@ INPUTS_FORMAT = "river-finder rain inputs v1"
 VIEWER_FORMAT = "river-finder rain viewer map v1"
 MAGIC = b"RFR1"
 MM_SCALE = 0.1
-AREA_SCALE, AREA_ADD = 2e-4, -3.0
+AREA_SCALE, AREA_ADD = 2e-4, -5.0  # 10 ** (q * 2e-4 - 5): 1e-5 .. 1.2e8 km2 in 0.05 % steps
 MANIFEST = "manifest.json"
 VIEWER_MAP = "viewer.json"
 REGION_SUFFIX = ".bin.gz"
@@ -266,6 +267,9 @@ def build_inputs(cfg: RainConfig, out_dir: Path, viewer_dir: Path | None = None,
                 files.append(rain / p.name)
         with np.load(src, allow_pickle=False) as z:
             m = json.loads(str(z["meta"]))
+        if not GridSpec.from_dict(m["grid"]).same_cells(cfg.grids[fam]):
+            raise SystemExit(f"{src} is for another grid than [grids.{fam}] in the config: rebuild the weights "
+                             f"(river-finder rain weights --grid {fam}), or the job fails at every ingest")
         weights[fam] = {"built": m.get("built"), "rows_digest": m.get("rows_digest"), "grid": m.get("grid")}
         log(f"weights {fam}: {src} ({src.stat().st_size / 1e6:.1f} MB), built {m.get('built')}")
     net_path = rain / cfg.network_path.name
@@ -279,22 +283,21 @@ def build_inputs(cfg: RainConfig, out_dir: Path, viewer_dir: Path | None = None,
     else:
         log(f"warning: no {vindex}: publishing every network region under its slug, without the site's checks")
     vm = viewer_map(net, index, set(list_regions()))
-    vm["source"] = {"path": str(vindex), "mtime": _mtime(vindex)} if index is not None else None
+    vm["source"] = {"file": vindex.name, "mtime": _mtime(vindex)} if index is not None else None
     _write_json(rain / VIEWER_MAP, vm)
     files.append(rain / VIEWER_MAP)
     for r in vm["regions"]:
         log(f"  {r['id']:<15} {r['name']:<15} {r['n']:>7} viewer reaches")
     for rid, why in vm["omitted"].items():
-        log(f"  {rid:<15} omitted: {why}")
+        log(f"  {rid:<15} omitted: {why.split(':')[0]}")
     table = cfg.segments_path
     listing = [{"path": p.relative_to(out_dir).as_posix(), "bytes": p.stat().st_size, "sha256": _sha256(p)}
                for p in files]
     total = sum(f["bytes"] for f in listing)
     manifest = {
         "format": INPUTS_FORMAT, "created": _iso(datetime.now(UTC)), "code": _code_commit(),
-        "data": str(cfg.nz_data),
-        "national_build": {
-            "segments_table": {"path": str(table), "mtime": _mtime(table), "bytes": table.stat().st_size}
+        "national_build": {   # file names only: the branch is public, local paths stay local
+            "segments_table": {"file": table.name, "mtime": _mtime(table), "bytes": table.stat().st_size}
             if table.exists() else None,
             "weights": weights, "network_built": net.meta.get("built"),
             "viewer_index": vm["source"]},
@@ -322,7 +325,7 @@ def quantize_mm(mm: np.ndarray) -> np.ndarray:
 
 
 def quantize_area(km2: np.ndarray) -> np.ndarray:
-    """km² -> u16log (10 ** (q * 2e-4 - 3)), as the viewer's ``a``; areas below 0.001 km² clip to it."""
+    """km² -> u16log (``10 ** (q * 2e-4 - 5)``, the viewer's ``a`` kind); areas below 1e-5 km² clip to it."""
     x = np.log10(np.maximum(np.asarray(km2, dtype=np.float64), 10 ** AREA_ADD))
     return np.clip(np.rint((x - AREA_ADD) / AREA_SCALE), 0, 65535).astype("<u2")
 
