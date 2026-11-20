@@ -123,6 +123,14 @@ def status(cfg: RainConfig, log=print) -> None:
 
 
 # --- ECMWF (rf-t26.3) ------------------------------------------------------------------------------
+class SourceUnavailable(SystemExit):
+    """No published run covers what was asked (the source is late or down), as opposed to a real error.
+    The CLI exits with :data:`EXIT_UNAVAILABLE` for it and for downloads that fail after their retries."""
+
+
+EXIT_UNAVAILABLE = 75  # sysexits EX_TEMPFAIL: try again later (the hourly job keeps the previous files)
+
+
 def _hour(h: int) -> str:
     return hour_time(h).strftime("%Y-%m-%d %H:00Z")
 
@@ -204,7 +212,7 @@ def run_ecmwf(cfg: RainConfig, run: str = "latest", obs: bool = True, fc: bool =
     if obs:
         latest = explicit or find_run(rd, now, lambda r: range(lo, hi + 1), ec.search_hours)
         if latest is None:
-            raise SystemExit(f"no {name} run with leads {lo}-{hi} h published in the last {ec.search_hours} h")
+            raise SourceUnavailable(f"no {name} run with leads {lo}-{hi} h published in the last {ec.search_hours} h")
         plan, missing, end = obs_plan(rd, latest, (lo, hi), ec.obs_runs)
         buf = open_buffer(cfg, "observed", "ecmwf", w)
         log(f"observed: ECMWF_OBS from leads {lo}-{hi} h of {ec.obs_runs} runs up to {run_label(latest)}; "
@@ -220,8 +228,8 @@ def run_ecmwf(cfg: RainConfig, run: str = "latest", obs: bool = True, fc: bool =
             return range(first, now_h + SLOTS + 1 - hour_index(r))
         frun = explicit or find_run(rd, now, need, ec.search_hours)
         if frun is None:
-            raise SystemExit(f"no {name} run covering {_hour(now_h + 1)} .. {_hour(now_h + SLOTS)} "
-                             f"published in the last {ec.search_hours} h")
+            raise SourceUnavailable(f"no {name} run covering {_hour(now_h + 1)} .. {_hour(now_h + SLOTS)} "
+                                    f"published in the last {ec.search_hours} h")
         plan, missing = fc_plan(rd, frun, now_h)
         buf = open_buffer(cfg, "forecast", "ecmwf", w)
         held = {int(r) for r in buf.run_hour[buf.hour >= 0]}

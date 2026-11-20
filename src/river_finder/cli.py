@@ -216,14 +216,33 @@ def _rain(args):
         pipeline.run_weights(cfg, fams, log=log)
     elif args.step == "ecmwf":
         from .rainfall.ecmwf import parse_hour
+        from .rainfall.fetch import FetchError, Http, NotFound
 
         both = not (args.obs or args.fc)
         now = parse_hour(args.now) if args.now else None
-        pipeline.run_ecmwf(cfg, run=args.run, obs=args.obs or both, fc=args.fc or both, reader=args.reader, now=now,
-                           cache=not args.no_cache, log=log)
+        http = Http(retries=args.retries, log=log) if args.retries is not None else None
+        try:
+            pipeline.run_ecmwf(cfg, run=args.run, obs=args.obs or both, fc=args.fc or both, reader=args.reader,
+                               now=now, cache=not args.no_cache, http=http, log=log)
+        except (pipeline.SourceUnavailable, FetchError, NotFound) as e:
+            # late or unreachable data, not a bug: a distinct exit code lets the hourly job keep the last files
+            log(f"ECMWF unavailable: {e.code if isinstance(e, SystemExit) else e}")
+            raise SystemExit(pipeline.EXIT_UNAVAILABLE) from None
     elif args.step == "totals":
         pipeline.run_totals(cfg, windows=args.windows, scaled=not args.raw, rebuild_network=args.rebuild_network,
                             log=log)
+    elif args.step == "inputs":
+        from .rainfall.live import build_inputs
+
+        if args.out is None:
+            raise SystemExit("rain inputs needs --out DIR")
+        build_inputs(cfg, args.out, viewer_dir=args.viewer, log=log)
+    elif args.step == "publish":
+        from .rainfall.live import publish
+
+        if args.out is None:
+            raise SystemExit("rain publish needs --out DIR")
+        publish(cfg, args.out, log=log)
     else:
         pipeline.status(cfg, log=print)
 
@@ -299,13 +318,16 @@ def main(argv: list[str] | None = None) -> None:
     pl.add_argument("--models", nargs="*", help="cv: only these model ids (default: the whole zoo)")
     pl.add_argument("--repeats", type=int, default=5, help="cv: repeats of the 5-fold split")
     pl.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz")
-    pr = sub.add_parser("rain", help="rainfall per catchment: weights | ecmwf | totals | status "
-                                     "(see src/river_finder/rainfall/)")
-    pr.add_argument("step", choices=["weights", "ecmwf", "totals", "status"],
+    pr = sub.add_parser("rain", help="rainfall per catchment: weights | ecmwf | totals | inputs | publish | status "
+                                     "(see src/river_finder/rainfall/, docs/live-rain.md)")
+    pr.add_argument("step", choices=["weights", "ecmwf", "totals", "inputs", "publish", "status"],
                     help="weights: grid-cell -> local-catchment matrices into <data>/rain/; ecmwf: ECMWF IFS observed "
-                         "proxy and next-24-h forecast into <data>/rain/obs_ecmwf.npz and fc_ecmwf.npz; totals: "
-                         "upstream mm and m3 per reach and window from the current buffers into <data>/rain/totals.npz "
-                         "(+ .json); status: config, weight files, buffers and totals")
+                         "proxy and next-24-h forecast into <data>/rain/obs_ecmwf.npz and fc_ecmwf.npz (exit 75 when "
+                         "no run is published or the bucket does not answer); totals: upstream mm and m3 per reach and "
+                         "window from the current buffers into <data>/rain/totals.npz (+ .json); inputs: the hourly "
+                         "job's fixed inputs into --out (weights, network, viewer map, manifest); publish: per-region "
+                         "rain files + index.json for the site into --out; status: config, weight files, buffers and "
+                         "totals")
     pr.add_argument("--windows", type=int, nargs="+", default=None,
                     help="totals: windows in hours, any of 1..24 (default: windows in config/rainfall.toml)")
     pr.add_argument("--raw", action="store_true", help="totals: sum the raw values instead of the gauge-scaled ones")
@@ -319,6 +341,14 @@ def main(argv: list[str] | None = None) -> None:
                     help="ecmwf: where hourly IFS rain comes from (default: ecmwf.reader in config/rainfall.toml)")
     pr.add_argument("--now", default=None, help="ecmwf: treat this hour (YYYYMMDDHH, UTC) as now (default: the clock)")
     pr.add_argument("--no-cache", action="store_true", help="ecmwf: ignore and do not write the decoded-field cache")
+    pr.add_argument("--retries", type=int, default=None,
+                    help="ecmwf: retries per request on HTTP 429/5xx and network errors, backoff doubling from ~1 s "
+                         "(default 5)")
+    pr.add_argument("-o", "--out", type=Path, default=None,
+                    help="inputs: directory for the job's inputs (the rain-inputs branch); publish: directory for "
+                         "index.json and <region>.bin.gz (the rain branch)")
+    pr.add_argument("--viewer", type=Path, default=None,
+                    help="inputs: viewer data with regions_index.json (default: <data>/../viewer_nz)")
     pr.add_argument("--data", type=Path, default=None,
                     help="national data directory with tiles/ and segments_table.pkl (default: paths.nz_data in "
                          "config/rainfall.toml, i.e. data/nz)")
