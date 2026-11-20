@@ -1,0 +1,92 @@
+name: Live rain
+# Every hour: ECMWF IFS rain -> upstream totals per reach -> per-region files for the site, force-pushed
+# as one orphan commit to the `rain` branch (latest copy only), which the site reads from
+# raw.githubusercontent.com. Fixed inputs (weights, network, viewer map) come from the `rain-inputs`
+# branch. How it works, refreshing the inputs and pausing: docs/live-rain.md.
+#
+# Quiet by design (a failed run emails the owner): S3 throttling is retried with backoff; when no ECMWF
+# data can be had this hour (exit 75) the published files stay and the run passes with a warning,
+# unless they are older than STALE_HOURS. Anything else fails.
+on:
+  schedule:
+    - cron: "23 * * * *"     # hourly at :23 (GitHub is busiest at :00; scheduled runs can start late)
+  workflow_dispatch:
+
+permissions:
+  contents: write            # push the rain branch
+
+concurrency:
+  group: live-rain
+  cancel-in-progress: false  # never two at once: a run that starts late waits for the one before
+
+jobs:
+  rain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      STALE_HOURS: 12        # with no new ECMWF data, fail (and email) once the published files are this old
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Check out the inputs (rain-inputs branch)
+        uses: actions/checkout@v4
+        with:
+          ref: rain-inputs
+          path: rain-data
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install (runtime dependencies only)
+        run: |
+          uv sync --frozen --no-dev
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch ECMWF (observed window and next 24 h)
+        id: ecmwf
+        run: |
+          set +e
+          timeout 12m river-finder rain ecmwf --data rain-data --no-cache --retries 7
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo "fresh=true" >> "$GITHUB_OUTPUT"
+          elif [ "$rc" -eq 75 ] || [ "$rc" -eq 124 ]; then
+            echo "::warning title=No ECMWF data this hour::rain ecmwf exited $rc (no run published, S3 not answering or too slow); the published rain files stay"
+            echo "fresh=false" >> "$GITHUB_OUTPUT"
+          else
+            exit "$rc"
+          fi
+
+      - name: Upstream totals
+        if: steps.ecmwf.outputs.fresh == 'true'
+        run: river-finder rain totals --data rain-data
+
+      - name: Region files
+        if: steps.ecmwf.outputs.fresh == 'true'
+        run: river-finder rain publish --data rain-data --out "$RUNNER_TEMP/rain-out"
+
+      - name: Push the rain branch
+        if: steps.ecmwf.outputs.fresh == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash .github/scripts/rain-branch.sh push "$RUNNER_TEMP/rain-out"
+
+      - name: Keep the previous files unless they are stale
+        if: steps.ecmwf.outputs.fresh == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          age=$(bash .github/scripts/rain-branch.sh age)
+          echo "the published rain files are $age h old (-1: no rain branch yet)"
+          if [ "$age" -ge "$STALE_HOURS" ]; then
+            echo "::error title=Rain files stale::no new ECMWF data for $age h"
+            exit 1
+          fi
