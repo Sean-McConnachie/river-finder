@@ -56,3 +56,68 @@ cache = "cache"       # under <rain>: decoded NZ fields per run (re-runs downloa
 keep_days = 3         # cached runs older than this are deleted
 ecmwf_urls = ["https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/", "https://storage.googleapis.com/ecmwf-open-data/"]
 openmeteo_url = "https://openmeteo.s3.amazonaws.com/"
+
+# Rain gauges (rf-t26.4; src/river_finder/rainfall/gauges.py, docs/rain-gauges.md): hourly totals from the regional
+# councils' Hilltop servers, cached under <rain>/<dir>, for the gauge scale factors of rf-t26.5.
+# None of these servers could be reached from the development container (the proxy refused every council host),
+# so the .hts files and time zones below are unverified: run `river-finder rain gauges --discover` where the
+# servers answer and fix hts / measurements / timezone from what it prints.
+[gauges]
+dir = "gauges"            # under <rain>: sites.json, series/<council>/<site>.npz, gauges_hourly.npz (+ .json)
+days = 35                 # each run asks for the last 35 x 24 whole hours (rf-t26.5 compares 30 days); cached
+                          # hours are not asked again, except the newest refetch_hours
+keep_days = 60            # cached hours older than this are dropped
+refetch_hours = 48        # always fetched again: telemetry arrives late and councils edit recent records
+chunk_days = 10           # longest span of one GetData request
+request_gap_s = 1.0       # at least this long between two requests to one server (councils run in parallel)
+timeout_s = 60
+retries = 4               # per request on HTTP 429/5xx and network errors, backoff doubling from ~1 s
+max_mm_per_hour = 200.0   # hourly totals above this (or below 0) are marked suspect
+
+# Per council: base_url = server root(s), tried in order; hts = candidate data files, the first whose
+# MeasurementList has a rainfall measurement is used; measurements = names to look for, in order
+# (case-insensitive, "Rainfall" also matches "Rainfall [Rainfall]"); timezone of the times the server sends:
+# NZST (UTC+12 all year, as NEMS requires of recorders), Pacific/Auckland (NZ wall clock) or UTC;
+# method = raw (records summed here into hours ending) | total-end | total-start (the server's hourly totals);
+# region = the scaling region for a gauge that cannot be placed (the river-guide region names of the network).
+[gauges.councils.wcrc]
+name = "West Coast Regional Council"
+enabled = true
+base_url = ["https://hilltop.wcrc.govt.nz/", "http://hilltop.wcrc.govt.nz/"]
+hts = ["data.hts"]       # Hilltop Server's usual file name; unverified for WCRC
+measurements = ["Rainfall", "Rainfall Total", "Rain"]
+timezone = "NZST"
+method = "raw"
+quality = true
+region = "West Coast"
+licence = "not stated for the Hilltop service; WCRC calls its web rainfall data raw and unverified"
+attribution = "Rainfall data: West Coast Regional Council"
+source = "host: MfE 2023 stocktake of council water-quality data (http://hilltop.wcrc.govt.nz/wq.hts); flood-watch.wcrc.govt.nz reads a Hilltop server"
+
+[gauges.councils.ecan]
+name = "Environment Canterbury"
+enabled = true
+base_url = ["https://wateruse.ecan.govt.nz/", "http://wateruse.ecan.govt.nz/"]
+hts = ["data.hts"]       # unverified: ECan names its files per series (RiverRecorderQcEcanDaily.hts)
+measurements = ["Rainfall", "Rainfall Total", "Rain"]
+timezone = "NZST"         # ECan's rainfall pages: "times are in NZ standard time"
+method = "raw"
+quality = true
+region = "Canterbury"
+licence = "ECan open data is CC BY 4.0; not stated for the Hilltop service"
+attribution = "Rainfall data: Environment Canterbury"
+source = "host: a public Hilltop Server at http://wateruse.ecan.govt.nz/RiverRecorderQcEcanDaily.hts; ECan publishes rainfall per site on data.ecan.govt.nz (Open Data Portal, csv/json/xml, not Hilltop)"
+
+[gauges.councils.tdc]
+name = "Tasman District Council"
+enabled = true
+base_url = ["https://envdata.tasman.govt.nz/", "http://envdata.tasman.govt.nz/"]
+hts = ["data.hts"]       # unverified for TDC
+measurements = ["Rainfall", "Rainfall Total", "Rain"]
+timezone = "NZST"
+method = "raw"
+quality = true
+region = "Tasman"
+licence = "not stated for the Hilltop service: check TDC's terms before publishing"
+attribution = "Rainfall data: Tasman District Council"
+source = "host: MfE 2023 stocktake of council water-quality data (envdata.tasman.govt.nz/WaterQuality.hts)"

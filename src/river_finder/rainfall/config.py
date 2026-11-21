@@ -1,4 +1,4 @@
-"""``config/rainfall.toml``: windows, which source feeds which metric, data paths, grids and ECMWF settings.
+"""``config/rainfall.toml``: windows, which source feeds which metric, data paths, grids, ECMWF and gauge settings.
 
 Validated on load; any error names the key. Paths are relative to the repository root
 (``paths.nz_data``) or to ``nz_data`` (``tiles``, ``segments``, ``rain``); the CLI's ``--data``
@@ -18,10 +18,20 @@ from .grid import NATIVE, GridSpec
 from .sources import family_products
 
 CONFIG_PATH = REPO_ROOT / "config" / "rainfall.toml"
-_TOP = {"windows", "paths", "observed", "forecast", "grids", "ecmwf"}
+_TOP = {"windows", "paths", "observed", "forecast", "grids", "ecmwf", "gauges"}
 _PATHS = {"nz_data", "tiles", "segments", "rain"}
 _GRID = {"lon0", "lat0", "dlon", "dlat", "nx", "ny"}
 _ECMWF = {"reader", "obs_leads", "obs_runs", "search_hours", "cache", "keep_days", "ecmwf_urls", "openmeteo_url"}
+_GAUGES = {"dir", "days", "keep_days", "refetch_hours", "chunk_days", "request_gap_s", "timeout_s", "retries",
+           "max_mm_per_hour", "councils"}
+_COUNCIL = {"name", "enabled", "base_url", "hts", "measurements", "timezone", "method", "quality", "region",
+            "licence", "attribution", "source"}
+# Time zone of the times a server sends and expects: NZST = UTC+12 all year (the NEMS rule for recorders);
+# Pacific/Auckland = NZ wall clock (NZDT, UTC+13, in summer); UTC. Times that carry an offset are read as given.
+TIMEZONES = ("NZST", "Pacific/Auckland", "UTC")
+# raw: every record, summed here into hours ending (handles <Gap/> and partial hours);
+# total-end / total-start: the server's own Method=Total&Interval=1 hour, stamped at the end / start of the hour.
+METHODS = ("raw", "total-end", "total-start")
 
 
 @dataclass(frozen=True)
@@ -39,6 +49,47 @@ class EcmwfConfig:
 
 
 @dataclass(frozen=True)
+class CouncilConfig:
+    """``[gauges.councils.<id>]``: one council's Hilltop server (see :mod:`.hilltop`, ``docs/rain-gauges.md``)."""
+
+    id: str
+    name: str
+    base_urls: tuple[str, ...]               # server roots, tried in order (e.g. https, then http)
+    hts: tuple[str, ...]                     # candidate .hts files, tried in order: the first with rain is used
+    measurements: tuple[str, ...] = ("Rainfall",)  # measurement names to look for, in order (case-insensitive)
+    enabled: bool = True
+    timezone: str = "NZST"
+    method: str = "raw"
+    quality: bool = True                     # ask for quality codes (ShowQuality and the StdQualSeries)
+    region: str = ""                         # scaling region when a gauge cannot be placed (network region name)
+    licence: str = ""
+    attribution: str = ""
+    source: str = ""                         # where the endpoint is documented
+
+
+@dataclass(frozen=True)
+class GaugesConfig:
+    """``[gauges]``: rain-gauge ingestion (rf-t26.4, :mod:`.gauges`)."""
+
+    dir: str = "gauges"          # under <rain>
+    days: int = 35               # hours fetched: the last ``days`` x 24 whole hours
+    keep_days: int = 60          # cached hours older than this are dropped
+    refetch_hours: int = 48      # the newest hours are fetched again on every run (late telemetry, edits)
+    chunk_days: int = 10         # longest span of one GetData request
+    request_gap_s: float = 1.0   # pause between two requests to one server
+    timeout_s: float = 60.0
+    retries: int = 4             # per request, on HTTP 429/5xx and network errors (backoff doubling from ~1 s)
+    max_mm_per_hour: float = 200.0  # hourly totals above this are suspect
+    councils: tuple[CouncilConfig, ...] = ()
+
+    def council(self, cid: str) -> CouncilConfig:
+        for c in self.councils:
+            if c.id == cid:
+                return c
+        raise KeyError(f"no [gauges.councils.{cid}] (have {', '.join(c.id for c in self.councils)})")
+
+
+@dataclass(frozen=True)
 class RainConfig:
     windows: tuple[int, ...]
     observed_source: str
@@ -50,6 +101,7 @@ class RainConfig:
     segments: str = "segments_table.pkl"
     rain: str = "rain"
     ecmwf: EcmwfConfig = EcmwfConfig()
+    gauges: GaugesConfig = GaugesConfig()
 
     @property
     def tiles_dir(self) -> Path:
@@ -87,6 +139,11 @@ class RainConfig:
     def cache_dir(self) -> Path | None:
         """Decoded-field cache of the ECMWF readers (None when ``ecmwf.cache`` is empty)."""
         return self.rain_dir / self.ecmwf.cache if self.ecmwf.cache else None
+
+    @property
+    def gauges_dir(self) -> Path:
+        """Rain-gauge cache and outputs (rf-t26.4): ``sites.json``, ``series/``, ``gauges_hourly.npz`` (+ ``.json``)."""
+        return self.rain_dir / self.gauges.dir
 
     def with_data(self, nz_data: Path | None) -> RainConfig:
         return self if nz_data is None else replace(self, nz_data=Path(nz_data))
@@ -156,6 +213,80 @@ def _ecmwf(d) -> EcmwfConfig:
                        _int(e.get("keep_days", base.keep_days), "ecmwf.keep_days", 0, 30), tuple(urls), om)
 
 
+def _num(v, where: str, lo: float, hi: float) -> float:
+    if isinstance(v, bool) or not isinstance(v, int | float) or not lo <= v <= hi:
+        _err(f"{where} = {v!r}: expected a number in {lo}..{hi}")
+    return float(v)
+
+
+def _strs(v, where: str, suffix: str = "") -> tuple[str, ...]:
+    if not isinstance(v, list) or not v or not all(isinstance(x, str) and x.strip() for x in v):
+        _err(f"{where} must be a non-empty list of strings")
+    if suffix and not all(x.lower().endswith(suffix) for x in v):
+        _err(f"{where}: every entry must end with {suffix}")
+    return tuple(x.strip() for x in v)
+
+
+def _council(cid: str, d) -> CouncilConfig:
+    where = f"gauges.councils.{cid}"
+    c = _keys(d, _COUNCIL, where)
+    for k in ("name", "base_url", "hts"):
+        if k not in c:
+            _err(f"[{where}] lacks {k}")
+    urls = c["base_url"] if isinstance(c["base_url"], list) else [c["base_url"]]
+    for url in urls:
+        if not isinstance(url, str) or not url.startswith(("http://", "https://")) or "?" in url or ".hts" in url:
+            _err(f"{where}.base_url = {url!r}: expected http(s) server roots without a query (the .hts file goes "
+                 "in hts)")
+    if not urls:
+        _err(f"{where}.base_url must not be empty")
+    tz = c.get("timezone", "NZST")
+    if tz not in TIMEZONES:
+        _err(f"{where}.timezone = {tz!r}: expected one of {', '.join(TIMEZONES)}")
+    method = c.get("method", "raw")
+    if method not in METHODS:
+        _err(f"{where}.method = {method!r}: expected one of {', '.join(METHODS)}")
+    for k in ("enabled", "quality"):
+        if not isinstance(c.get(k, True), bool):
+            _err(f"{where}.{k} must be true or false")
+    for k in ("name", "region", "licence", "attribution", "source"):
+        if not isinstance(c.get(k, ""), str):
+            _err(f"{where}.{k} must be a string")
+    return CouncilConfig(cid, c["name"], tuple(u if u.endswith("/") else u + "/" for u in urls),
+                         _strs(c["hts"], f"{where}.hts", ".hts"),
+                         _strs(c.get("measurements", ["Rainfall"]), f"{where}.measurements"), c.get("enabled", True),
+                         tz, method, c.get("quality", True), c.get("region", ""), c.get("licence", ""),
+                         c.get("attribution", ""), c.get("source", ""))
+
+
+def _gauges(d) -> GaugesConfig:
+    g = _keys(d, _GAUGES, "gauges")
+    base = GaugesConfig()
+    gdir = g.get("dir", base.dir)
+    if not isinstance(gdir, str) or not gdir:
+        _err("gauges.dir must be a non-empty string")
+    councils = []
+    table = g.get("councils", {})
+    if not isinstance(table, dict):
+        _err("[gauges.councils] must be a table of [gauges.councils.<id>] tables")
+    for cid, c in table.items():
+        if not isinstance(cid, str) or not cid.replace("_", "").isalnum() or cid.lower() != cid:
+            _err(f"[gauges.councils.{cid}]: council ids are lower-case letters, digits and _")
+        councils.append(_council(cid, c))
+    keep = _int(g.get("keep_days", base.keep_days), "gauges.keep_days", 1, 366)
+    days = _int(g.get("days", base.days), "gauges.days", 1, 366)
+    if days > keep:
+        _err(f"gauges.days ({days}) must not exceed gauges.keep_days ({keep})")
+    return GaugesConfig(gdir, days, keep,
+                        _int(g.get("refetch_hours", base.refetch_hours), "gauges.refetch_hours", 0, 24 * 30),
+                        _int(g.get("chunk_days", base.chunk_days), "gauges.chunk_days", 1, 366),
+                        _num(g.get("request_gap_s", base.request_gap_s), "gauges.request_gap_s", 0, 60),
+                        _num(g.get("timeout_s", base.timeout_s), "gauges.timeout_s", 1, 600),
+                        _int(g.get("retries", base.retries), "gauges.retries", 0, 10),
+                        _num(g.get("max_mm_per_hour", base.max_mm_per_hour), "gauges.max_mm_per_hour", 1, 10_000),
+                        tuple(councils))
+
+
 def parse_config(d: dict, root: Path = REPO_ROOT) -> RainConfig:
     _keys(d, _TOP, "top level")
     windows = _windows(d.get("windows", [1, 3, 6, 12, 24]), "windows")
@@ -193,7 +324,7 @@ def parse_config(d: dict, root: Path = REPO_ROOT) -> RainConfig:
     nz = Path(paths.get("nz_data", "data/nz"))
     return RainConfig(windows, source, compare, forecast, grids, nz if nz.is_absolute() else root / nz,
                       paths.get("tiles", "tiles"), paths.get("segments", "segments_table.pkl"),
-                      paths.get("rain", "rain"), _ecmwf(d.get("ecmwf", {})))
+                      paths.get("rain", "rain"), _ecmwf(d.get("ecmwf", {})), _gauges(d.get("gauges", {})))
 
 
 def load_config(path: Path | None = None, nz_data: Path | None = None) -> RainConfig:
