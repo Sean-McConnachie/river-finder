@@ -168,9 +168,27 @@ def choose_measurement(names: list[str], hints: tuple[str, ...] | list[str]) -> 
     return None
 
 
+def matching_measurements(names: list[str], hints: tuple[str, ...] | list[str]) -> list[str]:
+    """Every name that a hint names (exactly, any case, or as ``<hint> [<source>]``), in hint order: the
+    measurements whose site lists make up a council's gauges (WCRC lists live gauges under ``Rainfall (raw)``
+    and only part of them under ``Rainfall``)."""
+    out: dict[str, None] = {}
+    for h in hints:
+        hl = h.strip().lower()
+        for n in names:
+            if n.lower() == hl or _bare(n) == hl:
+                out.setdefault(n, None)
+    return list(out)
+
+
 def rain_like(names: list[str]) -> list[str]:
     """Names that look like rainfall, for discovery reports when no hint matched."""
     return [n for n in names if "rain" in n.lower()]
+
+
+def is_raw_name(name: str) -> bool:
+    """A data source or measurement named as raw telemetry (``Rainfall (raw)``, ``Raw Rainfall``): not verified."""
+    return re.search(r"\braw\b", name, re.IGNORECASE) is not None
 
 
 @dataclass
@@ -223,6 +241,47 @@ def find_source(sources: list[DataSourceInfo], measurement: str) -> DataSourceIn
             or _bare(s.measurement) == _bare(measurement)]
     hits.sort(key=lambda s: s.tstype not in ("", "StdSeries"))
     return hits[0] if hits else None
+
+
+def _hint_index(s: DataSourceInfo, hints) -> int | None:
+    for k, h in enumerate(hints):
+        hl = h.strip().lower()
+        if hl in (s.measurement.lower(), s.request_as.lower(), _bare(s.request_as), _bare(s.measurement)):
+            return k
+    return None
+
+
+def rain_sources(sources: list[DataSourceInfo], hints) -> list[tuple[int, DataSourceInfo]]:
+    """The standard series of a site whose measurement a hint names, with the hint's index."""
+    out = []
+    for s in sources:
+        if s.tstype not in ("", "StdSeries"):
+            continue
+        k = _hint_index(s, hints)
+        if k is not None:
+            out.append((k, s))
+    return out
+
+
+def choose_source(sources: list[DataSourceInfo], hints, tz: str, now_s: float,
+                  tie_s: float = 6 * 3600) -> DataSourceInfo | None:
+    """The rain series of a site whose record reaches nearest to now (``To``, read in the server's zone ``tz``);
+    series within ``tie_s`` of the nearest go to the earlier hint (verified before raw in the config's order).
+
+    WCRC keeps two rain series per site: ``Rainfall`` (verified, ends at the last audit, e.g. 2023-10-16) and
+    ``Rainfall (raw)`` (live telemetry); TDC keeps ``Rainfall`` live and ``Raw Rainfall`` to the last visit."""
+    cands = []
+    for k, s in rain_sources(sources, hints):
+        if s.last is None:
+            d = math.inf
+        else:
+            d = abs(float(to_utc([s.last], tz)[0][0]) - now_s)
+        cands.append((d, k, s))
+    if not cands:
+        return None
+    best = min(d for d, _, _ in cands)
+    near = [c for c in cands if c[0] <= best + tie_s]
+    return min(near, key=lambda c: (c[1], c[0]))[2]
 
 
 @dataclass

@@ -117,7 +117,9 @@ from .hilltop import (
     Series,
     TimeStats,
     choose_measurement,
-    find_source,
+    choose_source,
+    is_raw_name,
+    matching_measurements,
     rain_like,
     to_utc,
 )
@@ -396,8 +398,14 @@ class Gauge:
     region_method: str = ""      # polygon | cell | council
     units: str = ""
     interpolation: str = ""
-    record_first: str | None = None   # first and last record time, UTC ISO (from MeasurementList)
+    record_first: str | None = None   # first and last record time, UTC ISO (MeasurementList; ECan: the last sample)
     record_last: str | None = None
+    datasource: str = ""         # Hilltop: the data source chosen for the site (the one reaching nearest to now)
+    raw: bool = False            # that source is raw telemetry ("Rainfall (raw)"): its hours are never "good"
+    site_no: str = ""            # ECan portal: the site number requests use
+    owner: str = ""              # ECan portal: who runs the gauge (ECan, CCC, ESNZ)
+    checked: str | None = None   # UTC ISO: when the record times were last read from the server
+    active: bool = True          # record reaches within inactive_days of the run (or is unknown)
 
     @property
     def key(self) -> str:
@@ -663,20 +671,49 @@ class CouncilRun:
     measurement: str = ""
     gauges: list[Gauge] = field(default_factory=list)
     fetched: int = 0                  # gauges whose series this run updated
+    skipped: int = 0                  # inactive gauges this run sent no request for (record ended long ago)
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     times: TimeStats = field(default_factory=TimeStats)
     http: dict = field(default_factory=dict)
     seconds: float = 0.0
+    extra: dict = field(default_factory=dict)  # per kind (ECan portal: gauge owners)
+
+
+def _parse_iso(s: str | None) -> float | None:
+    if not s:
+        return None
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def known_inactive(o: Gauge | None, gc: GaugesConfig, now_s: float) -> bool:
+    """A gauge from the last site list whose record ended more than ``inactive_days`` ago and that was checked
+    less than ``recheck_days`` ago: no request this run."""
+    if o is None:
+        return False
+    end, checked = _parse_iso(o.record_last), _parse_iso(o.checked)
+    return (end is not None and end < now_s - gc.inactive_days * 86400 and checked is not None
+            and checked >= now_s - gc.recheck_days * 86400)
+
+
+def _carry(g: Gauge, o: Gauge) -> None:
+    """Record facts of ``o`` (the last site list) on ``g`` (this run's), for a gauge this run did not check."""
+    for k in ("measurement", "units", "interpolation", "record_first", "record_last", "datasource", "raw", "checked",
+              "active"):
+        setattr(g, k, getattr(o, k))
 
 
 def _client(c: CouncilConfig, base: str, hts: str, http: Http, pacer: Pacer) -> HilltopClient:
     return HilltopClient(base, hts, c.timezone, http, pacer)
 
 
-def find_file(c: CouncilConfig, http: Http, pacer: Pacer, log=print) -> tuple[HilltopClient, str, list[str]]:
-    """The first server root x .hts file that answers with a rainfall measurement: (client, measurement,
-    what was tried). Raises FetchError (nothing answered) or HilltopError (answers without rain)."""
+def find_file(c: CouncilConfig, http: Http, pacer: Pacer, log=print) -> tuple[HilltopClient, list[str], list[str]]:
+    """The first server root x .hts file that answers with a rainfall measurement: (client, every measurement
+    the hints name, in hint order; what was tried). Raises FetchError (nothing answered) or HilltopError (answers
+    without rain)."""
     tried, answered = [], False
     for base in c.base_urls:
         for hts in c.hts:
@@ -694,9 +731,9 @@ def find_file(c: CouncilConfig, http: Http, pacer: Pacer, log=print) -> tuple[Hi
                 tried.append(f"{cl.url('MeasurementList')}: Hilltop error {e}")
                 continue
             answered = True
-            m = choose_measurement(names, c.measurements)
-            if m:
-                return cl, m, tried
+            ms = matching_measurements(names, c.measurements)
+            if ms:
+                return cl, ms, tried
             tried.append(f"{cl.url('MeasurementList')}: {len(names)} measurements, none of {list(c.measurements)}"
                          + (f" (rain-like: {rain_like(names)[:8]})" if rain_like(names) else ""))
     msg = "; ".join(tried)
@@ -718,23 +755,34 @@ def _record_extent(src, tz: str) -> tuple[float | None, float | None, TimeStats]
 
 def fetch_gauge(cl: HilltopClient, c: CouncilConfig, gc: GaugesConfig, g: Gauge, gdir: Path, first: int,
                 last: int, refetch_from: int, run: CouncilRun, now_s: float, log=print) -> bool:
-    """Fetch what ``g``'s cache lacks in ``first .. last`` (plus the newest hours) and merge it; True if updated."""
+    """Fetch what ``g``'s cache lacks in ``first .. last`` (plus the newest hours) and merge it; True if updated.
+
+    The site's rain series is the one whose record reaches nearest to now (:func:`.hilltop.choose_source`); a
+    site whose record ended more than ``inactive_days`` ago is marked inactive and costs no data request."""
     try:
         sources = cl.site_measurements(g.name)
     except (FetchError, NotFound, HilltopError) as e:
         run.errors.append(f"{g.name}: MeasurementList: {e}")
         return False
-    src = find_source(sources, run.measurement)
-    g.measurement = src.request_name if src else run.measurement
-    if src:
-        g.units, g.interpolation = src.units, src.interpolation
+    g.checked = _iso(now_s)
+    src = choose_source(sources, c.measurements, c.timezone, now_s)
+    if src is None:
+        g.active = False
+        run.warnings.append(f"{g.name}: no standard series named any of {list(c.measurements)}")
+        return False
+    g.measurement, g.datasource = src.request_name, src.datasource
+    g.raw = is_raw_name(src.datasource) or is_raw_name(src.measurement)
+    g.units, g.interpolation = src.units, src.interpolation
     rec0, rec1, st = _record_extent(src, c.timezone)
     run.times.add(st)
     g.record_first, g.record_last = _iso(rec0), _iso(rec1)
+    g.active = rec1 is None or rec1 >= now_s - gc.inactive_days * 86400
+    if not g.active:
+        return False
     if rec1 is not None and rec1 > now_s + 600:
         run.warnings.append(f"{g.name}: last record {_iso(rec1)} is {(rec1 - now_s) / 60:.0f} min in the future "
                             f"(read as {c.timezone}): is the server on another time zone?")
-    if src and src.units and src.units.lower() not in ("mm", "millimetres", "millimeters"):
+    if src.units and src.units.lower() not in ("mm", "millimetres", "millimeters"):
         run.warnings.append(f"{g.name}: units {src.units!r}, expected mm")
     path = series_path(gdir, g)
     cached, meta = load_series(path)
@@ -782,6 +830,8 @@ def fetch_gauge(cl: HilltopClient, c: CouncilConfig, gc: GaugesConfig, g: Gauge,
         hb = hours_from_records(t_s[order], s.values[order], a, b, gap_before=s.gap_before[order],
                                 gap_at_end=s.gap_at_end, rec_start=rec0, rec_end=rec1, rec_qc=s.quality[order],
                                 qual=qual, method=c.method, max_mm=gc.max_mm_per_hour)
+        if g.raw:  # raw telemetry is unverified whatever code it carries
+            hb.state[hb.state == GOOD] = RAW
         block = merge(block, hb)
         fetches.append({"at": _iso(now_s), "first": _hour(a), "last": _hour(b), "records": len(s)})
         done += 1
@@ -791,59 +841,91 @@ def fetch_gauge(cl: HilltopClient, c: CouncilConfig, gc: GaugesConfig, g: Gauge,
     if block.first < keep_from:
         block = block.slice(keep_from, block.last)
     save_series(path, block, {"id": g.id, "council": g.council, "site": g.name, "measurement": g.measurement,
-                              "timezone": c.timezone, "method": c.method, "units": g.units,
+                              "datasource": g.datasource, "raw": g.raw, "timezone": c.timezone, "method": c.method,
+                              "units": g.units,
                               "record_first": g.record_first, "record_last": g.record_last,
                               "fetches": fetches[-24:]})
     return True
 
 
 def run_council(cfg: RainConfig, c: CouncilConfig, first: int, last: int, refetch_from: int, now_s: float,
-                sites_only: bool = False, http: Http | None = None, log=print) -> CouncilRun:
+                sites_only: bool = False, http: Http | None = None, log=print,
+                old: dict[str, Gauge] | None = None) -> CouncilRun:
+    """One council: site list(s), then each active gauge's new hours. ``old``: the gauges of the last
+    ``sites.json`` (id -> Gauge), whose record times let known-inactive sites go without a request."""
     gc = cfg.gauges
     t0 = time.monotonic()
     http = http or Http(timeout=gc.timeout_s, retries=gc.retries, log=log)
     pacer = Pacer(gc.request_gap_s)
+    old = old or {}
+    if c.kind == "ecan-portal":
+        from .ecanportal import run_portal
+
+        run = run_portal(cfg, c, first, last, refetch_from, now_s, sites_only, http, pacer, log, old)
+        _finish(run, http, t0, log)
+        return run
     run = CouncilRun(c.id)
     try:
-        cl, m, tried = find_file(c, http, pacer, log)
+        cl, ms, tried = find_file(c, http, pacer, log)
     except (FetchError, HilltopError) as e:
         run.status = f"failed: {e}"
         run.http, run.seconds = http.stats.to_dict(), round(time.monotonic() - t0, 1)
         log(f"{c.id}: no server answered with a rainfall measurement: {e}")
         return run
-    run.base_url, run.hts, run.measurement = cl.base_url, cl.hts, m
+    run.base_url, run.hts, run.measurement = cl.base_url, cl.hts, ", ".join(ms)
     for t in tried:
         run.warnings.append(f"tried {t}")
-    try:
-        sites = cl.sites(m)
-    except (FetchError, NotFound, HilltopError) as e:
-        run.status = f"failed: SiteList: {e}"
-        run.http, run.seconds = http.stats.to_dict(), round(time.monotonic() - t0, 1)
-        log(f"{c.id}: SiteList failed: {e}")
-        return run
-    names = {}
-    for s in sites:
-        names.setdefault(s.name, s)  # a site listed twice keeps its first entry
-    run.gauges = [Gauge(f"{c.id}:{s.name}", c.id, s.name, m, s.lon, s.lat) for s in names.values()]
-    unplaced = sum(1 for s in names.values() if not s.located)
-    log(f"{c.id}: {cl.url('SiteList', Measurement=m)} -> {len(run.gauges)} sites with {m!r}"
-        + (f" ({unplaced} without a location)" if unplaced else ""))
+    names: dict = {}
+    for m in ms:  # the union of the site lists: WCRC lists 68 sites under "Rainfall (raw)", 54 under "Rainfall"
+        try:
+            sites = cl.sites(m)
+        except (FetchError, NotFound, HilltopError) as e:
+            if m == ms[0]:
+                run.status = f"failed: SiteList: {e}"
+                run.http, run.seconds = http.stats.to_dict(), round(time.monotonic() - t0, 1)
+                log(f"{c.id}: SiteList failed: {e}")
+                return run
+            run.warnings.append(f"SiteList {m!r}: {e}")
+            continue
+        n0 = len(names)
+        for s in sites:
+            if s.name not in names or (s.located and not names[s.name][0].located):
+                names[s.name] = (s, names.get(s.name, (s, m))[1])  # keeps the first list's measurement
+        log(f"{c.id}: {cl.url('SiteList', Measurement=m)} -> {len(sites)} sites with {m!r} "
+            f"({len(names) - n0} not listed before)")
+    run.gauges = [Gauge(f"{c.id}:{s.name}", c.id, s.name, m, s.lon, s.lat) for s, m in names.values()]
+    unplaced = sum(1 for s, _ in names.values() if not s.located)
+    log(f"{c.id}: {len(run.gauges)} sites" + (f" ({unplaced} without a location)" if unplaced else ""))
     if sites_only:
         run.status = "sites only"
+        for g in run.gauges:
+            if g.id in old:
+                _carry(g, old[g.id])
     else:
         gdir = cfg.gauges_dir
         for i, g in enumerate(run.gauges):
-            if fetch_gauge(cl, c, gc, g, gdir, first, last, refetch_from, run, now_s, log):
+            o = old.get(g.id)
+            if known_inactive(o, gc, now_s):
+                _carry(g, o)
+                g.active = False
+                run.skipped += 1
+            elif fetch_gauge(cl, c, gc, g, gdir, first, last, refetch_from, run, now_s, log):
                 run.fetched += 1
             if (i + 1) % 25 == 0:
                 log(f"{c.id}: {i + 1}/{len(run.gauges)} sites, {http.stats.requests} requests, "
                     f"{http.stats.bytes / 1e6:.1f} MB, {len(run.errors)} errors")
         run.status = "ok" if not run.errors else "partial"
+    _finish(run, http, t0, log)
+    return run
+
+
+def _finish(run: CouncilRun, http: Http, t0: float, log) -> None:
     run.http, run.seconds = http.stats.to_dict(), round(time.monotonic() - t0, 1)
-    log(f"{c.id}: {run.status}; {run.fetched}/{len(run.gauges)} series updated; {http.stats.requests} requests, "
+    active = sum(g.active for g in run.gauges)
+    log(f"{run.council}: {run.status}; {len(run.gauges)} sites, {active} active, {run.skipped} known inactive "
+        f"(no request); {run.fetched} series updated; {http.stats.requests} requests, "
         f"{http.stats.bytes / 1e6:.1f} MB, {http.stats.retries} retries, {run.seconds} s"
         + (f"; {len(run.errors)} errors (first: {run.errors[0]})" if run.errors else ""))
-    return run
 
 
 def _selected(cfg: RainConfig, councils) -> list[CouncilConfig]:
@@ -872,11 +954,13 @@ def run_gauges(cfg: RainConfig, councils: list[str] | None = None, days: int | N
     grid = cfg.grids["ecmwf"]
     log(f"gauges: {', '.join(c.id for c in sel)}; hours {_hour(first)} .. {_hour(now_h)} ({days} days), "
         f"refetch from {_hour(refetch_from)}; cache {gdir}")
+    sites = load_sites(gdir)
+    old = {g["id"]: Gauge.from_dict(g) for g in sites.get("gauges", [])}
 
     def one(c: CouncilConfig) -> CouncilRun:
         def clog(m):
             log(m if m.startswith(c.id) else f"{c.id}: {m}")
-        return run_council(cfg, c, first, now_h, refetch_from, now_s, sites_only, http, clog)
+        return run_council(cfg, c, first, now_h, refetch_from, now_s, sites_only, http, clog, old)
 
     if (workers or len(sel)) > 1 and http is None:
         with ThreadPoolExecutor(max_workers=workers or len(sel)) as ex:
@@ -885,8 +969,6 @@ def run_gauges(cfg: RainConfig, councils: list[str] | None = None, days: int | N
         runs = [one(c) for c in sel]
 
     # sites.json: this run's gauges replace their council's; councils not reached keep their last list
-    sites = load_sites(gdir)
-    old = {g["id"]: Gauge.from_dict(g) for g in sites.get("gauges", [])}
     by_council: dict[str, list[Gauge]] = {}
     for g in old.values():
         by_council.setdefault(g.council, []).append(g)
@@ -898,16 +980,18 @@ def run_gauges(cfg: RainConfig, councils: list[str] | None = None, days: int | N
         if r.gauges:
             for g in r.gauges:  # keep the record times of a gauge this run did not reach
                 o = old.get(g.id)
-                if o is not None and g.record_last is None:
-                    g.record_first, g.record_last, g.units = o.record_first, o.record_last, o.units
+                if o is not None and g.checked is None:
+                    _carry(g, o)
             by_council[r.council] = r.gauges
             sites["councils"][r.council] = {"base_url": r.base_url, "hts": r.hts, "measurement": r.measurement,
-                                            "found": _iso(now_s), "sites": len(r.gauges)}
+                                            "found": _iso(now_s), "sites": len(r.gauges),
+                                            "active": sum(g.active for g in r.gauges)}
     sites.update(format=SITES_FORMAT, updated=_iso(now_s),
                  gauges=[g.to_dict() for cid in sorted(by_council) for g in by_council[cid]])
     _write_json(gdir / "sites.json", sites)
 
-    gauges = [g for c in sel for g in by_council.get(c.id, [])]
+    # only active gauges go into the hourly output (closed sites stay in sites.json with "active": false)
+    gauges = [g for c in sel for g in by_council.get(c.id, []) if g.active]
     keep_from = now_h - gc.keep_days * 24 + 1
     gh = build_hourly(gdir, gauges, now_h, keep_from)
     rep = report(cfg, sel, runs, gauges, gh, now_h, now_s, sites_only)
@@ -955,14 +1039,24 @@ def report(cfg: RainConfig, sel: list[CouncilConfig], runs: list[CouncilRun], ga
     st = gh.state
     tot = max(1, st.size)
     councils = {}
+    c30 = gh.cols(now_h, 720)
     for c in sel:
         r = next(x for x in runs if x.council == c.id)
-        councils[c.id] = {"name": c.name, "status": r.status, "base_url": r.base_url, "hts": r.hts,
+        rows = np.flatnonzero(gh.gauges["council"] == c.id) if gh.n else np.zeros(0, np.intp)
+        cells = max(1, len(rows) * gh.state.shape[1])
+        cells30 = max(1, len(rows) * len(c30))
+        councils[c.id] = {"name": c.name, "kind": c.kind, "status": r.status, "base_url": r.base_url, "hts": r.hts,
                           "measurement": r.measurement, "timezone": c.timezone, "method": c.method,
                           "attribution": c.attribution, "licence": c.licence, "source": c.source,
-                          "gauges": sum(1 for g in gauges if g.council == c.id), "series_updated": r.fetched,
+                          "sites": len(r.gauges), "sites_active": sum(g.active for g in r.gauges),
+                          "sites_skipped_inactive": r.skipped,
+                          "gauges": len(rows), "series_updated": r.fetched,
+                          "usable_frac": round(float(gh.ok[rows].sum()) / cells, 4),
+                          "usable_frac_30d": round(float(gh.ok[rows][:, c30].sum()) / cells30, 4),
+                          "gauges_90pct_30d": int((w30["n_ok"][rows] >= 0.9 * 720).sum()),
                           "errors": r.errors[:50], "n_errors": len(r.errors), "warnings": r.warnings[:50],
-                          "times": r.times.to_dict(), "http": r.http, "seconds": r.seconds}
+                          "n_warnings": len(r.warnings), "times": r.times.to_dict(), "http": r.http,
+                          "seconds": r.seconds, **r.extra}
     return {
         "format": HOURLY_FORMAT, "created": _iso(time.time()), "now": _hour(now_h), "sites_only": sites_only,
         "hour_convention": HOUR_CONVENTION,
@@ -994,6 +1088,11 @@ def discover(cfg: RainConfig, councils: list[str] | None = None, http: Http | No
     for c in ([cfg.gauges.council(x) for x in councils] if councils else list(cfg.gauges.councils)):
         h = http or Http(timeout=gc.timeout_s, retries=min(gc.retries, 2), log=log)
         pacer = Pacer(gc.request_gap_s)
+        if c.kind == "ecan-portal":
+            from .ecanportal import discover_portal
+
+            out["councils"][c.id] = dict(discover_portal(c, h, pacer, now_s, log), http=h.stats.to_dict())
+            continue
         probes = []
         for base in c.base_urls:
             for hts in c.hts:
@@ -1013,7 +1112,8 @@ def discover(cfg: RainConfig, councils: list[str] | None = None, http: Http | No
                     log(f"{c.id}: {e}" if isinstance(e, FetchError) else f"{c.id}: {cl.url('MeasurementList')}: {e}")
                     continue
                 m = choose_measurement(names, c.measurements)
-                p.update(measurements=len(names), rain_like=rain_like(names), chosen=m)
+                p.update(measurements=len(names), rain_like=rain_like(names), chosen=m,
+                         matching=matching_measurements(names, c.measurements))
                 log(f"{c.id}: {cl.url('MeasurementList')}: {len(names)} measurements; rain-like {rain_like(names)}; "
                     f"chosen {m!r}")
                 if m:
@@ -1041,12 +1141,13 @@ def discover(cfg: RainConfig, councils: list[str] | None = None, http: Http | No
 def _sample(cl: HilltopClient, c: CouncilConfig, site: str, m: str, now_s: float) -> dict:
     """One site's data sources and its last 6 hours of records, with how far its newest record is from now."""
     srcs = cl.site_measurements(site)
-    src = find_source(srcs, m)
+    src = choose_source(srcs, c.measurements, c.timezone, now_s)
     d = {"site": site, "sources": [{"datasource": s.datasource, "measurement": s.measurement,
                                     "request_as": s.request_as, "units": s.units, "tstype": s.tstype,
                                     "data_type": s.data_type, "interpolation": s.interpolation,
                                     "from": s.first.isoformat() if s.first else None,
-                                    "to": s.last.isoformat() if s.last else None} for s in srcs[:12]]}
+                                    "to": s.last.isoformat() if s.last else None} for s in srcs[:12]],
+         "chosen_source": src.datasource if src else None, "chosen_request_as": src.request_name if src else None}
     end = src.last if src and src.last else None
     if end is not None:
         for tz in ("NZST", "Pacific/Auckland", "UTC"):

@@ -23,9 +23,12 @@ _PATHS = {"nz_data", "tiles", "segments", "rain"}
 _GRID = {"lon0", "lat0", "dlon", "dlat", "nx", "ny"}
 _ECMWF = {"reader", "obs_leads", "obs_runs", "search_hours", "cache", "keep_days", "ecmwf_urls", "openmeteo_url"}
 _GAUGES = {"dir", "days", "keep_days", "refetch_hours", "chunk_days", "request_gap_s", "timeout_s", "retries",
-           "max_mm_per_hour", "councils"}
-_COUNCIL = {"name", "enabled", "base_url", "hts", "measurements", "timezone", "method", "quality", "region",
+           "max_mm_per_hour", "inactive_days", "recheck_days", "councils"}
+_COUNCIL = {"name", "kind", "enabled", "base_url", "hts", "measurements", "timezone", "method", "quality", "region",
             "licence", "attribution", "source"}
+# hilltop: a Hilltop Server (:mod:`.hilltop`); ecan-portal: Environment Canterbury's Open Data Portal
+# (:mod:`.ecanportal`: hourly totals per site, no .hts file).
+KINDS = ("hilltop", "ecan-portal")
 # Time zone of the times a server sends and expects: NZST = UTC+12 all year (the NEMS rule for recorders);
 # Pacific/Auckland = NZ wall clock (NZDT, UTC+13, in summer); UTC. Times that carry an offset are read as given.
 TIMEZONES = ("NZST", "Pacific/Auckland", "UTC")
@@ -50,13 +53,16 @@ class EcmwfConfig:
 
 @dataclass(frozen=True)
 class CouncilConfig:
-    """``[gauges.councils.<id>]``: one council's Hilltop server (see :mod:`.hilltop`, ``docs/rain-gauges.md``)."""
+    """``[gauges.councils.<id>]``: one council's gauge server (see :mod:`.hilltop`, :mod:`.ecanportal`,
+    ``docs/rain-gauges.md``)."""
 
     id: str
     name: str
     base_urls: tuple[str, ...]               # server roots, tried in order (e.g. https, then http)
-    hts: tuple[str, ...]                     # candidate .hts files, tried in order: the first with rain is used
-    measurements: tuple[str, ...] = ("Rainfall",)  # measurement names to look for, in order (case-insensitive)
+    hts: tuple[str, ...]                     # hilltop: candidate .hts files, tried in order: the first with rain wins
+    # hilltop: the rain series to look for (case-insensitive); per site the one whose record reaches nearest to now
+    # is used, ties (within 6 h) going to the earlier name
+    measurements: tuple[str, ...] = ("Rainfall",)
     enabled: bool = True
     timezone: str = "NZST"
     method: str = "raw"
@@ -65,6 +71,7 @@ class CouncilConfig:
     licence: str = ""
     attribution: str = ""
     source: str = ""                         # where the endpoint is documented
+    kind: str = "hilltop"                    # hilltop | ecan-portal
 
 
 @dataclass(frozen=True)
@@ -80,6 +87,8 @@ class GaugesConfig:
     timeout_s: float = 60.0
     retries: int = 4             # per request, on HTTP 429/5xx and network errors (backoff doubling from ~1 s)
     max_mm_per_hour: float = 200.0  # hourly totals above this are suspect
+    inactive_days: int = 30      # a gauge whose record ended longer ago than this is inactive: no requests ...
+    recheck_days: int = 7        # ... until this long after its last check (Hilltop: the site's MeasurementList)
     councils: tuple[CouncilConfig, ...] = ()
 
     def council(self, cid: str) -> CouncilConfig:
@@ -230,7 +239,10 @@ def _strs(v, where: str, suffix: str = "") -> tuple[str, ...]:
 def _council(cid: str, d) -> CouncilConfig:
     where = f"gauges.councils.{cid}"
     c = _keys(d, _COUNCIL, where)
-    for k in ("name", "base_url", "hts"):
+    kind = c.get("kind", "hilltop")
+    if kind not in KINDS:
+        _err(f"{where}.kind = {kind!r}: expected one of {', '.join(KINDS)}")
+    for k in ("name", "base_url") + (("hts",) if kind == "hilltop" else ()):
         if k not in c:
             _err(f"[{where}] lacks {k}")
     urls = c["base_url"] if isinstance(c["base_url"], list) else [c["base_url"]]
@@ -252,11 +264,11 @@ def _council(cid: str, d) -> CouncilConfig:
     for k in ("name", "region", "licence", "attribution", "source"):
         if not isinstance(c.get(k, ""), str):
             _err(f"{where}.{k} must be a string")
-    return CouncilConfig(cid, c["name"], tuple(u if u.endswith("/") else u + "/" for u in urls),
-                         _strs(c["hts"], f"{where}.hts", ".hts"),
+    hts = _strs(c["hts"], f"{where}.hts", ".hts") if "hts" in c else ()
+    return CouncilConfig(cid, c["name"], tuple(u if u.endswith("/") else u + "/" for u in urls), hts,
                          _strs(c.get("measurements", ["Rainfall"]), f"{where}.measurements"), c.get("enabled", True),
                          tz, method, c.get("quality", True), c.get("region", ""), c.get("licence", ""),
-                         c.get("attribution", ""), c.get("source", ""))
+                         c.get("attribution", ""), c.get("source", ""), kind)
 
 
 def _gauges(d) -> GaugesConfig:
@@ -284,6 +296,8 @@ def _gauges(d) -> GaugesConfig:
                         _num(g.get("timeout_s", base.timeout_s), "gauges.timeout_s", 1, 600),
                         _int(g.get("retries", base.retries), "gauges.retries", 0, 10),
                         _num(g.get("max_mm_per_hour", base.max_mm_per_hour), "gauges.max_mm_per_hour", 1, 10_000),
+                        _int(g.get("inactive_days", base.inactive_days), "gauges.inactive_days", 1, 3660),
+                        _int(g.get("recheck_days", base.recheck_days), "gauges.recheck_days", 0, 366),
                         tuple(councils))
 
 

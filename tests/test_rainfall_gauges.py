@@ -530,11 +530,15 @@ def test_repo_config_councils():
     from river_finder.national import FILTER_ORDER
 
     g = load_config().gauges
-    assert {c.id for c in g.councils} == {"wcrc", "ecan", "tdc"}
+    assert {c.id for c in g.councils if c.enabled} == {"wcrc", "ecan", "tdc"}
+    assert not g.council("ecan_hilltop").enabled  # ECan's Hilltop server: kept, off (resets every connection)
+    assert g.council("ecan").kind == "ecan-portal" and not g.council("ecan").hts
     for c in g.councils:
-        assert c.region in FILTER_ORDER and c.timezone in ("NZST", "Pacific/Auckland", "UTC")
+        assert c.region in FILTER_ORDER and c.timezone == "NZST"  # checked live for all three (2026-11-21)
         assert all(u.endswith("/") for u in c.base_urls) and all(h.endswith(".hts") for h in c.hts)
-    assert g.days <= g.keep_days
+        assert c.kind == "ecan-portal" or c.hts
+    assert "Rainfall (raw)" in g.council("wcrc").measurements
+    assert g.days <= g.keep_days and g.inactive_days < g.days
 
 
 @pytest.mark.parametrize("patch,match", [
@@ -588,9 +592,27 @@ def test_closed_site_costs_no_data_requests(tmp_path):
     cfg = _cfg(tmp_path)
     closed = {"Gamma Closed": {"lat": -42.0, "lon": 172.0, "first": datetime(2001, 1, 1),
                                "records": _tips(datetime(2026, 9, 30), datetime(2026, 10, 1))}}
+    # and one whose record ended 20 days ago: still active (inactive_days = 30), but outside the 2 days asked
+    closed["Delta Quiet"] = {"lat": -42.1, "lon": 172.1, "first": datetime(2001, 1, 1),
+                             "records": _tips(datetime(2026, 11, 1), datetime(2026, 11, 1, 12))}
     fake = FakeHilltop(closed)
-    G.run_gauges(cfg, now=utc(2026, 11, 21, 3), http=fake, log=lambda m: None)
+    rep = G.run_gauges(cfg, now=utc(2026, 11, 21, 3), http=fake, log=lambda m: None)
     assert not [c for c in fake.calls if "Request=GetData" in c]  # neither data nor quality series
     hours = G.GaugeHours.load(cfg.gauges_dir / "gauges_hourly.npz")
+    assert hours.id.tolist() == ["test:Delta Quiet"]  # the closed site is left out of the hourly output
     assert set(hours.state[0].tolist()) == {G.MISSING} and set(hours.flags[0].tolist()) == {G.F_OUTSIDE}
     assert len(hours.hour) == 48
+    c = rep["councils"]["test"]
+    assert (c["sites"], c["sites_active"], c["sites_skipped_inactive"], c["gauges"]) == (2, 1, 0, 1)
+    sites = {g["name"]: g for g in json.loads((cfg.gauges_dir / "sites.json").read_text())["gauges"]}
+    assert not sites["Gamma Closed"]["active"] and sites["Gamma Closed"]["checked"] == "2026-11-21T03:00:00Z"
+    assert sites["Gamma Closed"]["record_last"] == "2026-09-30T12:00:00Z"  # 2026-10-01 00:00 NZST
+    # the next runs send it no request at all, until recheck_days (7) after its check
+    for day, asked in ((22, False), (27, False), (29, True)):
+        fake = FakeHilltop(closed)
+        rep = G.run_gauges(cfg, now=utc(2026, 11, day, 3), http=fake, log=lambda m: None)
+        assert any("Gamma" in urllib.parse.unquote(u) for u in fake.calls) == asked, day
+        assert rep["councils"]["test"]["sites_skipped_inactive"] == (0 if asked else 1)
+        sites = {g["name"]: g for g in json.loads((cfg.gauges_dir / "sites.json").read_text())["gauges"]}
+        assert sites["Gamma Closed"]["record_last"] == "2026-09-30T12:00:00Z" and not sites["Gamma Closed"]["active"]
+    assert sites["Gamma Closed"]["checked"] == "2026-11-29T03:00:00Z"
