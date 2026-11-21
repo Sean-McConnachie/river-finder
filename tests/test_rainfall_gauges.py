@@ -790,15 +790,18 @@ def test_portal_hourly_totals_to_hours():
     assert E.round_hour(datetime(2026, 11, 8, 10, 0, 0, 20000)) == datetime(2026, 11, 8, 10)
     assert E.parse_time("8/11/2026 9:59:59 AM") == datetime(2026, 11, 8, 9, 59, 59)  # no leading zeros
     assert E.parse_time("2026-11-22T09:00:00+13:00") == datetime(2026, 11, 22, 9)  # JSON's offset dropped
-    assert E.period_for(10) == ("2_Days", 47) and E.period_for(48) == ("1_Week", 167)
-    assert E.period_for(800) == ("1_Month", 671)
+    assert E.period_for(10) == ("2_Days", 45) and E.period_for(48) == ("1_Week", 165)
+    assert E.period_for(800) == ("1_Month", 669)
 
 
 class FakePortal(Http):
     """ECan's portal at portal.example.test: the real site list (Esk's last sample moved back to 19/10) and, per
-    site, ``Period``'s rows back from the site's last whole hour, 0.5 mm each."""
+    site, ``Period``'s rows back from the site's last whole hour, 0.5 mm each; as at ECan's event recorders, hours
+    without a record have no row: Tai Tapu Yard has one every 3 hours, Arthur's Pass none (dry)."""
 
-    ROWS = {"2_Days": 47, "1_Week": 167, "2_Weeks": 335, "1_Month": 742}
+    ROWS = {"2_Days": 47, "1_Week": 167, "2_Weeks": 334, "1_Month": 742}
+    EVERY = {"326510": 3}
+    DRY = {"219506"}
 
     def __init__(self):
         super().__init__(retries=0, backoff=0.0, sleep=lambda s: None)
@@ -820,7 +823,8 @@ class FakePortal(Http):
         if u.path.startswith("/data/78/") and q.get("Period") in self.ROWS:
             end = self.last[q["SiteNo"]].replace(minute=0, second=0)
             rows = [f"{q['SiteNo']},{self.stamp(end - timedelta(hours=k))},0.5"
-                    for k in range(self.ROWS[q["Period"]] - 1, -1, -1)]
+                    for k in range(self.ROWS[q["Period"]] - 1, -1, -1)
+                    if k % self.EVERY.get(q["SiteNo"], 1) == 0 and q["SiteNo"] not in self.DRY]
             return ("site_no,DateTime,RainfallTotal\r\n" + "\r\n".join(rows) + "\r\n").encode(), {}
         raise urllib.error.HTTPError(url, 500, "Internal Server Error", {}, None)
 
@@ -852,10 +856,10 @@ def test_run_against_fake_portal(tmp_path):
     assert rep["answered"] and c["status"] == "ok" and c["kind"] == "ecan-portal"
     assert (c["sites"], c["sites_active"], c["sites_skipped_inactive"], c["gauges"]) == (5, 4, 1, 4)
     assert c["owners"] == {"ECan": 3, "ESNZ": 1, "CCC": 1}
-    # one request for the list, one per active site, the shortest period back from the site's last whole hour:
-    # Shingle Fan (09:00 NZST) needs all 48 hours (1_Week: 2_Days gives 47), the others' last whole hour is 08:00
-    assert len(fake.calls) == 5 and fake.periods() == {"231910": "1_Week", "219506": "2_Days", "325616": "2_Days",
-                                                       "326510": "2_Days"}
+    # one request for the list, one per active site, the shortest period surely reaching 47-48 hours back from the
+    # site's last whole hour (2_Days: 45 assumed)
+    assert len(fake.calls) == 5 and set(fake.periods().values()) == {"1_Week"}
+    assert set(fake.periods()) == {"231910", "219506", "325616", "326510"}
     gh = G.GaugeHours.load(cfg.gauges_dir / "gauges_hourly.npz")
     names = gh.name.tolist()
     assert names == ["Shingle Fan", "Arthur's Pass EWS (ESNZ)", "Botanic Gardens (CCC)", "Tai Tapu Yard"]
@@ -863,13 +867,16 @@ def test_run_against_fake_portal(tmp_path):
     assert gh.cell[names.index("Tai Tapu Yard")] == -1 and gh.cell[0] >= 0
     assert G.GOOD not in gh.state  # provisional values: raw at best
     assert set(gh.state[0].tolist()) == {G.RAW} and np.all(gh.mm[0] == 0.5)
-    # Arthur's Pass: last sample 08:00 NZST = 20Z, so the hour ending 21Z is after its record
+    # Arthur's Pass: no rows at all (dry): 0 mm up to its last sample (08:00 NZST = 20Z), the hour ending 21Z after it
     ap = names.index("Arthur's Pass EWS (ESNZ)")
+    assert np.all(gh.mm[ap, :-1] == 0.0) and np.all(gh.state[ap, :-1] == G.RAW)
     assert G.STATES[gh.state[ap, -1]] == "missing" and gh.flags[ap, -1] & G.F_OUTSIDE
+    # Tai Tapu Yard: a row every 3 hours, 0 mm in the hours between
+    tt = names.index("Tai Tapu Yard")
+    assert np.nansum(gh.mm[tt]) == 0.5 * 16 and np.all(gh.ok[tt, :-1])
     # Botanic Gardens: last sample 08:55 NZST: the hour ending 09:00 NZST has no total yet (partly after its record)
     bg = names.index("Botanic Gardens (CCC)")
-    assert G.STATES[gh.state[bg, -1]] == "missing" and gh.flags[bg, -1] & G.F_NO_VALUE
-    assert gh.flags[bg, -1] & G.F_PARTIAL and np.all(gh.ok[bg, :-1])
+    assert G.STATES[gh.state[bg, -1]] == "suspect" and gh.flags[bg, -1] & G.F_PARTIAL and np.all(gh.ok[bg, :-1])
     sites = {g["name"]: g for g in json.loads((cfg.gauges_dir / "sites.json").read_text())["gauges"]}
     assert sites["Esk"]["active"] is False and sites["Esk"]["site_no"] == "311910"
     assert sites["Botanic Gardens (CCC)"]["record_last"] == "2026-11-21T20:55:00Z" and sites["Shingle Fan"]["raw"]

@@ -60,9 +60,10 @@ from .hilltop import Pacer, _nz_lonlat, to_utc
 SITES = (51, "Rainfall/Rainfall summary by area")
 HOURLY = (78, "Rainfall/Rainfall for individual site")
 SUMMARY = (134, "Rainfall/Rainfall summary for site")
-# hourly periods, shortest first, with the hours each surely gives back from the site's last whole hour
-# (P - 1 rows; a month is at least 28 days)
-PERIODS = (("2_Days", 47), ("1_Week", 7 * 24 - 1), ("2_Weeks", 14 * 24 - 1), ("1_Month", 28 * 24 - 1))
+# hourly periods, shortest first, with the hours each surely spans back from the site's last whole hour: seen
+# 2026-11-21 were 46-47 rows for 2_Days, 167 for 1_Week, 334 for 2_Weeks, 742 for 1_Month (31 days); an hour or two
+# less is assumed, and a month of 28 days
+PERIODS = (("2_Days", 45), ("1_Week", 7 * 24 - 3), ("2_Weeks", 14 * 24 - 3), ("1_Month", 28 * 24 - 3))
 OWNERS = {"ecan": "ECan", "ccc": "CCC", "esnz": "ESNZ"}
 
 
@@ -261,12 +262,13 @@ def fetch_portal_gauge(cl: PortalClient, c: CouncilConfig, cfg: RainConfig, g, f
     gc = cfg.gauges
     path = series_path(cfg.gauges_dir, g)
     cached, meta = load_series(path)
-    todo = plan(cached, first, last, refetch_from)
-    if not todo:
-        return False
     rec_end = _parse_iso(g.record_last)
     anchor = math.floor((rec_end if rec_end is not None else now_s) / 3600)  # the site's last whole hour
-    period, _ = period_for(anchor - todo[0][0] + 1)
+    # hours older than the longest period are out of reach: not asked for (they stay not_fetched)
+    todo = plan(cached, max(first, anchor - PERIODS[-1][1] + 1), last, refetch_from)
+    if not todo:
+        return False
+    period, span = period_for(anchor - todo[0][0] + 1)
     try:
         tab = cl.hourly(g.site_no, period)
     except (FetchError, NotFound, PortalError) as e:
@@ -281,16 +283,19 @@ def fetch_portal_gauge(cl: PortalClient, c: CouncilConfig, cfg: RainConfig, g, f
     run.times.add(st)
     order = np.argsort(t_s, kind="stable")
     t_s, mm = t_s[order], tab.mm[order]
-    if not len(t_s):
-        run.warnings.append(f"{g.name} ({g.site_no}): {period}: no hourly rows")
-        return False
-    h0 = int(-(-int(t_s[0]) // 3600))  # the answer covers its first row's hour (ending) onwards
+    # the hours the answer covers: the period back from the last whole hour, or from its first row if earlier.
+    # Event-recording gauges (most of ECan's: 0.5 mm tips) have no row for an hour without a record, so an hour
+    # in that span without a row is 0 mm, as for Hilltop records (``raw``); after the last sample: outside.
+    h0 = anchor - span + 1
+    if len(t_s):
+        h0 = min(h0, int(-(-int(t_s[0]) // 3600)))
     block, done = cached, 0
     for a, b in todo:
         a = max(a, h0)
         if a > b:
             continue
-        hb = hours_from_records(t_s, mm, a, b, rec_end=rec_end, method="total-end", max_mm=gc.max_mm_per_hour)
+        hb = hours_from_records(t_s, mm, a, b, rec_start=(h0 - 1) * 3600, rec_end=rec_end, method="raw",
+                                max_mm=gc.max_mm_per_hour)
         hb.state[hb.state < RAW] = RAW  # provisional: never "good"
         block = merge(block, hb)
         done += 1
@@ -301,7 +306,7 @@ def fetch_portal_gauge(cl: PortalClient, c: CouncilConfig, cfg: RainConfig, g, f
         block = block.slice(keep_from, block.last)
     fetches = list(meta.get("fetches", [])) + [{"at": _iso(now_s), "period": period, "records": len(t_s)}]
     save_series(path, block, {"id": g.id, "council": g.council, "site": g.name, "site_no": g.site_no,
-                              "measurement": g.measurement, "timezone": c.timezone, "method": "total-end",
+                              "measurement": g.measurement, "timezone": c.timezone, "method": "raw (hour-end totals)",
                               "owner": g.owner, "units": "mm", "record_last": g.record_last,
                               "fetches": fetches[-24:]})
     return True

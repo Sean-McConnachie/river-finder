@@ -700,6 +700,13 @@ def _parse_iso(s: str | None) -> float | None:
         return None
 
 
+def clock_now(now_s: float) -> float:
+    """"Now" for telling whether a record is in the future: the wall clock in a live run (a run's ``now`` is fixed
+    at its start, and TDC is reached ~20 min later), the run's ``now`` when it was set to another time."""
+    t = time.time()
+    return max(now_s, t) if abs(t - now_s) < 6 * 3600 else now_s
+
+
 def known_inactive(o: Gauge | None, gc: GaugesConfig, now_s: float) -> bool:
     """A gauge of the last site list found inactive (its record had ended more than ``inactive_days`` before, or
     it had no rain series) less than ``recheck_days`` ago: no request this run."""
@@ -789,8 +796,9 @@ def fetch_gauge(cl: HilltopClient, c: CouncilConfig, gc: GaugesConfig, g: Gauge,
     g.active = rec1 is None or rec1 >= now_s - gc.inactive_days * 86400
     if not g.active:
         return False
-    if rec1 is not None and rec1 > now_s + 600:
-        run.warnings.append(f"{g.name}: last record {_iso(rec1)} is {(rec1 - now_s) / 60:.0f} min in the future "
+    ref = clock_now(now_s)
+    if rec1 is not None and rec1 > ref + 600:
+        run.warnings.append(f"{g.name}: last record {_iso(rec1)} is {(rec1 - ref) / 60:.0f} min in the future "
                             f"(read as {c.timezone}): is the server on another time zone?")
     if src.units and src.units.lower() not in ("mm", "millimetres", "millimeters"):
         run.warnings.append(f"{g.name}: units {src.units!r}, expected mm")
