@@ -13,17 +13,34 @@ in `config/rainfall.toml`. Tests: `tests/test_rainfall_gauges.py`; fixtures in `
 
 ## Status: verified live (2026-11-21)
 
-From the development container (`rain gauges --days 35`, all three councils in parallel, first run
-over an empty cache for ECan and WCRC's raw series; the TDC cache held 3 days):
+From the development container, `rain gauges --days 35`, all three councils in parallel
+(2026-11-21 21:31Z: the first 35-day run, over an empty cache for ECan and for WCRC's raw series;
+22:05Z: the next run, which for WCRC and TDC fetches only the newest 48 h):
 
-TODO_LIVE_TABLE
+| council | kind | sites listed | active | first 35-day run | next run (newest 48 h) | usable, 35 d | usable, 30 d | gauges with >= 90 % of 30 d |
+|---|---|---|---|---|---|---|---|---|
+| WCRC | Hilltop | 69 | 60 | 372 requests, 12.0 MB, 8.3 min, 0 retries | 181 requests, 0.9 MB, 3.5 min (9 inactive: no request) | 97.0 % | 96.7 % | 56 |
+| TDC | Hilltop | 179 | 81 | 660 requests, 14.0 MB, 18.7 min, 36 retries | 247 requests, 3.1 MB, 6.3 min, 10 retries (98 inactive: no request) | 99.9 % | 99.9 % | 81 |
+| ECan | portal | 110 | 110 | 111 requests, 2.6 MB, 2.3 min, 0 retries | 111 requests, 0.6 MB, 1.9 min (`1_Week` per site; run on a copy of the cache) | 88.1 % | 99.7 % | 110 |
+| all | | 358 | 251 | | | 94.0 % | | 247 |
 
-Sites = in the site lists; active = record reaching within `inactive_days` (30) of now; usable =
-share of the active gauges' hours with a value (good or raw) over the 35 days asked (ECan's portal
-reaches back a month at most, see below), and over the last 30 days. Routine runs (the newest 48 h)
-cost one MeasurementList, one quality series and one GetData per active Hilltop gauge, and one request
-per active ECan gauge plus the site list; known-inactive Hilltop sites cost nothing until
-`recheck_days` (7) after their last check.
+Sites listed = in the site lists; active = record reaching within `inactive_days` (30) of now (only
+active gauges are in `gauges_hourly`); usable = share of the active gauges' hours with a value (good
+or raw) over the 35 days (841 h) and the last 30 days. ECan's 35-day share is lower because its portal
+reaches back a month at most (below). No request failed in either run. The four gauges below 90 % are
+WCRC's, with real gaps: Grey Rv @ Waipuna WCRC (server `<Gap/>`s since 2026-10-19), Haast Rv @ Roaring
+Billy WCRC and Wanganui Rv @ Smyth Hut (records ended 2026-11-02 and 11-18), Grey Rv @ WCRC Office2
+(89.9 %). A routine run costs one MeasurementList, one quality series and one GetData per active
+Hilltop gauge, and the site list plus one request per active ECan gauge; known-inactive Hilltop sites
+cost nothing until `recheck_days` (7) after their last check.
+
+**Regions.** Canterbury 111 gauges (110 ECan, 1 WCRC), Tasman 80 (TDC and WCRC gauges in the Buller
+headwaters), West Coast 57, Marlborough 2 (TDC: Pelorus, Motueka at Red Hills), Otago 1 (WCRC: Young
+North Branch, Makarora). **Duplicates:** WCRC and TDC publish the same 7 gauges (Aorere at Perry
+Saddle, Cobb, Karamea, Mokihinui, Wangapeka, Maruia, Matakitaki; e.g. `wcrc:Karamea Rv @ Garibaldi`
+and `tdc:HY Karamea at Garibaldi`: identical hourly values, r = 1.00), and WCRC's `Arthurs Pass EWS` is
+ECan's `Arthur's Pass EWS (ESNZ)`. Both copies are in `gauges_hourly`: rf-t26.5 should count such a
+station once.
 
 What the first, blind version got wrong, and what changed:
 
@@ -39,11 +56,12 @@ What the first, blind version got wrong, and what changed:
   (raw)]` is refused ("Rainfall is not a measurement in the Rainfall (raw) data source"). Spaces must be
   `%20`: WCRC reads `+` literally ("No data source for Rainfall+(raw)."). The client always sent `%20`
   (`urllib.parse.quote`; test `test_real_wcrc_getdata_and_request_encoding`).
-- **TDC: closed sites.** 98 of TDC's 170 `Rainfall` sites closed years ago (records to 1987 .. 2026-02).
-  They are now inactive: not in `gauges_hourly`, no data request, and no request at all on later runs
-  until a recheck. TDC's `Rainfall` is live (verified to the last visit, QC 200 after it); `Raw
-  Rainfall` ends at the last visit; 9 sites list only `Rainfall [Combined Data]`.
-- **TDC resets connections** (`Connection reset by peer`, ~4 % of requests): retried with backoff
+- **Closed sites.** 98 of TDC's 179 sites and 9 of WCRC's 69 have records that ended long ago
+  (TDC: 1951 .. 2026-08-19; WCRC: 1992 .. 2026-07-09). They are now inactive: not in `gauges_hourly`, no
+  data request, and no request at all on later runs until a recheck. TDC's `Rainfall` is live (verified
+  to the last visit, QC 200 after it); `Raw Rainfall` ends at the last visit; 9 sites list only
+  `Rainfall [Combined Data]` (a quality series is not served for those: the records' own `Q1` is used).
+- **TDC resets connections** (`Connection reset by peer`, 4-6 % of requests): retried with backoff
   (`retries = 4`), none lost.
 - **ECan's Hilltop server** (`wateruse.ecan.govt.nz`) reset every https connection; plain http does not
   leave the container. ECan now comes from its Open Data Portal (below); the Hilltop entry is kept as
@@ -59,9 +77,48 @@ All three councils send NZST (UTC+12 all year); `timezone = "NZST"` for each. Ev
 | TDC (21:08Z) | `Rainfall` to 09:00, telemetry log (`Comms`) to 09:04:36 | 8 min, 4 min | 68 min, 64 min | TDC keeps a separate `Rainfall NZDT` copy of its rainfall |
 | ECan (21:22Z) | last samples 09:00-09:15 at 97 of 110 sites | 7-22 min | 67-82 min | ECan: "times are in NZ standard time; during daylight saving add one hour"; the portal's JSON/XML append `+13:00` (the server's own offset, a .NET serialisation of the same wall-clock value): not used, the CSV is |
 
-None was in the future read as NZST (the run warns when a record is more than 10 min ahead).
+None was in the future read as NZST (the run warns when a record is more than 10 min ahead of the
+clock; a run's own "now" is fixed at its start, so the check uses the wall clock in a live run).
 
-**Lag check against ECMWF.** TODO_LAG
+**The same station from two councils.** Converted to UTC, WCRC's `Arthurs Pass EWS` and ECan's
+`Arthur's Pass EWS (ESNZ)` agree hour for hour (r = 1.00 at lag 0, 0.91 at ±1 h, 621 mm each over 741
+h), and so do the 7 gauges that WCRC and TDC both publish (r = 0.99-1.00 at lag 0, equal totals). So the
+three conversions agree with each other, and ECan's own statement (NZST) fixes them all.
+
+**ECan's daily columns.** The site list's `-1 Day .. -7 Day` totals are reproduced by the hourly rows
+(read as NZST hour ends) for 748 of 767 site-days when the days run from 23:00 to 23:00 NZST, i.e.
+midnight to midnight on the NZ wall clock (NZDT in November): 669 with NZST midnights, 632 if a row
+held the hour after its stamp. So the hours are NZST hour ends, and the website's days are wall-clock
+days.
+
+**Lag check against ECMWF.** Gauge hours against the ECMWF IFS hourly rain (Open-Meteo, the
+observed-proxy leads 1-6; 189 hours, 2026-11-14 01Z .. 11-21 21Z; 413 requests, 141 MB, 4 min) at the
+gauge's 0.1° cell, for the 136 gauges with >= 80 % usable hours, >= 10 mm and >= 5 mm in the cell.
+Pooled Pearson r of gauge hour `h + k` against ECMWF hour `h` (k = 0 if the conversion is right; gauge
+times that were really UTC would peak at k = -12, NZDT read as NZST at k = +1):
+
+| lag k (h) | -13 | -12 | -6 | -3 | -2 | -1 | **0** | +1 | +2 | +3 | +6 | +12 | +13 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| all 136 | 0.15 | 0.18 | 0.47 | 0.70 | 0.77 | 0.83 | **0.85** | 0.85 | 0.82 | 0.78 | 0.59 | 0.27 | 0.23 |
+| WCRC own 43 | 0.14 | 0.18 | 0.48 | 0.71 | 0.79 | 0.84 | **0.87** | 0.87 | 0.84 | 0.81 | 0.63 | 0.27 | 0.24 |
+| WCRC EWS 5 | 0.19 | 0.20 | 0.53 | 0.71 | 0.79 | 0.86 | **0.87** | 0.83 | 0.78 | 0.73 | 0.48 | 0.19 | 0.16 |
+| TDC 28 | -0.03 | -0.03 | 0.07 | 0.39 | 0.56 | 0.73 | **0.84** | 0.84 | 0.72 | 0.55 | 0.19 | -0.01 | -0.02 |
+| ECan own 58 | 0.14 | 0.17 | 0.45 | 0.66 | 0.72 | 0.75 | **0.75** | 0.74 | 0.71 | 0.66 | 0.46 | 0.22 | 0.20 |
+| ECan ESNZ EWS 2 | 0.19 | 0.22 | 0.61 | 0.83 | 0.89 | 0.91 | **0.92** | 0.88 | 0.85 | 0.80 | 0.64 | 0.37 | 0.32 |
+
+The best lag is 0 for all gauges pooled (0 for 3-hour sums too, r 0.88), and 48 of the 136 gauges
+peak at 0 on their own, 98 within ±1 h (median 0). Times read as UTC are ruled out (r 0.18 at -12 h).
+ECMWF cannot settle the last hour, though: TDC, WCRC's and ECan's own gauges are within 0.003 between 0
+and an hour either side, so the hour comes from the record times above. The gauges whose own best lag
+is 3 h or more off are 14 ECan gauges, mostly in the Mid and South Canterbury foothills, with little rain
+in the week (11-37 mm against 19-61 mm in the cell: one event, which ECMWF placed differently), and five
+wet West Coast gauges at +3 / +4 (Taipo, Tuke, two on the Haast, Young: the front's timing; r at lag 0
+is 0.63-0.88 for them).
+
+**Open: Arthur's Pass.** ECan's own `Arthur's Pass` gauge leads the co-located ESNZ EWS by an hour
+(r = 0.99 at -1 h, 0.91 at 0; 636 vs 621 mm). The EWS is the same in ECan's and WCRC's copies, so one of
+the two series at that site is stamped an hour off at its source; ECMWF puts ECan's own gauges at -1
+or 0 (0.748 vs 0.747) and cannot tell. It matters to hourly comparisons, not to 30-day totals.
 
 ## Endpoints
 
@@ -110,13 +167,20 @@ https://data.ecan.govt.nz/data/134/Rainfall/Rainfall%20summary%20for%20site/CSV?
 - **Hourly totals** (`data/78`): `site_no, DateTime, RainfallTotal`, hourly for `Period` = `2_Days`,
   `1_Week`, `2_Weeks`, `1_Month`; `3_Months` and `1_Year` are daily; other values (`1_Day`, `7_Days`,
   `6_Weeks`, `2_Months`, ...) give an empty table, and `StartDate`/`EndDate` are not taken. A period
-  counts back from the site's last whole hour, not from the request: 47 rows for `2_Days`, 167 for
-  `1_Week`, 742 for `1_Month` (to 22/11). So a month is the longest hourly history the portal has;
-  the cache keeps what earlier runs got (`keep_days` 60). Each run asks for the shortest period that
-  reaches the oldest hour the cache lacks. Stamps are the end of the hour, a few ms either side
-  (`9:59:59 AM`, `12:00:00 PM`; JSON `09:59:59.943`): rounded to the nearest hour. The newest row is
-  the hour ending at the last sample when that is on the hour (a part hour is not given until it is
-  complete). Checked: the 21/11 hours of Shingle Fan sum to the site list's `-1 Day` (17.5 mm).
+  counts back from about the site's last whole hour, not from the request: 46-47 rows for `2_Days`,
+  167 for `1_Week`, 334 for `2_Weeks`, 742 for `1_Month` (to 22/11). So a month is the longest hourly
+  history the portal has; the cache keeps what earlier runs got (`keep_days` 60). Each run asks for the
+  shortest period that surely reaches the oldest hour the cache lacks (spans taken as 45, 165, 333 and
+  669 h), and uses the answer as far back as its rows go; hours older than a month are no reason for a
+  request. Stamps are the end of the hour, a few ms either side (`9:59:59 AM`, `12:00:00 PM`; JSON
+  `09:59:59.943`): rounded to the nearest hour. The newest row is the hour ending at the last sample
+  when that is on the hour (a part hour is not given until it is complete). Checked: the 21/11 hours of
+  Shingle Fan sum to the site list's `-1 Day` (17.5 mm), and the day columns as a whole (above).
+- **Dry hours have no row.** Most ECan gauges record events (0.5 mm tips) and an hour without a record
+  has no row: North Esk has a row every 4 hours (zero heartbeats) when dry, Mount Byrne only rows while
+  it rains (338 mm in 34 h on 25-26 October, then nothing for days). An hour in the period and before
+  the last sample without a row is therefore 0 mm, as for Hilltop records; it cannot be told apart
+  from an outage (the portal marks none), so a long dry spell at an event gauge reads as dry.
 - No quality codes, and the data terms call the values provisional: every ECan hour is `raw`.
 
 ### Hosts from the development container
@@ -190,13 +254,14 @@ belongs to the hour ending `hh:00`. `method = "raw"` (default for Hilltop) sums 
 hour (incremental tips or interval totals); an hour inside the record with no record is 0 mm.
 `total-end` / `total-start` take the server's own hourly totals instead (whether a Hilltop server
 stamps them at the start or end of the hour is not documented: check before switching). ECan's
-portal totals are end-stamped (`total-end`); an hour without a row is missing (`no_value`).
+portal totals are end-stamped and summed like records: an hour without a row, inside the period and
+before the last sample, is 0 mm.
 
 **States** (use `state <= 1`, `GaugeHours.ok`): 0 good (value, quality code >= 500 for the whole hour,
 not a raw series), 1 raw (value, not quality coded yet: no code, QC 0 or 200, a raw series, or ECan),
 2 suspect (value kept, not to be used), 3 missing (NaN). **Flags** (bits): 1 gap (a `<Gap/>` covers the
 hour), 2 partial (part of the hour in a gap or outside the record), 4 outside (before the record's
-first or after its last time), 8 no_value (`total-*`, ECan: no total returned), 16 range (a record
+first or after its last time), 8 no_value (`total-*`: no total returned), 16 range (a record
 unreadable or negative, or the hour above `max_mm_per_hour` = 200), 32 low_qc (QC 300-499 or not a NEMS
 code), 64 qc_missing (QC 100), 128 not_fetched. Quality codes follow the NEMS National Quality Code
 Schema (600 good, 500 fair, 400 compromised, 200 not verified, 100 missing record) [12]; a code in the

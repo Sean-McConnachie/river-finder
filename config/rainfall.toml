@@ -69,7 +69,7 @@ refetch_hours = 48        # always fetched again: telemetry arrives late and cou
 chunk_days = 10           # longest span of one GetData request
 request_gap_s = 1.0       # at least this long between two requests to one server (councils run in parallel)
 timeout_s = 60
-retries = 4               # per request on HTTP 429/5xx and network errors (TDC resets ~4 % of connections),
+retries = 4               # per request on HTTP 429/5xx and network errors (TDC resets 4-6 % of connections),
                           # backoff doubling from ~1 s
 max_mm_per_hour = 200.0   # hourly totals above this (or below 0) are marked suspect
 inactive_days = 30        # a site whose record ended longer ago is inactive: no data request, not in the hourly

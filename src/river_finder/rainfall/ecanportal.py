@@ -16,10 +16,13 @@ wrong value an empty table). Requests used:
     City Council (CCC) 11, Earth Sciences New Zealand (ESNZ) 6;
 ``data/78/Rainfall/Rainfall%20for%20individual%20site/CSV?SiteNo=<n>&Period=<p>``
     ``site_no, DateTime, RainfallTotal``: hourly totals for ``Period`` = ``2_Days``, ``1_Week``,
-    ``2_Weeks`` or ``1_Month`` (a calendar month: 742 rows on 2026-11-22), back from the site's
-    last whole hour: 47 rows for ``2_Days``, 167 for ``1_Week``, whatever the time of the request.
-    ``3_Months`` and ``1_Year`` give daily totals, other values an empty table. No quality codes:
-    the portal calls its values provisional, so every hour is ``raw``;
+    ``2_Weeks`` or ``1_Month`` (a calendar month: 742 rows on 2026-11-22), back from about the
+    site's last whole hour: 46-47 rows for ``2_Days``, 167 for ``1_Week``, 334 for ``2_Weeks``,
+    whatever the time of the request. ``3_Months`` and ``1_Year`` give daily totals, other values an
+    empty table. An hour without a record has no row: most ECan gauges record events (0.5 mm tips),
+    so a dry hour is missing from the table (North Esk sends a zero every 4 h, Mount Byrne nothing
+    between storms); such an hour, inside the period and before the last sample, is 0 mm here. No
+    quality codes: the portal calls its values provisional, so every hour is ``raw``;
 ``data/134/Rainfall/Rainfall%20summary%20for%20site/CSV?SiteNo=<n>``
     one site's row of the summary (not used).
 
@@ -31,9 +34,11 @@ and XML forms append the server's current offset (``2026-11-22T09:00:00+13:00`` 
 a .NET serialisation of the same wall-clock value, not the zone of the data: they are not used.
 Hourly totals are stamped at the end of their hour, a few milliseconds either side (``9:59:59 AM``,
 ``12:00:00 PM``; JSON ``09:59:59.943``): stamps are rounded to the nearest hour, so a row stamped
-``10:00`` NZST is the hour ending 22:00Z the day before (:func:`.gauges.hours_from_records`,
-``total-end``). The newest row is the hour ending at the site's last sample when that is on the
-hour; a part hour after it is not given (it comes next run: ``refetch_hours``).
+``10:00`` NZST is the hour ending 22:00Z the day before (:func:`.gauges.hours_from_records`). The
+site list's daily columns (``-1 Day`` ..) are reproduced by these hours for 748 of 767 site-days with
+days on the NZ wall clock (669 with NZST days, 632 if a row held the hour after its stamp). The
+newest row is the hour ending at the site's last sample when that is on the hour; a part hour after
+it is not given (it comes next run: ``refetch_hours``).
 
 **Licence.** The portal: "All data unless specifically stated is licensed under a Creative Commons
 Attribution 4.0 International License"; its data terms ask that Environment Canterbury is named as
