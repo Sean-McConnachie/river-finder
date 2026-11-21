@@ -231,6 +231,10 @@ def test_inputs_manifest_then_job_publishes(tmp_path, monkeypatch):
     assert idx["schema"] == 1 and idx["windows"] == [1, 3, 6, 12, 24]
     assert [r["id"] for r in idx["regions"]] == ["bay-of-plenty", "hawkes-bay"] and "kaimai" in idx["omitted"]
     assert idx["observed"]["hours_behind_now"] == 0 and idx["forecast"]["run_age_hours"] >= 5
+    assert idx["observed"]["window_end"] == idx["now"] == idx["forecast"]["start"]   # past and next meet at now
+    # no gauge factors yet (all version 0): nothing reads "scaled", the per-reach bits say raw
+    assert idx["observed"]["scaled"] is idx["forecast"]["scaled"] is idx["totals"]["scaled"] is False
+    assert idx["observed"]["scale"] == idx["forecast"]["scale"] == "raw" and idx["totals"]["values"] == "scaled"
     runs = {r["run"]: r for r in idx["ecmwf"]["runs"]}
     assert idx["ecmwf"]["newest_run"] == max(runs) and "forecast" in runs[idx["forecast"]["run"]]["used_for"]
     assert "ECMWF" in idx["attribution"] and "Open-Meteo" not in idx["attribution"]   # no openmeteo-s3 source
@@ -245,6 +249,7 @@ def test_inputs_manifest_then_job_publishes(tmp_path, monkeypatch):
         assert head["n"] == r["n"] == rows.size and head["generated"] == idx["generated"]
         assert np.abs(f["obs_mm_24h"] - t.mm("observed", 24)[rows]).max() <= 0.05 + 1e-9
         assert np.abs(f["fc_mm_6h"] - t.mm("forecast", 6)[rows]).max() <= 0.05 + 1e-9
+        assert all((f[f"{p}_scale_{x}h"] == 1).all() for p in ("obs", "fc") for x in idx["windows"])   # 1 = raw
     # inputs that no longer match the site's data are refused
     index = json.loads((viewer / "regions_index.json").read_text())
     index[0]["segments"] = 4

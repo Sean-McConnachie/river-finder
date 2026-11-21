@@ -6,9 +6,10 @@ ecmwf``, ``rain totals`` and ``rain publish`` against it, and force-pushes the p
 orphan commit to the ``rain`` branch. The site reads them from
 ``https://raw.githubusercontent.com/<owner>/<repo>/rain/<file>`` (CORS ``*``, cached 5 min).
 
-Stateless: ``rain ecmwf`` rebuilds the observed window (leads 1-6 of the latest 5 runs) and the
-next 24 h (newest run covering them) from scratch in a fresh directory, so nothing persists between
-runs; only the inputs below are fixed.
+Stateless: ``rain ecmwf`` rebuilds the observed window (the 24 h up to "now", each hour from the
+newest IFS run that has it: leads 1-6 of the runs before the latest, the latest's own leads up to
+now) and the next 24 h (newest run covering them) from scratch in a fresh directory, so nothing
+persists between runs; only the inputs below are fixed.
 
 Inputs: ``river-finder rain inputs --out DIR``
 ----------------------------------------------
@@ -38,18 +39,26 @@ Published files: ``river-finder rain publish --out DIR`` (the contract for the m
      "generated": "2026-11-20T05:24:10Z",            # when the files were written (UTC)
      "now": "2026-11-20 05:00Z",                     # the whole hour the job ran in; forecasts start here
      "windows": [1, 3, 6, 12, 24],                   # hours
-     "observed": {"window_end": "...", "hours_behind_now": 5, "runs": ["2026-11-19 06:00Z", ...],
-                  "products": ["ECMWF_OBS"], "sources": ["openmeteo-s3"],
+     "observed": {"window_end": "...", "hours_behind_now": 0, "runs": ["2026-11-19 06:00Z", ...],
+                  "products": ["ECMWF_OBS"], "sources": ["openmeteo-s3"], "scaled": false, "scale": "raw",
                   "windows": {"24": {"start", "end", "hours_with_data", "missing_hours", "products", "runs",
                                      "leads"}, ...}},  # window x = (end - x h, end]
-     "forecast": {"start": "...", "run": "2026-11-20 00:00Z", "run_age_hours": 5.4, "windows": {...}},
+     "forecast": {"start": "...", "run": "2026-11-20 00:00Z", "run_age_hours": 5.4, "windows": {...}, ...},
      "ecmwf": {"reader": "openmeteo-s3", "runs": [{"run", "age_hours", "used_for"}], "newest_run",
                "newest_run_age_hours"},          # ages: generated - run, hours
      "units": {...}, "products": {"ECMWF_OBS": "...", ...}, "flags": {"1": {"name", "doc"}, ...},
      "attribution": "...", "licences": [{"name", "licence", "url"}],
      "regions": [{"id": "canterbury", "title": "Canterbury", "file": "canterbury.bin.gz", "n": 109254,
                   "bytes": 462243, "raw_bytes": 2516554, "sha256": "..."}],   # bytes: the .gz file
-     "omitted": {"kaimai": "..."}, "summary": "...", "inputs": {...}, "job": {...}}
+     "omitted": {"kaimai": "..."}, "totals": {"created", "rows", "rows_digest", "scaled", "values"},
+     "summary": "...", "inputs": {...}, "job": {...}}
+
+``observed.window_end`` is normally ``now`` (the forecast starts at the next hour); it lags ``now`` by
+``hours_behind_now`` only when no ECMWF run has published the newest hours yet. ``scaled`` (per kind
+and under ``totals``) is true only when some value used gauge scale factors (rf-t26.5, factor version
+> 0); ``scale`` is ``raw`` (no factors yet), ``scaled``, ``mixed`` or ``none``, as the per-reach
+``<p>_scale_<x>h`` bits below; ``totals.values`` says which array was summed (``raw`` after
+``rain totals --raw``).
 
 ``<region id>.bin.gz``: one gzip member (``mtime`` 0) holding a little-endian binary file:
 
@@ -423,7 +432,7 @@ def _kind_summary(t: UpstreamTotals, kind: str, generated: datetime) -> dict | N
     i = k.info
     keep = ("start", "end", "hours_with_data", "missing_hours", "products", "runs", "leads", "reaches_incomplete")
     out = {"products": list(k.product_tags), "sources": i.get("sources", []), "runs": i.get("runs", []),
-           "family": i.get("family"), "scaled": i.get("scaled"),
+           "family": i.get("family"), "scaled": bool(i.get("scaled")), "scale": i.get("scale"),
            "windows": {x: {f: w.get(f) for f in keep} for x, w in i.get("windows_info", {}).items()}}
     if kind == "observed":
         out.update(window_end=i.get("window_end"), hours_behind_now=i.get("hours_behind_now"))
@@ -524,7 +533,7 @@ def publish(cfg: RainConfig, out_dir: Path, now: datetime | None = None, log=pri
         "flags": {str(b): {"name": name, "doc": FLAG_DOC[name]} for b, name in FLAG_NAMES.items()},
         "attribution": attr, "licences": licences, "regions": regions, "omitted": vm.get("omitted", {}),
         "totals": {"created": t.meta.get("created"), "rows": t.n, "rows_digest": t.meta.get("rows_digest"),
-                   "scaled": t.meta.get("scaled")},
+                   "scaled": bool(t.meta.get("scaled")), "values": t.meta.get("values")},
         "inputs": {k: manifest.get(k) for k in ("created", "code", "national_build", "rows_digest")}
         if manifest else None,
         "job": _job(),

@@ -9,9 +9,11 @@ Each run, on GitHub Actions at :23 past the hour (scheduled runs can start late)
 
 1. checks out the code and, into `rain-data/`, the **`rain-inputs`** branch (~35 MB);
 2. `uv sync --frozen --no-dev`: runtime dependencies only (~300 MB of wheels, ~15 s cold);
-3. `river-finder rain ecmwf --data rain-data --no-cache --retries 7`: the observed window
-   (leads 1-6 of the latest 5 IFS runs, ending at the newest finished hour) and the next 24 h,
-   from Open-Meteo's hourly copy of ECMWF IFS (~36 MB, ~1 min);
+3. `river-finder rain ecmwf --data rain-data --no-cache --retries 7`: the observed window, the 24 h
+   up to the latest whole hour ("now"), and the next 24 h from the hour after it, from Open-Meteo's
+   hourly copy of ECMWF IFS (~36 MB, ~1 min). Each observed hour comes from the newest IFS run that
+   has it: leads 1-6 of the runs before the latest, then the latest run's own leads up to now (5-11 h
+   after its base time; `[ecmwf] obs_leads = [1, 18]` in `config/rainfall.toml`);
 4. `river-finder rain totals --data rain-data`: upstream mm per reach and window (~8 s);
 5. `river-finder rain publish --data rain-data --out $RUNNER_TEMP/rain-out`: `index.json` plus one
    `<region>.bin.gz` per national region (~4 s);
@@ -33,7 +35,11 @@ Failures email the owner, so the job fails only on real errors:
 | anything else | a bug or a changed data format | fails |
 
 When no newer ECMWF run is out yet, the job still publishes: same runs, honest times
-(`index.json` gives every run's age and how far the observed window lags "now").
+(`index.json` gives every run's age). The observed window ends at "now" unless no run has published
+the newest hours within 18 h of its base time (ECMWF or Open-Meteo hours late); it then ends at the
+newest hour one has, and `observed.hours_behind_now` says by how much. `scaled` in `index.json` is
+true only once gauge scale factors (rf-t26.5) are applied; until then it is false and every reach's
+scale bits read 1 (raw).
 
 ## Where the files are
 

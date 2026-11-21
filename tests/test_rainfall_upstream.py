@@ -235,6 +235,10 @@ def test_products_and_scale_flags_propagate():
     assert t.mm("observed", 2)[ROW["A"]] == pytest.approx(4.0)
     raw = compute_totals(net, {"observed": buf}, windows=(2,), scaled=False)
     assert raw.mm("observed", 2)[ROW["A"]] == pytest.approx(2.0) and (raw.kind("observed").scale[0] <= RAW).all()
+    # "scaled" in the metadata follows the SCALED bit: a factor version > 0 reached some value
+    assert (k.info["scaled"], k.info["scale"], t.meta["scaled"], t.meta["values"]) == (True, "mixed", True, "scaled")
+    ri = raw.kind("observed").info
+    assert (ri["scaled"], ri["scale"], raw.meta["scaled"], raw.meta["values"]) == (False, "raw", False, "raw")
     at = t.at(ROW["E"])["observed"][2]
     assert at["products"] == ["SYNTHETIC_BETTER"] and at["scale"] == "mixed"
     prov = t.provenance(ROW["E"], "observed", 2)
@@ -243,6 +247,29 @@ def test_products_and_scale_flags_propagate():
     assert t.provenance(ROW["G"], "observed", 6)[0]["factor_version"] == {"R1": 0}
     assert k.info["windows_info"]["6"]["products"] == {"SYNTHETIC": 4, "SYNTHETIC_BETTER": 2}
     assert k.info["windows_info"]["6"]["factor_versions"] == [0, 3]
+
+
+def test_unity_factors_are_not_reported_as_scaled():
+    """All factors at version 0 (no gauge scaling yet, rf-t26.5): every flag reads raw, nothing says scaled."""
+    net = _net()
+    unity = ScaleFactors.unity("synthetic", REGIONS)
+    obs = _obs(_rain, factors=unity)
+    fc = HourlyBuffer(N, "forecast", REGIONS, REGION_OF)
+    fc.advance(H0 + 5)
+    for h in range(H0 + 6, H0 + 12):
+        fc.put(h, _rain(h), "SYNTHETIC_FC")
+    t = compute_totals(net, {"observed": obs, "forecast": fc}, windows=(1, 6))
+    assert (t.meta["scaled"], t.meta["values"]) == (False, "scaled")
+    for kind in ("observed", "forecast"):
+        k = t.kind(kind)
+        assert (k.info["scaled"], k.info["scale"]) == (False, "raw") and (k.scale == RAW).all()
+        assert all(w["factor_versions"] == [0] for w in k.info["windows_info"].values())
+    assert t.at(ROW["E"])["observed"][6]["scale"] == "raw"
+    obs.apply_factors(ScaleFactors("synthetic", REGIONS, [1.0, 1.0], [1, 0]), hours=[H0 + 5])  # version 1, R0 only
+    t2 = compute_totals(net, {"observed": obs}, windows=(1, 6))
+    k2 = t2.kind("observed")
+    assert (k2.info["scaled"], k2.info["scale"], t2.meta["scaled"]) == (True, "mixed", True)
+    assert k2.scale[0][ROW["A"]] == SCALED and k2.scale[0][ROW["G"]] == RAW and k2.scale[1][ROW["A"]] == RAW | SCALED
 
 
 def test_forecast_and_observed_together_any_windows():

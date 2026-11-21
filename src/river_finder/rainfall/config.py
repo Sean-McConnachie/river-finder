@@ -29,8 +29,8 @@ class EcmwfConfig:
     """``[ecmwf]``: where hourly IFS rain comes from and which leads make the observed proxy (see :mod:`.ecmwf`)."""
 
     reader: str = "openmeteo-s3"
-    obs_leads: tuple[int, int] = (1, 6)
-    obs_runs: int = 5
+    obs_leads: tuple[int, int] = (1, 18)
+    obs_runs: int = 6
     search_hours: int = 48
     cache: str = "cache"
     keep_days: int = 3

@@ -46,8 +46,11 @@ ny = 141
 #   ecmwf-s3:     ECMWF open data 0.1 deg GRIB tp (exactly this grid), 3-hourly steps split evenly into hours,
 #                 out ~8.5-9.5 h after the run.
 reader = "openmeteo-s3"
-obs_leads = [1, 6]    # ECMWF_OBS: lead hours of each run used as the observed proxy (runs are 6 h apart: span >= 6)
-obs_runs = 5          # runs read for the observed window: the latest and the 4 before it
+obs_leads = [1, 18]   # ECMWF_OBS: lead hours a run may give the observed proxy (span >= 6: runs are 6 h apart). Each
+                      # hour takes the newest run that has it, so older runs give leads 1-6 and the newest one its
+                      # leads up to "now" (5-11 h with Open-Meteo, up to ~15 h with ecmwf-s3): the window ends at now
+obs_runs = 6          # runs read for the observed window: the latest and the 5 before it (5 cover 24 h; the 6th
+                      # stands in when one is missing; a run is only listed when a newer one lacks an hour)
 search_hours = 48     # "latest" looks back this far for a published run
 cache = "cache"       # under <rain>: decoded NZ fields per run (re-runs download only listings); "" = no cache
 keep_days = 3         # cached runs older than this are deleted

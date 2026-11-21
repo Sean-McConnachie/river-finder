@@ -37,7 +37,10 @@ takes ~0.2 s; the whole computation ~1.5 s after the buffers are read (~1 s), sa
   ``SCALED`` (2) = some used a version > 0 (gauge-scaled, rf-t26.5); 3 = mixed, 0 = no value. The
   exact versions per hour and region are in the slot arrays; with ``up_regions`` (a bit per region
   upstream) :meth:`UpstreamTotals.provenance` lists every hour's product, run, lead and the factor
-  versions that reached a reach. Totals sum the scaled values unless computed with ``scaled=False``.
+  versions that reached a reach. Totals sum the scaled values unless computed with ``scaled=False``
+  (then every value counts as raw). ``scaled`` in the metadata (per kind and overall) is true only when
+  some reach has the ``SCALED`` bit, i.e. a factor version > 0 was applied: with the unity factors of
+  today (all version 0, rf-t26.5 open) it is false; ``values`` says which array was summed.
 
 Per window the metadata also keeps the hours, missing hours, products, sources, runs, leads and
 factor versions, the reaches incomplete, the largest depth and volume and two checks: every reach
@@ -810,14 +813,17 @@ def compute_totals(net: Network, buffers: dict[str, HourlyBuffer], windows=(1, 3
                 "outlets_m3": at_outlets, "local_m3": total_local,
                 "outlets_vs_local_rel_err": abs(at_outlets - total_local) / max(total_local, 1.0)})
         k = KindTotals(kind, xs, mm, mx[c], mf, bits[c], bits[c2], lo.tags, slots, {})
-        k.info = _kind_info(kind, buf, scaled, now_hour, (anchor or {}).get(kind), info_w)
+        k.info = _kind_info(kind, buf, int(np.bitwise_or.reduce(lo.scale, axis=None)) if lo.scale.size else 0,
+                            now_hour, (anchor or {}).get(kind), info_w)
         kinds[kind] = k
     timing["finish_s"] = round(time.perf_counter() - t3, 3)
     timing["total_s"] = round(time.perf_counter() - t0, 3)
     static = {"gid": net.gid, "down": net.down, "vi": net.vi, "region_of": net.region_of,
               "up_area_m2": net.up_area_m2, "table_area_km2": net.table_area_km2, "flags": net.flags,
               "up_regions": net.up_regions}
-    meta = {"created": datetime.now(UTC).isoformat(timespec="seconds"), "windows": list(xs), "scaled": scaled,
+    meta = {"created": datetime.now(UTC).isoformat(timespec="seconds"), "windows": list(xs),
+            # scaled: some value summed used a gauge scale factor (version > 0); values: the array summed
+            "scaled": any(k.info["scaled"] for k in kinds.values()), "values": "scaled" if scaled else "raw",
             "rows": n, "rows_digest": net.rows_digest, "down_digest": net.down_digest,
             "network": {k: net.meta.get(k) for k in ("built", "table", "weights", "flags", "area_check")},
             "flags_doc": FLAG_DOC, "seconds": timing,
@@ -863,11 +869,14 @@ def _window_info(kind: str, x: int, slots: dict, miss: np.ndarray, mm: np.ndarra
             "checks": checks}
 
 
-def _kind_info(kind: str, buf: HourlyBuffer, scaled: bool, now_hour: int | None, anchor: int | None,
+def _kind_info(kind: str, buf: HourlyBuffer, scale: int, now_hour: int | None, anchor: int | None,
                windows: dict) -> dict:
+    """``scale``: the scale bits of every local catchment and window OR-ed together (``scaled`` is true
+    only when some value used a factor version > 0, as the ``SCALED`` bit of the reaches)."""
     held = buf.hour >= 0
     runs = sorted({int(r) for r in buf.run_hour[held] if r >= 0})
-    info = {"anchor": _hour(buf.anchor), "scaled": scaled, "windows_info": windows,
+    info = {"anchor": _hour(buf.anchor), "scaled": bool(scale & SCALED), "scale": SCALE_NAMES[scale & (RAW | SCALED)],
+            "windows_info": windows,
             "runs": [_hour(r) for r in runs], "sources": sorted({str(s) for s in buf.source[held]})}
     a = buf.anchor if anchor is None else int(anchor)
     if kind == "observed":

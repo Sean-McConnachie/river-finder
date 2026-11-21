@@ -63,19 +63,31 @@ selectable: it is ECMWF's own product on exactly this grid and keeps drizzle.
 
 Observed proxy (``ECMWF_OBS``)
 ------------------------------
-Each hour comes from the newest run whose lead for that hour lies in ``[ecmwf] obs_leads`` (default
-1-6 h: with a run every 6 h these tile the timeline, and are the shortest leads there are;
-ERA5 similarly builds its accumulations from forecast steps 1-12 h). Spin-up in the first hours
-of IFS precipitation is small. The window ends 6 h after the latest run (its last short lead), or at
-"now" if that is earlier: 0-6 h before "now" with Open-Meteo, 3-10 h with the GRIB reader, given their
-publication delays (Open-Meteo can publish lead 6 before that hour has ended; the hour then waits for
-the next fetch, and the forecast holds it meanwhile).
-Raise the upper lead (e.g. 12) to fill those hours from longer leads: the buffer keeps the newest
-run for each hour, so an hour written from lead 7-12 is replaced by lead 1-6 of the next run.
-``obs_runs`` runs are considered (the latest and the ones before it): with leads 1-6, 4 runs cover
-24 h; a 5th only serves, with a longer upper lead, when one of those runs is missing. These fields
-go into the observed ECMWF buffer beside the satellite (IMERG) buffer, through the same interface,
-for side-by-side comparison; ``ECMWF_OBS`` has the lowest priority of the observed products.
+Each hour comes from the newest run that has published it with a lead in ``[ecmwf] obs_leads``
+(default 1-18 h). With a run every 6 h, the hours up to the newest run come from leads 1-6 of the
+runs before it (they tile the timeline and are the shortest leads there are; ERA5 similarly builds
+its accumulations from forecast steps 1-12 h; spin-up in the first hours of IFS precipitation is
+small), and the hours after it from its own leads 1, 2, ... up to "now". The window ends at "now"
+(the latest whole hour), so the forecast's first hour (now+1) follows it with no gap.
+
+"Latest" is the newest run whose lead ``obs_leads[0]`` is out (and has ended), even while the rest of
+it is still being converted: the plan takes the leads it lists so far and fills the hours after them
+from the run before. The upper lead must reach "now" from the newest run until the next one appears:
+the next run's first leads appear ~5-6 h after its base time with Open-Meteo, so "now" is up to
+~11 h after the newest run, and up to ~15 h with the GRIB reader (runs complete 8.5-9.5 h after
+their base time), hence 18. Longer leads only fill hours that no newer run has published: a missing
+run's hours come from leads 7-12 of the run before it, and the buffer keeps the newest run for each
+hour, so an hour written from a long lead is replaced by a short lead of the next run. If no run
+reaches "now" within ``obs_leads`` (ECMWF late), the window ends at the newest hour one does and lags
+"now" (``hours_behind_now``); hours inside the window that no run covers are reported missing.
+
+``obs_runs`` runs are considered (the latest and the ones before it). The window starts 23 h before
+"now", which is ``k`` = 5-11 h (Open-Meteo) after the latest run: for ``k`` >= 6, 4 runs cover the
+24 h; for ``k`` <= 5 the 5th is needed; a 6th (the default) keeps them complete when one run is
+missing. A run is only listed when no newer one has the hour, so the extra runs cost nothing
+otherwise. These fields go into the observed ECMWF buffer beside the satellite (IMERG) buffer,
+through the same interface, for side-by-side comparison; ``ECMWF_OBS`` has the lowest priority of
+the observed products.
 
 Forecast (``ECMWF_FC``)
 -----------------------
@@ -531,28 +543,44 @@ Plan = dict[int, tuple[datetime, int]]  # valid hour -> (run, lead)
 
 def obs_plan(reader: Reader, latest: datetime, leads: tuple[int, int], n_runs: int,
              hours: int = SLOTS, now_hour: int | None = None) -> tuple[Plan, list[int], int]:
-    """Observed proxy: for each hour of the ``hours`` ending at ``latest + leads[1]``, the newest of the
-    ``n_runs`` runs up to ``latest`` whose lead for it lies in ``leads`` and is published.
+    """Observed proxy: for each of the ``hours`` ending at the window's last hour, the newest of the
+    ``n_runs`` runs up to ``latest`` whose lead for it lies in ``leads`` and is published (a run still
+    being converted offers the leads it lists so far; older runs fill the hours after them).
 
-    ``now_hour`` caps the last hour: Open-Meteo publishes lead 6 a few minutes before that hour ends
-    (the 00z run's 06:00Z file was out by 05:50Z on 2026-11-20), and an hour that has not ended yet is
-    not observed (it is the forecast's first hour).
+    The last hour is ``now_hour`` (the latest whole hour, so the forecast's first hour follows it
+    directly), at most ``latest + leads[1]``; if no run has published it yet, the last hour before it
+    that one has (the window then lags "now"). Hours inside the window that no run covers (a run
+    missing, a gap in a run being converted) are returned as missing. ``now_hour`` is also needed
+    because Open-Meteo publishes a lead a few minutes before that hour ends (the 00z run's 06:00Z file
+    was out by 05:50Z on 2026-11-20), and an hour that has not ended yet is not observed (it is the
+    forecast's first hour).
 
     Returns (plan, hours with no run, last hour)."""
     lo, hi = leads
-    end = hour_index(latest) + hi
-    if now_hour is not None:
-        end = min(end, int(now_hour))
     runs = [latest - timedelta(hours=RUN_EVERY * k) for k in range(n_runs)]
-    plan, missing = {}, []
-    for h in range(end - hours + 1, end + 1):
-        for run in runs:  # newest first
+
+    def pick(h: int) -> tuple[datetime, int] | None:
+        for run in runs:  # newest first; a run is listed only when its lead for h is in range
             lead = h - hour_index(run)
             if lo <= lead <= hi and lead in reader.leads(run):
-                plan[h] = (run, lead)
-                break
-        else:
+                return run, lead
+        return None
+
+    top = hour_index(latest) + hi
+    if now_hour is not None:
+        top = min(top, int(now_hour))
+    end = top
+    while end > top - hours and pick(end) is None:  # the newest hours no run has published yet
+        end -= 1
+    if end == top - hours:  # nothing published in the whole window: keep it at the top, all missing
+        end = top
+    plan, missing = {}, []
+    for h in range(end - hours + 1, end + 1):
+        p = pick(h)
+        if p is None:
             missing.append(h)
+        else:
+            plan[h] = p
     return plan, missing, end
 
 

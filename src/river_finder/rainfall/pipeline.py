@@ -154,8 +154,9 @@ def run_ecmwf(cfg: RainConfig, run: str = "latest", obs: bool = True, fc: bool =
     """Fill the observed (``ECMWF_OBS``) and forecast (``ECMWF_FC``) ECMWF buffers from one run.
 
     ``run`` is ``latest`` (the newest published run that covers what is asked) or ``YYYYMMDDHH``.
-    The observed window takes the short leads of that run and the ``obs_runs - 1`` runs before it;
-    the forecast holds hours ``now+1 .. now+24`` of that run. Buffers go to
+    The observed window ends at "now": each hour from the newest of that run and the ``obs_runs - 1``
+    runs before it that has it within ``obs_leads`` (see :func:`.ecmwf.obs_plan`); the forecast holds
+    hours ``now+1 .. now+24`` of one run (``latest``: the newest that has them all). Buffers go to
     ``<rain>/obs_ecmwf.npz`` and ``<rain>/fc_ecmwf.npz``, each with a ``.json`` report of the last
     ingest (source, run, lead and product of every hour, missing hours, windows, download).
     """
@@ -195,9 +196,13 @@ def run_ecmwf(cfg: RainConfig, run: str = "latest", obs: bool = True, fc: bool =
         for h in missing:
             log(f"  {_hour(h)} {tag}: no run covers this hour")
         path = buf.save(cfg.buffer_path(kind, "ecmwf"))
+        table = buf.slot_table()
+        versions = sorted({v for r in table if r["product"] for v in r["factor_versions"]})
         rep = {"product": tag, "reader": name, "written": datetime.now(UTC).isoformat(timespec="seconds"),
                "now": _hour(now_h), **extra, "hours": hours, "missing": [_hour(h) for h in missing],
-               "windows": window_summary(buf, w, cfg.windows), "buffer": buf.slot_table(),
+               # scaled: some hour held used gauge scale factors (version > 0, rf-t26.5); version 0 = raw
+               "scaled": any(v > 0 for v in versions), "factor_versions": versions,
+               "windows": window_summary(buf, w, cfg.windows), "buffer": table,
                "download": {"bytes": http.stats.bytes - b0, "requests": http.stats.requests - s0,
                             "seconds": round(time.monotonic() - t0, 1)}}
         path.with_suffix(".json").write_text(json.dumps(rep, indent=1))
@@ -210,17 +215,26 @@ def run_ecmwf(cfg: RainConfig, run: str = "latest", obs: bool = True, fc: bool =
         return rep
 
     if obs:
-        latest = explicit or find_run(rd, now, lambda r: range(lo, hi + 1), ec.search_hours)
+        # the newest run whose first observed lead is out and over, however much of it is converted yet:
+        # obs_plan takes the leads it lists and fills the hours after them from the runs before
+        latest = explicit or find_run(rd, now, lambda r: (lo,) if hour_index(r) + lo <= now_h else (),
+                                      ec.search_hours)
         if latest is None:
-            raise SourceUnavailable(f"no {name} run with leads {lo}-{hi} h published in the last {ec.search_hours} h")
+            raise SourceUnavailable(f"no {name} run with lead {lo} h published in the last {ec.search_hours} h")
         plan, missing, end = obs_plan(rd, latest, (lo, hi), ec.obs_runs, now_hour=now_h)
         buf = open_buffer(cfg, "observed", "ecmwf", w)
-        log(f"observed: ECMWF_OBS from leads {lo}-{hi} h of {ec.obs_runs} runs up to {run_label(latest)}; "
-            f"window ends {_hour(end)} ({now_h - end} h before now)")
+        newest = sorted(lead for r, lead in plan.values() if r == latest)
+        log(f"observed: ECMWF_OBS from leads {lo}-{hi} h of {ec.obs_runs} runs up to {run_label(latest)} "
+            f"({f'leads {newest[0]}-{newest[-1]} of it' if newest else 'none of its leads'}); window ends "
+            f"{_hour(end)} ({now_h - end} h before now)")
+        if end < now_h:
+            log(f"  {_hour(end + 1)} .. {_hour(now_h)}: no run publishes these hours within leads {lo}-{hi} h yet")
         report["observed"] = ingest_plan(
             "observed", "ECMWF_OBS", buf, plan, missing, end - SLOTS, end,
             {"latest_run": run_label(latest), "runs": sorted({run_label(r) for r, _ in plan.values()}),
-             "leads": [lo, hi], "window_end": _hour(end), "hours_behind_now": now_h - end})
+             "leads": [lo, hi], "latest_run_leads": [newest[0], newest[-1]] if newest else None,
+             "window_end": _hour(end), "hours_behind_now": now_h - end,
+             "not_published": [_hour(h) for h in range(end + 1, now_h + 1)]})
 
     if fc:
         def need(r):
@@ -346,7 +360,8 @@ def run_totals(cfg: RainConfig, windows=None, scaled: bool = True, rebuild_netwo
         i = k.info
         when = (f"window end {i['window_end']} ({i.get('hours_behind_now')} h before now)" if kind == "observed"
                 else f"from {i['start']} (run {i.get('run')}, {i.get('hours_since_start')} h ago)")
-        log(f"{kind} ({i.get('family')}, products {list(k.product_tags)}, scaled={i['scaled']}): {when}")
+        log(f"{kind} ({i.get('family')}, products {list(k.product_tags)}, scaled={i['scaled']} (scale bits "
+            f"{i.get('scale')}{', --raw' if tot.meta['values'] == 'raw' else ''})): {when}")
         for x, w in i["windows_info"].items():
             c = w["checks"]
             area = float(net.up_area_m2[net.down < 0].sum())

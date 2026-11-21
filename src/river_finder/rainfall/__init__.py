@@ -43,12 +43,13 @@ Once per grid: ``river-finder rain weights --grid gsmap|ecmwf|all`` writes
 ``data/nz/rain/weights_<family>.npz`` (+ ``.json`` with the checks).
 
 ECMWF, every few hours (a run comes every 6 h): ``river-finder rain ecmwf`` fills
-``obs_ecmwf.npz`` (``ECMWF_OBS``: leads 1-6 h of the latest run and the 4 before it, the newest
-run per hour) and ``fc_ecmwf.npz`` (``ECMWF_FC``: hours now+1 .. now+24 of the newest run that
-covers them), each with a ``.json`` report giving the source, run, lead and product of every hour,
-the run's age and the download. Re-running replaces hours, never adds to them; decoded fields are
-cached under ``data/nz/rain/cache/``. ``--run YYYYMMDDHH`` picks a run, ``--obs`` / ``--fc`` one
-buffer, ``--reader`` the other reader.
+``obs_ecmwf.npz`` (``ECMWF_OBS``: the 24 h up to now, each hour from the newest of the latest 6 runs
+that has it within leads 1-18 h: leads 1-6 of the older runs, the latest run's own leads up to now)
+and ``fc_ecmwf.npz`` (``ECMWF_FC``: hours now+1 .. now+24 of the newest run that covers them), each
+with a ``.json`` report giving the source, run, lead and product of every hour, the run's age and
+the download. Re-running replaces hours, never adds to them; decoded fields are cached under
+``data/nz/rain/cache/``. ``--run YYYYMMDDHH`` picks a run, ``--obs`` / ``--fc`` one buffer,
+``--reader`` the other reader.
 
 After each fill: ``river-finder rain totals`` adds the observed and forecast windows down the river
 network into ``totals.npz`` (+ ``.json``; ``--windows`` for any of 1..24 h, ``--raw`` for unscaled

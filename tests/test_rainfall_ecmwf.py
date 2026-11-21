@@ -11,7 +11,7 @@ import pytest
 import scipy.sparse as sp
 
 from river_finder.rainfall import CatchmentWeights, GridSpec, HourlyBuffer, hour_index, hour_time, ingest
-from river_finder.rainfall.config import parse_config
+from river_finder.rainfall.config import load_config, parse_config
 from river_finder.rainfall.ecmwf import (
     EcmwfSource,
     GribReader,
@@ -186,12 +186,14 @@ class FakeReader(Reader):
 
     name = "fake"
 
-    def __init__(self, published: dict[datetime, int]):
+    def __init__(self, published: dict[datetime, int | set[int]]):
         super().__init__(WIN)
-        self.published = published  # run -> last lead published
+        self.published = published  # run -> last lead published, or the set of leads listed so far
+        self.bucket = Bucket(["https://nowhere/"], Http(retries=0))  # run_ecmwf reads its download tally
 
     def _list_leads(self, run):
-        return tuple(range(1, self.published.get(run, 0) + 1))
+        p = self.published.get(run, 0)
+        return tuple(sorted(p)) if isinstance(p, set) else tuple(range(1, p + 1))
 
     def value(self, run, lead):
         return 100.0 * ((hour_index(run) - hour_index(RUN)) // 6 + 10) + lead
@@ -272,6 +274,100 @@ def test_forecast_plan_find_run_and_windows():
     assert len(short) == 8 and len(miss) == 16                       # leads 3..10 only
 
 
+# --- the observed window ends at now ------------------------------------------------------------------
+def _cfg(root, **ecmwf):
+    """Config on ``root`` (defaults of [ecmwf] unless given) with the WIN weights in place."""
+    (root / "rain").mkdir(parents=True, exist_ok=True)
+    _weights().save(root / "rain" / "weights_ecmwf.npz")
+    return parse_config({"observed": {"source": "ecmwf"}, "forecast": {"source": "ecmwf"},
+                         "grids": {"ecmwf": {"lon0": 165.8, "lat0": -33.8, "dlon": 0.1, "dlat": -0.1, "nx": 133,
+                                             "ny": 141}},
+                         "paths": {"nz_data": str(root)}, "ecmwf": ecmwf})
+
+
+def _h(h: int) -> str:
+    return hour_time(h).strftime("%Y-%m-%d %H:00Z")
+
+
+def _run_of(label: str) -> datetime:
+    return datetime.strptime(label, "%Y-%m-%d %HZ").replace(tzinfo=UTC)
+
+
+def test_observed_window_ends_now_next_to_the_forecast(tmp_path):
+    """Through a whole run cycle ("now" 5-11 h after RUN, each run fully out 5 h after its base time) the
+    window ends at now: hours after the latest run come from its own leads, the rest from leads 1-6."""
+    cfg = _cfg(tmp_path)                                              # obs_leads 1-18, 6 runs
+    runs = [RUN + timedelta(hours=6 * k) for k in range(-6, 2)]       # RUN-36 .. RUN+6
+    for k in range(5, 12):
+        now_h = hour_index(RUN) + k
+        rd = FakeReader({r: 90 for r in runs if hour_index(r) + 5 <= now_h})
+        rep = run_ecmwf(cfg, reader=rd, now=hour_time(now_h), log=lambda m: None)
+        o, f = rep["observed"], rep["forecast"]
+        latest = RUN if k < 11 else RUN + timedelta(hours=6)          # RUN+6 is out at RUN+11
+        assert o["latest_run"] == f["run"] == f"{latest:%Y-%m-%d %H}Z"
+        assert o["window_end"] == o["now"] == _h(now_h) and o["hours_behind_now"] == 0 and not o["not_published"]
+        assert len(o["hours"]) == 24 and not o["missing"] and o["hours"][0]["hour"] == _h(now_h - 23)
+        assert o["hours"][-1]["hour"] == _h(now_h) and f["hours"][0]["hour"] == _h(now_h + 1)   # no hole
+        own = [h["lead"] for h in o["hours"] if _run_of(h["run"]) == latest]
+        assert own == list(range(1, now_h - hour_index(latest) + 1)) and o["latest_run_leads"] == [1, own[-1]]
+        assert all(1 <= h["lead"] <= 6 for h in o["hours"] if _run_of(h["run"]) != latest)
+        assert o["windows"]["1"]["last"] == _h(now_h) and not o["windows"]["24"]["missing_hours"]
+    # the saved buffer holds exactly the last plan: newer runs replaced the long leads of older ones
+    buf = HourlyBuffer.load(cfg.buffer_path("observed", "ecmwf"))
+    want = sum(rd.value(_run_of(h["run"]), h["lead"]) for h in o["hours"])
+    assert buf.anchor == now_h and np.allclose(buf.window(24).mm, want)
+
+
+def test_observed_window_with_a_half_converted_newest_run(tmp_path):
+    new = RUN + timedelta(hours=6)
+    now_h = hour_index(new) + 5                                       # its first leads are out, the rest not yet
+    older = [RUN - timedelta(hours=6 * k) for k in range(6)]          # RUN .. RUN-30
+    logs = []
+    rd, cfg = FakeReader({new: 3, **{r: 90 for r in older}}), _cfg(tmp_path / "a")
+    rep = run_ecmwf(cfg, reader=rd, now=hour_time(now_h), log=logs.append)
+    o, f = rep["observed"], rep["forecast"]
+    assert o["latest_run"] == f"{new:%Y-%m-%d %H}Z" and o["latest_run_leads"] == [1, 3]
+    assert o["window_end"] == _h(now_h) and o["hours_behind_now"] == 0 and not o["missing"]
+    assert [(_run_of(h["run"]), h["lead"]) for h in o["hours"][-5:]] == [(new, 1), (new, 2), (new, 3), (RUN, 10),
+                                                                          (RUN, 11)]
+    assert f["run"] == f"{RUN:%Y-%m-%d %H}Z" and f["hours"][0]["hour"] == _h(now_h + 1)   # new lacks its leads
+    assert json.loads(cfg.buffer_path("observed", "ecmwf").with_suffix(".json").read_text())["window_end"] == _h(now_h)
+    # an outage: RUN, RUN-6 and RUN-12 never came out. Hours no run publishes are reported: inside the window as
+    # missing, after its end (no run reaches now within leads 1-18) as not published, and the window lags now
+    rd = FakeReader({new: {1, 2, 3}, **{r: 90 for r in older[3:]}})
+    o = run_ecmwf(_cfg(tmp_path / "b"), reader=rd, now=hour_time(now_h), fc=False, log=logs.append)["observed"]
+    run_h = hour_index(RUN)
+    assert o["window_end"] == _h(run_h + 9) and o["hours_behind_now"] == 2
+    assert o["not_published"] == [_h(run_h + 10), _h(run_h + 11)]
+    assert o["missing"] == [_h(run_h + k) for k in range(1, 7)]       # RUN-18 reaches lead 18 = RUN, no further
+    assert o["windows"]["24"]["missing_hours"] == o["missing"] and len(o["hours"]) == 18
+    assert {(_run_of(h["run"]), h["lead"]) for h in o["hours"][-3:]} == {(new, 1), (new, 2), (new, 3)}
+    assert any("no run publishes these hours" in m for m in logs)
+
+
+def test_grib_observed_window_with_a_half_published_newest_run(tmp_path):
+    """ecmwf-s3: 3-hourly steps split evenly, with the wider leads: the newest run has steps 3 and 6 only, so
+    the two hours after them come from RUN's 12-15 h step, and the window still ends at now."""
+    new = RUN + timedelta(hours=6)
+    rate = {RUN - timedelta(hours=6 * k): 0.001 * (k + 1) for k in range(5)} | {new: 0.01}   # m per hour
+    tp = {r: {s: np.full(NATIVE.shape, rate[r] * s) for s in range(3, 25, 3)} for r in rate if r != new}
+    tp[new] = {s: np.full(NATIVE.shape, rate[new] * s) for s in (3, 6)}
+    cfg = _cfg(tmp_path, reader="ecmwf-s3")
+    now_h = hour_index(new) + 8
+    rd = GribReader(WIN, Bucket([S3, GCS], FakeHttp(grib_objects(tp))), native=NATIVE)
+    o = run_ecmwf(cfg, reader=rd, now=hour_time(now_h), fc=False, log=lambda m: None)["observed"]
+    assert o["latest_run"] == f"{new:%Y-%m-%d %H}Z" and o["latest_run_leads"] == [1, 6]
+    assert o["window_end"] == _h(now_h) and o["hours_behind_now"] == 0 and not o["missing"] and len(o["hours"]) == 24
+    assert [(_run_of(h["run"]), h["lead"], h["method"]) for h in o["hours"][-2:]] == [
+        (RUN, 13, "tp 12-15 h / 3"), (RUN, 14, "tp 12-15 h / 3")]
+    assert [h["lead"] for h in o["hours"][-8:-2]] == list(range(1, 7))
+    assert o["windows"]["1"]["mean_mm"] == pytest.approx(rate[RUN] * 1000, rel=1e-4)
+    assert o["windows"]["3"]["mean_mm"] == pytest.approx((2 * rate[RUN] + rate[new]) * 1000, rel=1e-4)
+    assert o["windows"]["24"]["mean_mm"] == pytest.approx(
+        (6 * rate[new] + 8 * rate[RUN] + 6 * rate[RUN - timedelta(hours=6)] + 4 * rate[RUN - timedelta(hours=12)])
+        * 1000, rel=1e-4)
+
+
 # --- Open-Meteo (.om on an octahedral grid) ------------------------------------------------------
 def _om_file(tmp_path, values, run, lead, n=8, crs_n=None):
     import omfiles
@@ -344,11 +440,21 @@ def test_run_ecmwf_twice_does_not_double_count(tmp_path):
     rep = go()
     o, f = rep["observed"], rep["forecast"]
     assert o["latest_run"] == "2026-11-19 06Z" and len(o["hours"]) == 24 and not o["missing"]
-    assert {h["status"] for h in o["hours"]} == {"new"} and {h["lead"] for h in o["hours"]} == set(range(1, 7))
+    # the window ends at now (RUN + 9): leads 1-9 of the latest run (7-9 split from its 6-9 h step), 1-6 before
+    assert o["window_end"] == o["now"] == "2026-11-19 15:00Z" and o["hours_behind_now"] == 0
+    assert not o["not_published"] and o["latest_run_leads"] == [1, 9]
+    assert [h["lead"] for h in o["hours"] if h["run"] == "2026-11-19 06Z"] == list(range(1, 10))
+    assert {h["lead"] for h in o["hours"] if h["run"] != "2026-11-19 06Z"} == set(range(1, 7))
+    assert o["hours"][-1]["method"] == "tp 6-9 h / 3" and o["hours"][-1]["hour"] == "2026-11-19 15:00Z"
+    assert {h["status"] for h in o["hours"]} == {"new"}
     assert f["run"] == "2026-11-19 06Z" and f["run_age_hours"] == 9 and len(f["hours"]) == 24
     assert [h["lead"] for h in f["hours"]] == list(range(10, 34)) and f["hours"][0]["method"] == "tp 9-12 h / 3"
-    # 24 h observed = 6 h from each of the 4 runs at its own rate; 24 h forecast = 24 h at the latest rate
-    assert o["windows"]["24"]["mean_mm"] == pytest.approx(6 * sum(rate.values()) * 1000, rel=1e-4)
+    assert f["hours"][0]["hour"] == "2026-11-19 16:00Z"                # no hour between observed and forecast
+    assert o["scaled"] is f["scaled"] is False and o["factor_versions"] == f["factor_versions"] == [0]
+    # 24 h observed = 9 h of the latest run, 6 h of each of the next two and 3 h of the oldest, each at its own
+    # rate; 24 h forecast = 24 h at the latest rate
+    obs_h = {runs[0]: 9, runs[1]: 6, runs[2]: 6, runs[3]: 3}
+    assert o["windows"]["24"]["mean_mm"] == pytest.approx(sum(obs_h[r] * rate[r] for r in runs) * 1000, rel=1e-4)
     assert f["windows"]["24"]["mean_mm"] == pytest.approx(24 * rate[RUN] * 1000, rel=1e-4)
     obs1 = HourlyBuffer.load(cfg.buffer_path("observed", "ecmwf")).window(24).mm
     fc1 = HourlyBuffer.load(cfg.buffer_path("forecast", "ecmwf")).ahead(24).mm
@@ -371,7 +477,10 @@ def test_ecmwf_config_validation():
     base = {"grids": {"ecmwf": {"lon0": 165.8, "lat0": -33.8, "dlon": 0.1, "dlat": -0.1, "nx": 133, "ny": 141}},
             "observed": {"source": "ecmwf"}, "forecast": {"source": "ecmwf"}}
     c = parse_config(base)
-    assert c.ecmwf.reader == "openmeteo-s3" and c.ecmwf.obs_leads == (1, 6) and c.cache_dir.name == "cache"
+    assert c.ecmwf.reader == "openmeteo-s3" and c.ecmwf.obs_leads == (1, 18) and c.ecmwf.obs_runs == 6
+    assert c.cache_dir.name == "cache"
+    shipped = load_config()                                            # config/rainfall.toml says the same
+    assert (shipped.ecmwf.obs_leads, shipped.ecmwf.obs_runs) == (c.ecmwf.obs_leads, c.ecmwf.obs_runs)
     assert parse_config({**base, "ecmwf": {"reader": "ecmwf-s3", "obs_leads": [1, 12], "cache": ""}}).cache_dir is None
     for bad, msg in [({"reader": "ftp"}, "reader"), ({"obs_leads": [1, 3]}, "at least 6"),
                      ({"obs_leads": [0, 6]}, "obs_leads"), ({"obs_runs": 0}, "obs_runs"), ({"bogus": 1}, "unknown"),

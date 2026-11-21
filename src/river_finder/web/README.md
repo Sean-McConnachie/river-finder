@@ -173,7 +173,7 @@ reference area (not published) all end in an error state with a message for peop
 | `RF.rain.region(id)` → `Promise<RainData>` | load once, then cached; rejects with `{code, message}`: `host` (artifact), `off`, `browser`, `reference`, `missing`, `mismatch`, `stale`, `network`, `format` |
 | `RF.rain.state(id)` | synchronous snapshot for rendering, starts no fetch: `{status: "idle" \| "loading" \| "ok" \| "error", data, code, message}` |
 | `RF.rain.at(data, reach)` | one reach: `{reach, area (km²), flags, past: {x: w}, next: {x: w}}`, `w = {mm, m3, miss, products, scale}`; `mm`/`m3` null = no value |
-| `RF.rain.span(data, "past" \| "next", x)` | `{start, end}` Dates of window `x` (past windows end at `head.observed.window_end`, which lags now; next ones start at `head.forecast.start`) |
+| `RF.rain.span(data, "past" \| "next", x)` | `{start, end}` Dates of window `x` (past windows end at `head.observed.window_end`, normally `now`, `hours_behind_now` earlier when the newest hours are not published yet; next ones start at `head.forecast.start`) |
 | `RF.rain.windows` | `[1, 3, 6, 12, 24]` (hours) |
 | `RF.rain.time(t, {day})`, `RF.rain.age(t)` | `"07:00 NZDT"` (weekday added when not today in NZ), `"12 min ago"` |
 | `RF.rain.fmt.{mm, m3}` | `"12.3"`; `"850"`, `"3.4k"`, `"4.1M"` |
