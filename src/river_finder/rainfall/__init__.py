@@ -32,6 +32,11 @@ Modules
   window, upstream volume (m³) and mean depth (mm) summed over every local catchment upstream, with
   the missing hours, products and scale factors that reached it; method, flags and checks in its
   docstring.
+- :mod:`.hilltop` / :mod:`.gauges` (rf-t26.4): Hilltop Server client (site lists, measurement
+  discovery, GetData, quality series; NZST / NZ wall-clock times to UTC) and the gauge ingestion:
+  records summed into hours ending with a state (good / raw / suspect / missing) and flags per
+  hour, each gauge's NZTM position, ECMWF cell and scaling region, a per-site cache under
+  ``<rain>/gauges/`` and ``gauges_hourly.npz`` (``GaugeHours``) for rf-t26.5; ``docs/rain-gauges.md``.
 - :mod:`.live` (rf-t26.9): the hourly GitHub Actions job's fixed inputs (``rain inputs``: weights,
   network, viewer map, manifest; the ``rain-inputs`` branch) and the files it publishes (``rain
   publish``: ``index.json`` + one ``<region>.bin.gz`` per site region; the ``rain`` branch). The
@@ -77,6 +82,9 @@ Every hour (children 2 and 3 provide the sources)::
   ``ECMWF_OBS`` into the observed ecmwf buffer, next to the satellite buffer (IMERG, replacing
   GSMaP) for comparison through the same interface, and ``ECMWF_FC`` into ``fc_ecmwf.npz``
   (``fc.advance(now)``, then ``fc.ahead(x)`` for x = 1..24, ``.m3(w.area_m2)`` for volumes).
+- rf-t26.4 (gauges): ``river-finder rain gauges`` fills ``<rain>/gauges/``; ``GaugeHours.load(...)``
+  gives hours x gauges (``mm``, ``state``, ``ok``), ``window(hours=720)``, ``region_rows()`` (the
+  network's region names) and each gauge's ``cell`` on the ECMWF grid.
 - rf-t26.5 (scaling): build ``ScaleFactors(family, buffer.regions, factor, version)`` and pass them
   to ``ingest``; ``buffer.apply_factors`` re-scales hours already held. Regions are the segment
   table's ``region`` column (river-guide regions, which follow the councils), ``buffer.region_of``.

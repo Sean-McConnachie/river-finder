@@ -39,7 +39,8 @@ When no newer ECMWF run is out yet, the job still publishes: same runs, honest t
 the newest hours within 18 h of its base time (ECMWF or Open-Meteo hours late); it then ends at the
 newest hour one has, and `observed.hours_behind_now` says by how much. `scaled` in `index.json` is
 true only once gauge scale factors (rf-t26.5) are applied; until then it is false and every reach's
-scale bits read 1 (raw).
+scale bits read 1 (raw). The gauge totals they will come from are fetched by `rain gauges`
+(`docs/rain-gauges.md`), not by this job yet.
 
 ## Where the files are
 

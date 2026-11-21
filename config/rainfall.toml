@@ -104,7 +104,7 @@ timezone = "NZST"         # ECan's rainfall pages: "times are in NZ standard tim
 method = "raw"
 quality = true
 region = "Canterbury"
-licence = "ECan open data is CC BY 4.0; not stated for the Hilltop service"
+licence = "Canterbury Maps open data is Creative Commons Attribution; terms of the Hilltop service not checked"
 attribution = "Rainfall data: Environment Canterbury"
 source = "host: a public Hilltop Server at http://wateruse.ecan.govt.nz/RiverRecorderQcEcanDaily.hts; ECan publishes rainfall per site on data.ecan.govt.nz (Open Data Portal, csv/json/xml, not Hilltop)"
 
