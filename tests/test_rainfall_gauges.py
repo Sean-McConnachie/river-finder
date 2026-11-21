@@ -888,6 +888,28 @@ def test_run_against_fake_portal(tmp_path):
     assert set(fake2.periods().values()) == {"2_Days"}
 
 
+def test_portal_first_run_takes_the_whole_month(tmp_path):
+    """35 days asked, a month (742 rows) given: every row is used, the older hours stay not_fetched, and the next
+    run does not ask for a month again just because they are missing."""
+    d = tomllib.loads(CONFIG_PATH.read_text())
+    d["paths"]["nz_data"] = str(tmp_path)
+    d["gauges"] = {"days": 35, "keep_days": 60, "refetch_hours": 3, "request_gap_s": 0, "retries": 0,
+                   "councils": {"ec": {"name": "T", "kind": "ecan-portal", "base_url": "https://portal.example.test/"}}}
+    cfg = parse_config(d)
+    fake = FakePortal()
+    G.run_gauges(cfg, now=utc(2026, 11, 21, 21), http=fake, log=lambda m: None)
+    assert set(fake.periods().values()) == {"1_Month"}
+    gh = G.GaugeHours.load(cfg.gauges_dir / "gauges_hourly.npz")
+    i = gh.name.tolist().index("Shingle Fan")
+    assert gh.ok[i].sum() == 742 and np.all(gh.mm[i][gh.ok[i]] == 0.5)
+    first_ok = int(np.flatnonzero(gh.ok[i])[0])
+    assert gh.hour[first_ok] == hr(2026, 11, 21, 21) - 741 and np.all(gh.ok[i][first_ok:])
+    assert np.all(gh.flags[i][:first_ok] & G.F_NOT_FETCHED)  # the axis starts at the earliest hour any gauge holds
+    fake2 = FakePortal()
+    G.run_gauges(cfg, now=utc(2026, 11, 21, 22), http=fake2, log=lambda m: None)
+    assert set(fake2.periods().values()) == {"2_Days"}
+
+
 def test_portal_site_list_failure_is_unanswered(tmp_path):
     cfg = _portal_cfg(tmp_path)
 

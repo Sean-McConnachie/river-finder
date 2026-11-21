@@ -264,11 +264,12 @@ def fetch_portal_gauge(cl: PortalClient, c: CouncilConfig, cfg: RainConfig, g, f
     cached, meta = load_series(path)
     rec_end = _parse_iso(g.record_last)
     anchor = math.floor((rec_end if rec_end is not None else now_s) / 3600)  # the site's last whole hour
-    # hours older than the longest period are out of reach: not asked for (they stay not_fetched)
-    todo = plan(cached, max(first, anchor - PERIODS[-1][1] + 1), last, refetch_from)
-    if not todo:
+    # hours older than the longest period are out of reach: they alone are no reason for a request
+    ask = plan(cached, max(first, anchor - PERIODS[-1][1] + 1), last, refetch_from)
+    if not ask:
         return False
-    period, span = period_for(anchor - todo[0][0] + 1)
+    period, span = period_for(anchor - ask[0][0] + 1)
+    todo = plan(cached, first, last, refetch_from)  # what the answer may fill: as far back as its rows go
     try:
         tab = cl.hourly(g.site_no, period)
     except (FetchError, NotFound, PortalError) as e:
