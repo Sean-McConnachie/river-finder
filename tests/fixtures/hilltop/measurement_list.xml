@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYNTHETIC test fixture: hand-written from the Hilltop Server documentation (HBRC 2016) and hilltop-py 2.4's
+     parsers, not real council data. Request=MeasurementList without a site: the measurements in the file. -->
+<HilltopServer>
+<Agency>Example Regional Council</Agency>
+<Measurement Name="Flow"/>
+<Measurement Name="Rainfall Intensity"/>
+<Measurement Name="Rainfall [Rainfall]"/>
+<Measurement Name="Stage"/>
+<Measurement Name="Flow"/>
+</HilltopServer>

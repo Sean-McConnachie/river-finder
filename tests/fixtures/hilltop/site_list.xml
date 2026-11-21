@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYNTHETIC test fixture: hand-written from the Hilltop Server documentation, not real council data (names and
+     places invented, coordinates near real towns). Request=SiteList&Location=LatLong&Measurement=Rainfall. -->
+<HilltopServer>
+<Agency>Example Regional Council</Agency>
+<Projection>NZGD2000</Projection>
+<Site Name="Grey &amp; Ahaura at Test Bridge">
+<Latitude>-42.4504</Latitude>
+<Longitude>171.2108</Longitude>
+</Site>
+<Site Name="Ōtira at Test Pass">
+<Latitude>-42.8300</Latitude>
+<Longitude>171.5600</Longitude>
+</Site>
+<Site Name="Unlocated Test Gauge">
+</Site>
+<Site Name="Zero Test Gauge">
+<Latitude>0</Latitude>
+<Longitude>0</Longitude>
+</Site>
+<Site Name="Chatham Test Gauge">
+<Latitude>-43.95</Latitude>
+<Longitude>-176.56</Longitude>
+</Site>
+</HilltopServer>

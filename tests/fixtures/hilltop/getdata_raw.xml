@@ -1,0 +1,31 @@
+<?xml version="1.0" standalone="yes"?>
+<!-- SYNTHETIC test fixture: hand-written from the Hilltop Server documentation and hilltop-py 2.4's GetData parser,
+     not real council data. Request=GetData&Site=...&Measurement=Rainfall&ShowQuality=Yes, times in NZST (UTC+12):
+     0.5 mm tips, a gap between 14:20 and 17:10, a negative record. -->
+<Hilltop>
+<Agency>Example Regional Council</Agency>
+<Measurement SiteName="Grey &amp; Ahaura at Test Bridge">
+<DataSource Name="Rainfall" NumItems="1">
+<TSType>StdSeries</TSType>
+<DataType>SimpleTimeSeries</DataType>
+<Interpolation>Incremental</Interpolation>
+<ItemInfo ItemNumber="1">
+<ItemName>Rainfall</ItemName>
+<ItemFormat>F</ItemFormat>
+<Divisor>1</Divisor>
+<Units>mm</Units>
+<Format>###0.0</Format>
+</ItemInfo>
+</DataSource>
+<Data DateFormat="Calendar" NumItems="1">
+<E><T>2026-11-20T13:15:00</T><I1>0.5</I1><Q1>600</Q1></E>
+<E><T>2026-11-20T13:40:00</T><I1>0.5</I1><Q1>600</Q1></E>
+<E><T>2026-11-20T14:00:00</T><I1>0.5</I1><Q1>600</Q1></E>
+<E><T>2026-11-20T14:20:00</T><I1>0.5</I1><Q1>200</Q1></E>
+<Gap/>
+<E><T>2026-11-20T17:10:00</T><I1>0.5</I1><Q1>200</Q1></E>
+<E><T>2026-11-20T17:30:00</T><I1>-0.5</I1><Q1>200</Q1></E>
+<E><T>2026-11-20T18:00:00</T><I1>0.5</I1><Q1>200</Q1></E>
+</Data>
+</Measurement>
+</Hilltop>

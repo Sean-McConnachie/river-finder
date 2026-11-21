@@ -1,0 +1,23 @@
+<?xml version="1.0" standalone="yes"?>
+<!-- SYNTHETIC test fixture: hand-written from the Hilltop Server documentation, not real council data.
+     Request=GetData&...&Method=Total&Interval=1 hour&Alignment=00:00, times in NZST (UTC+12); no total for 16:00. -->
+<Hilltop>
+<Agency>Example Regional Council</Agency>
+<Measurement SiteName="Grey &amp; Ahaura at Test Bridge">
+<DataSource Name="Rainfall" NumItems="1">
+<TSType>StdSeries</TSType>
+<DataType>SimpleTimeSeries</DataType>
+<Interpolation>Incremental</Interpolation>
+<ItemInfo ItemNumber="1">
+<ItemName>Rainfall</ItemName>
+<Units>mm</Units>
+</ItemInfo>
+</DataSource>
+<Data DateFormat="Calendar" NumItems="1">
+<E><T>2026-11-20T13:00:00</T><I1>0.0</I1></E>
+<E><T>2026-11-20T14:00:00</T><I1>1.5</I1></E>
+<E><T>2026-11-20T15:00:00</T><I1>0.5</I1></E>
+<E><T>2026-11-20T17:00:00</T><I1>250.0</I1></E>
+</Data>
+</Measurement>
+</Hilltop>

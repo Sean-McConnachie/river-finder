@@ -1,0 +1,21 @@
+<?xml version="1.0" standalone="yes"?>
+<!-- SYNTHETIC test fixture: hand-written from the Hilltop Server documentation, not real council data.
+     Request=GetData&...&tsType=StdQualSeries, times in NZST (UTC+12): each code ends the period it applies to. -->
+<Hilltop>
+<Agency>Example Regional Council</Agency>
+<Measurement SiteName="Grey &amp; Ahaura at Test Bridge">
+<DataSource Name="Rainfall" NumItems="1">
+<TSType>StdQualSeries</TSType>
+<DataType>SimpleTimeSeries</DataType>
+<Interpolation>Discrete</Interpolation>
+<ItemInfo ItemNumber="1">
+<ItemName>Quality</ItemName>
+</ItemInfo>
+</DataSource>
+<Data DateFormat="Calendar" NumItems="1">
+<E><T>2026-11-20T14:00:00</T><I1>600</I1></E>
+<E><T>2026-11-20T15:30:00</T><I1>400</I1></E>
+<E><T>2026-11-20T16:00:00</T><I1>100</I1></E>
+</Data>
+</Measurement>
+</Hilltop>

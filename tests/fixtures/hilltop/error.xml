@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYNTHETIC test fixture: an answer to a request the server cannot serve (Hilltop Server documentation). -->
+<HilltopServer>
+<Agency>Example Regional Council</Agency>
+<Error>No data for site Missing Test Gauge</Error>
+</HilltopServer>

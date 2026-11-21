@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYNTHETIC test fixture: hand-written from the Hilltop Server documentation and hilltop-py 2.4's measurement_list
+     parser, not real council data. Request=MeasurementList&Site=Grey & Ahaura at Test Bridge. -->
+<HilltopServer>
+<Agency>Example Regional Council</Agency>
+<DataSource Name="Rainfall" Site="Grey &amp; Ahaura at Test Bridge">
+<NumItems>1</NumItems>
+<TSType>StdQualSeries</TSType>
+<DataType>SimpleTimeSeries</DataType>
+<Interpolation>Discrete</Interpolation>
+<From>1995-06-23T00:00:00</From>
+<To>2026-11-20T16:15:00</To>
+<Measurement Name="Rainfall">
+<RequestAs>Rainfall [Rainfall]</RequestAs>
+</Measurement>
+</DataSource>
+<DataSource Name="Rainfall" Site="Grey &amp; Ahaura at Test Bridge">
+<NumItems>1</NumItems>
+<TSType>StdSeries</TSType>
+<DataType>SimpleTimeSeries</DataType>
+<Interpolation>Incremental</Interpolation>
+<From>1995-06-23T00:00:00</From>
+<To>2026-11-20T18:00:00</To>
+<Measurement Name="Rainfall">
+<Units>mm</Units>
+<Format>###0.0</Format>
+<RequestAs>Rainfall [Rainfall]</RequestAs>
+</Measurement>
+</DataSource>
+<DataSource Name="Stage" Site="Grey &amp; Ahaura at Test Bridge">
+<NumItems>1</NumItems>
+<TSType>StdSeries</TSType>
+<DataType>SimpleTimeSeries</DataType>
+<Interpolation>Instant</Interpolation>
+<From>2001-01-01T00:00:00</From>
+<To>2026-11-20T18:00:00</To>
+<Measurement Name="Stage">
+<Units>mm</Units>
+</Measurement>
+</DataSource>
+</HilltopServer>

@@ -187,7 +187,7 @@ def region_filters(base: Path | None = None) -> gpd.GeoDataFrame:
     wang = horizons.intersection(unary_union([basins, coast])).difference(manawatu_basin)
     parts["Wanganui"] = [wang]
     parts["Manawatu"] = [horizons.difference(wang)]
-    rows = [{"region": k, "geometry": unary_union(parts[k]).buffer(0)} for k in FILTER_ORDER]
+    rows = [{"region": k, "geometry": unary_union(parts[k]).buffer(0)} for k in FILTER_ORDER if k in parts]
     return gpd.GeoDataFrame(rows, crs="EPSG:2193")
 
 
