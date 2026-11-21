@@ -1,0 +1,26 @@
+<?xml version="1.0" ?>
+<!-- REAL response (not trimmed), fetched 2026-11-21 21:07Z from https://hilltop.wcrc.govt.nz/data.hts?Service=Hilltop&amp;Request=GetData&amp;
+     Site=Arthurs%20Pass%20EWS&amp;Measurement=Rainfall%20(raw)&amp;From=2026-11-22T00:00:00&amp;To=2026-11-22T10:00:00&amp;ShowQuality=Yes -->
+<Hilltop>
+<Agency>West Coast Regional Council</Agency>
+<Measurement SiteName="Arthurs Pass EWS">
+<DataSource Name="Rainfall (raw)" NumItems="1">
+<TSType>StdSeries</TSType>
+<DataType>SimpleTimeSeries</DataType>
+<Interpolation>Incremental</Interpolation>
+<ItemInfo ItemNumber="1">
+<ItemName>Rainfall (raw)</ItemName><ItemFormat>F</ItemFormat><Units>mm</Units><Format>###.#</Format>
+</ItemInfo>
+</DataSource>
+<Data DateFormat="Calendar" NumItems="1">
+<E><T>2026-11-22T00:00:00</T><I1>0</I1><Q1>200</Q1></E>
+<E><T>2026-11-22T01:00:00</T><I1>0</I1><Q1>200</Q1></E>
+<E><T>2026-11-22T02:00:00</T><I1>0</I1><Q1>200</Q1></E>
+<E><T>2026-11-22T03:00:00</T><I1>0</I1><Q1>200</Q1></E>
+<E><T>2026-11-22T04:00:00</T><I1>0</I1><Q1>200</Q1></E>
+<E><T>2026-11-22T05:00:00</T><I1>0</I1><Q1>200</Q1></E>
+<E><T>2026-11-22T06:00:00</T><I1>0</I1><Q1>200</Q1></E>
+<E><T>2026-11-22T07:00:00</T><I1>0</I1><Q1>200</Q1></E>
+</Data>
+</Measurement>
+</Hilltop>

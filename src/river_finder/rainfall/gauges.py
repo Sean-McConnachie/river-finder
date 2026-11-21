@@ -786,6 +786,12 @@ def fetch_gauge(cl: HilltopClient, c: CouncilConfig, gc: GaugesConfig, g: Gauge,
         run.warnings.append(f"{g.name}: units {src.units!r}, expected mm")
     path = series_path(gdir, g)
     cached, meta = load_series(path)
+    if cached is not None and (meta.get("measurement"), meta.get("datasource", g.datasource)) != (g.measurement,
+                                                                                                   g.datasource):
+        # the cached hours are of another series (e.g. WCRC's verified "Rainfall" before "Rainfall (raw)" was chosen)
+        run.warnings.append(f"{g.name}: series changed from {meta.get('measurement')!r} to {g.measurement!r}: "
+                            "cached hours dropped")
+        cached, meta = None, {}
     todo = chunks(plan(cached, first, last, refetch_from), gc.chunk_days * 24)
     if not todo:
         return False
@@ -1081,11 +1087,12 @@ def report(cfg: RainConfig, sel: list[CouncilConfig], runs: list[CouncilRun], ga
 # --- discovery ------------------------------------------------------------------------------------
 def discover(cfg: RainConfig, councils: list[str] | None = None, http: Http | None = None, now: datetime | None = None,
              log=print) -> dict:
-    """Probe every server root x candidate file of the councils; write and return ``discover.json``."""
+    """Probe every server root x candidate file of the councils (default: the enabled ones); write and return
+    ``discover.json``."""
     gc = cfg.gauges
     now_s = (now or datetime.now(UTC)).timestamp()
     out = {"created": _iso(time.time()), "councils": {}}
-    for c in ([cfg.gauges.council(x) for x in councils] if councils else list(cfg.gauges.councils)):
+    for c in _selected(cfg, councils):
         h = http or Http(timeout=gc.timeout_s, retries=min(gc.retries, 2), log=log)
         pacer = Pacer(gc.request_gap_s)
         if c.kind == "ecan-portal":

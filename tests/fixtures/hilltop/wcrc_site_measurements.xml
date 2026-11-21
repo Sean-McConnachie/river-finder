@@ -1,0 +1,76 @@
+<?xml version="1.0" ?>
+<!-- REAL response (not trimmed), fetched 2026-11-21 21:07Z from
+     https://hilltop.wcrc.govt.nz/data.hts?Service=Hilltop&amp;Request=MeasurementList&amp;Site=Arthurs%20Pass%20EWS -->
+<HilltopServer>
+<Agency>West Coast Regional Council</Agency>
+<DataSource Name="Rainfall" Site="Arthurs Pass EWS" >
+<NumItems>1</NumItems>
+<TSType>StdSeries</TSType>
+<DataType>SimpleTimeSeries</DataType>
+<Interpolation>Incremental</Interpolation>
+<ItemFormat>1</ItemFormat>
+<From>2021-09-28T00:00:00</From>
+<To>2023-10-16T05:00:00</To>
+<Measurement Name="Rainfall">
+<Item>1</Item>
+<DefaultMeasurement />
+<RequestAs>Rainfall</RequestAs>
+<Units>mm</Units>
+<Format>###.#</Format>
+</Measurement>
+<Measurement Name="Check diff rain">
+<Item>1</Item>
+<DefaultMeasurement />
+<RequestAs>Check diff rain</RequestAs>
+<Format>#.##</Format>
+<VM>1</VM>
+<VMStart>2021-09-28T00:00:00</VMStart>
+<VMFinish>2023-10-16T05:00:00</VMFinish>
+</Measurement>
+<Measurement Name="1 Day cumulative rainfall">
+<Item>1</Item>
+<DefaultMeasurement />
+<RequestAs>1 Day cumulative rainfall</RequestAs>
+<Units>mm</Units>
+<Format>#.##</Format>
+<MeasurementGroup>Cumulative rainfall</MeasurementGroup>
+<VM>1</VM>
+<VMStart>2021-09-28T00:00:00</VMStart>
+<VMFinish>2023-10-16T00:00:00</VMFinish>
+</Measurement>
+</DataSource>
+<DataSource Name="Rainfall (raw)" Site="Arthurs Pass EWS" >
+<NumItems>1</NumItems>
+<TSType>StdSeries</TSType>
+<DataType>SimpleTimeSeries</DataType>
+<Interpolation>Incremental</Interpolation>
+<ItemFormat>1</ItemFormat>
+<From>2021-09-28T00:00:00</From>
+<To>2026-11-22T07:00:00</To>
+<Measurement Name="Rainfall (raw)">
+<Item>1</Item>
+<DefaultMeasurement />
+<RequestAs>Rainfall (raw)</RequestAs>
+<Units>mm</Units>
+<Format>###.#</Format>
+</Measurement>
+</DataSource>
+<DataSource Name="Rainfall" Site="Arthurs Pass EWS" >
+<NumItems>1</NumItems>
+<TSType>StdQualSeries</TSType>
+<DataType>SimpleTimeSeries</DataType>
+<Interpolation>Event</Interpolation>
+<ItemFormat>0</ItemFormat>
+<From>2021-09-28T00:00:00</From>
+<To>2023-10-16T05:00:00</To>
+</DataSource>
+<DataSource Name="Rainfall (raw)" Site="Arthurs Pass EWS" >
+<NumItems>1</NumItems>
+<TSType>StdQualSeries</TSType>
+<DataType>SimpleTimeSeries</DataType>
+<Interpolation>Event</Interpolation>
+<ItemFormat>0</ItemFormat>
+<From>2021-09-28T00:00:00</From>
+<To>2026-11-22T07:00:00</To>
+</DataSource>
+</HilltopServer>

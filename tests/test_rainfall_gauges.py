@@ -1,8 +1,12 @@
 """Rain gauges (rf-t26.4): Hilltop XML, time zones (NZST / NZ wall clock across DST), hourly aggregation,
-quality states, placement, cache merge and a whole run against a fake Hilltop server.
+quality states, placement, cache merge, the per-site choice of rain series, ECan's Open Data Portal, and whole
+runs against fake servers.
 
-The XML under tests/fixtures/hilltop/ is SYNTHETIC: hand-written from the Hilltop Server documentation and
-hilltop-py's parsers (the council servers were not reachable when this was written).
+Fixtures: tests/fixtures/hilltop/{error,getdata_raw,getdata_total,measurement_list,quality_series,site_list,
+site_measurements,status}.xml are SYNTHETIC (hand-written from the Hilltop Server documentation and hilltop-py's
+parsers before the servers could be reached). tests/fixtures/hilltop/{wcrc_site_measurements,tdc_site_measurements,
+wcrc_getdata_raw}.xml and tests/fixtures/ecan/*.csv are REAL answers of 2026-11-21 (each file says from where;
+the TDC one and the ECan site list are trimmed).
 """
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ from xml.sax.saxutils import escape, quoteattr
 import numpy as np
 import pytest
 
+from river_finder.rainfall import ecanportal as E
 from river_finder.rainfall import gauges as G
 from river_finder.rainfall import hilltop as H
 from river_finder.rainfall.config import CONFIG_PATH, load_config, parse_config
@@ -25,6 +30,7 @@ from river_finder.rainfall.fetch import FetchError, Http
 from river_finder.rainfall.grid import hour_index
 
 FIX = Path(__file__).parent / "fixtures" / "hilltop"
+ECAN = Path(__file__).parent / "fixtures" / "ecan"
 
 
 def fx(name: str) -> bytes:
@@ -616,3 +622,281 @@ def test_closed_site_costs_no_data_requests(tmp_path):
         sites = {g["name"]: g for g in json.loads((cfg.gauges_dir / "sites.json").read_text())["gauges"]}
         assert sites["Gamma Closed"]["record_last"] == "2026-09-30T12:00:00Z" and not sites["Gamma Closed"]["active"]
     assert sites["Gamma Closed"]["checked"] == "2026-11-29T03:00:00Z"
+
+
+# --- the rain series of a site (real WCRC and TDC answers) ------------------------------------------
+WCRC_HINTS = ("Rainfall", "Rainfall (corrected)", "Rainfall (raw)")
+NOW_LIVE = utc(2026, 11, 21, 21, 7).timestamp()  # when the real fixtures were fetched
+
+
+def test_matching_measurements_and_raw_names():
+    names = ["Stage", "Rainfall", "Check diff rain", "1 Day cumulative rainfall", "Rainfall (raw)", "Rainfall CR10x",
+             "Rainfall (check gauge)", "Rainfall (corrected)", "Rainfall [Rainfall DS4483]", "Item1C [Rainfall (raw)]"]
+    assert H.matching_measurements(names, WCRC_HINTS) == ["Rainfall", "Rainfall [Rainfall DS4483]",
+                                                          "Rainfall (corrected)", "Rainfall (raw)"]
+    assert H.matching_measurements(["Flow"], WCRC_HINTS) == []
+    assert H.is_raw_name("Rainfall (raw)") and H.is_raw_name("Raw Rainfall") and H.is_raw_name("RAW")
+    assert not H.is_raw_name("Rainfall") and not H.is_raw_name("Drawdown")
+
+
+def test_wcrc_site_takes_the_live_raw_series():
+    """Arthurs Pass EWS: "Rainfall" (verified) ends 2023-10-16, "Rainfall (raw)" reaches 2026-11-22 07:00 NZST."""
+    srcs = H.parse_site_measurements(fx("wcrc_site_measurements.xml"))
+    std = [(s.datasource, s.measurement) for k, s in H.rain_sources(srcs, WCRC_HINTS)]
+    assert std == [("Rainfall", "Rainfall"), ("Rainfall (raw)", "Rainfall (raw)")]  # no VMs, no quality series
+    src = H.choose_source(srcs, WCRC_HINTS, "NZST", NOW_LIVE)
+    assert (src.datasource, src.request_name, src.tstype, src.units) == ("Rainfall (raw)", "Rainfall (raw)",
+                                                                        "StdSeries", "mm")
+    assert src.last == datetime(2026, 11, 22, 7) and H.is_raw_name(src.datasource)
+    # in 2023 the verified series reached nearest to now: it wins
+    old = utc(2023, 10, 16, 0).timestamp()
+    assert H.choose_source(srcs, WCRC_HINTS, "NZST", old).datasource == "Rainfall"
+    assert H.choose_source(srcs, ("Flow",), "NZST", NOW_LIVE) is None
+
+
+def test_tdc_site_takes_rainfall_not_raw_or_forecast_statistics():
+    """HY Takaka at Harwoods: "Rainfall" is live, "Raw Rainfall" ends at the last visit, "Ensemble Rainfall
+    Statistics" runs into 2027 (not a hint)."""
+    srcs = H.parse_site_measurements(fx("tdc_site_measurements.xml"))
+    src = H.choose_source(srcs, ("Rainfall", "Raw Rainfall"), "NZST", NOW_LIVE)
+    assert (src.datasource, src.request_name) == ("Rainfall", "Rainfall") and src.last == datetime(2026, 11, 22, 9)
+    assert H.choose_source(srcs, ("Raw Rainfall",), "NZST", NOW_LIVE).datasource == "Raw Rainfall"
+    assert H.choose_source(srcs, ("Precipitation Month Mean", "Rainfall"), "NZST", NOW_LIVE).datasource == "Rainfall"
+
+
+def test_choose_source_ties_go_to_the_earlier_hint():
+    def src(name, last):
+        return H.DataSourceInfo(name, name, name, "mm", "StdSeries", last=last)
+
+    now = utc(2026, 11, 21, 21).timestamp()  # 22/11 09:00 NZST
+    both = [src("Rainfall (raw)", datetime(2026, 11, 22, 8, 55)), src("Rainfall", datetime(2026, 11, 22, 6))]
+    assert H.choose_source(both, WCRC_HINTS, "NZST", now).datasource == "Rainfall"  # 3 h apart: verified first
+    both[1].last = datetime(2026, 11, 21, 20)
+    assert H.choose_source(both, WCRC_HINTS, "NZST", now).datasource == "Rainfall (raw)"  # 13 h behind: raw
+    assert H.choose_source([src("Rainfall", None)], WCRC_HINTS, "NZST", now).datasource == "Rainfall"
+
+
+def test_real_wcrc_getdata_and_request_encoding():
+    s = H.parse_data(fx("wcrc_getdata_raw.xml"))
+    assert s.site == "Arthurs Pass EWS" and s.measurement == "Rainfall (raw)" and s.item == "Rainfall (raw)"
+    assert len(s) == 8 and s.times[0] == datetime(2026, 11, 22) and s.times[-1] == datetime(2026, 11, 22, 7)
+    assert s.values.tolist() == [0.0] * 8 and s.quality.tolist() == [200] * 8 and s.interpolation == "Incremental"
+    # spaces must go as %20: WCRC reads "+" literally ("No data source for Rainfall+(raw).")
+    u = H.build_url("https://hilltop.wcrc.govt.nz/", "data.hts", "GetData", Site="Ahaura Rv @ Gorge WCRC",
+                    Measurement="Rainfall (raw)")
+    assert "+" not in u and u.endswith("Site=Ahaura%20Rv%20%40%20Gorge%20WCRC&Measurement=Rainfall%20%28raw%29")
+
+
+class FakeTwoSeries(Http):
+    """A WCRC-like server: "Rainfall" (verified, ended 2023) lists only Alpha, "Rainfall (raw)" (live, QC 600 on
+    purpose) lists Alpha and Beta; GetData of "Rainfall" has nothing in the hours asked."""
+
+    def __init__(self):
+        super().__init__(retries=0, backoff=0.0, sleep=lambda s: None)
+        self.calls = []
+
+    def _once(self, url, headers):
+        self.calls.append(url)
+        q = {k: v[0] for k, v in urllib.parse.parse_qs(urllib.parse.urlsplit(url).query).items()}
+        req = q["Request"]
+        site = '<Site Name="{}"><Latitude>-42.4</Latitude><Longitude>171.7</Longitude></Site>'
+        if req == "MeasurementList" and "Site" not in q:
+            body = ('<HilltopServer><Measurement Name="Flow"/><Measurement Name="Rainfall"/>'
+                    '<Measurement Name="Rainfall (raw)"/></HilltopServer>')
+        elif req == "SiteList":
+            names = ["Alpha"] if q["Measurement"] == "Rainfall" else ["Alpha", "Beta"]
+            body = "<HilltopServer>" + "".join(site.format(n) for n in names) + "</HilltopServer>"
+        elif req == "MeasurementList":
+            ds = ('<DataSource Name="{0}"><TSType>StdSeries</TSType><Interpolation>Incremental</Interpolation>'
+                  '<From>2021-09-28T00:00:00</From><To>{1}</To><Measurement Name="{0}"><RequestAs>{0}</RequestAs>'
+                  '<Units>mm</Units></Measurement></DataSource>')
+            body = ("<HilltopServer>" + (ds.format("Rainfall", "2023-10-16T05:00:00") if q["Site"] == "Alpha" else "")
+                    + ds.format("Rainfall (raw)", "2026-11-21T15:00:00") + "</HilltopServer>")
+        elif req == "GetData" and q.get("tsType") == "StdQualSeries":
+            body = f'<Hilltop><Measurement SiteName="{q["Site"]}"><Data></Data></Measurement></Hilltop>'
+        elif req == "GetData" and q["Measurement"] == "Rainfall (raw)":
+            a, b = datetime.fromisoformat(q["From"]), datetime.fromisoformat(q["To"])
+            t, rows = a.replace(minute=0, second=0), []
+            while t <= min(b, datetime(2026, 11, 21, 15)):
+                rows.append(f"<E><T>{t.isoformat()}</T><I1>1.0</I1><Q1>600</Q1></E>")
+                t += timedelta(hours=1)
+            body = (f'<Hilltop><Measurement SiteName="{q["Site"]}"><DataSource Name="Rainfall (raw)"><ItemInfo '
+                    f'ItemNumber="1"><ItemName>Rainfall (raw)</ItemName><Units>mm</Units></ItemInfo></DataSource>'
+                    f'<Data>{"".join(rows)}</Data></Measurement></Hilltop>')
+        else:
+            body = f"<HilltopServer><Error>No data for {escape(q.get('Measurement', ''))}</Error></HilltopServer>"
+        return body.encode(), {}
+
+
+def test_run_uses_each_sites_live_series(tmp_path):
+    cfg = _cfg(tmp_path, base_url=["https://hilltop.example.test/"], hts=["data.hts"], measurements=list(WCRC_HINTS))
+    # a cache of the wrong series from an earlier run: all hours "outside" (fetched), as WCRC's first live run left
+    g0 = G.Gauge("test:Alpha", "test", "Alpha")
+    G.save_series(G.series_path(cfg.gauges_dir, g0), G.HourBlock.empty(hr(2026, 11, 19, 4), 48, G.F_OUTSIDE),
+                  {"measurement": "Rainfall"})
+    fake = FakeTwoSeries()
+    rep = G.run_gauges(cfg, now=utc(2026, 11, 21, 3), http=fake, log=lambda m: None)
+    c = rep["councils"]["test"]
+    assert c["measurement"] == "Rainfall, Rainfall (raw)" and (c["sites"], c["sites_active"]) == (2, 2)
+    assert any("series changed" in w for w in c["warnings"])
+    sites = {g["name"]: g for g in json.loads((cfg.gauges_dir / "sites.json").read_text())["gauges"]}
+    for n in ("Alpha", "Beta"):
+        assert (sites[n]["measurement"], sites[n]["datasource"], sites[n]["raw"]) == ("Rainfall (raw)",
+                                                                                     "Rainfall (raw)", True)
+        assert sites[n]["record_last"] == "2026-11-21T03:00:00Z"
+    gd = [u for u in fake.calls if "Request=GetData" in u and "tsType" not in u]
+    assert gd and all("Measurement=Rainfall%20%28raw%29" in u for u in gd)
+    gh = G.GaugeHours.load(cfg.gauges_dir / "gauges_hourly.npz")
+    assert gh.id.tolist() == ["test:Alpha", "test:Beta"]
+    assert np.all(gh.mm == 1.0) and set(gh.state.ravel().tolist()) == {G.RAW}  # QC 600, but raw telemetry
+    assert c["usable_frac"] == 1.0 and c["gauges"] == 2
+
+
+# --- ECan Open Data Portal (real answers) -----------------------------------------------------------
+def test_portal_site_list():
+    sites = E.parse_sites((ECAN / "sites_all.csv").read_bytes())
+    by = {s.name: s for s in sites}
+    assert list(by) == ["Shingle Fan", "Arthur's Pass EWS (ESNZ)", "Esk", "Botanic Gardens (CCC)", "Tai Tapu Yard"]
+    s = by["Shingle Fan"]
+    assert (s.site_no, s.owner, s.area, s.last_sample) == ("231910", "ECan", "N", datetime(2026, 11, 22, 9))
+    assert (s.lon, s.lat) == pytest.approx((173.90133667, -42.10688019))
+    assert by["Esk"].last_sample == datetime(2026, 11, 19, 20)  # 8:00:00 PM
+    assert by["Arthur's Pass EWS (ESNZ)"].owner == "ESNZ" and by["Botanic Gardens (CCC)"].owner == "CCC"
+    assert not by["Tai Tapu Yard"].located and by["Tai Tapu Yard"].last_sample == datetime(2026, 11, 22, 8, 45)
+    assert E.owner_name("Ecan") == E.owner_name("ECAN") == "ECan"
+    with pytest.raises(E.PortalError, match="not CSV"):
+        E.parse_sites(b"<!DOCTYPE html><html>Sorry, an error occurred</html>")
+    with pytest.raises(E.PortalError, match="without column"):
+        E.parse_sites(b"site_no,DateTime,RainfallTotal\r\n")
+
+
+def test_portal_hourly_totals_to_hours():
+    """Shingle Fan, Period=2_Days: 47 hour-end stamps (xx:59:59 or xx:00:00), 17.5 mm on 21/11 as the site list's
+    "-1 Day"; a stamp of 09:00 NZST on 22/11 is the hour ending 2026-11-21 21:00Z."""
+    tab = E.parse_hourly((ECAN / "hourly_2days_231910.csv").read_bytes())
+    assert len(tab.times) == 47 and tab.sites == ("231910",) and tab.off_hour == 0
+    assert tab.times[0] == datetime(2026, 11, 20, 11) and tab.times[1] == datetime(2026, 11, 20, 12)  # 10:59:59 AM
+    assert tab.times[-1] == datetime(2026, 11, 22, 9)
+    assert all(b - a == timedelta(hours=1) for a, b in zip(tab.times, tab.times[1:], strict=False))
+    day = [v for t, v in zip(tab.times, tab.mm, strict=True) if t.date() == datetime(2026, 11, 21).date()]
+    assert sum(day) == 17.5
+    t_s, _ = H.to_utc(tab.times, "NZST")
+    first, last = hr(2026, 11, 19, 23), hr(2026, 11, 21, 22)
+    b = G.hours_from_records(t_s, tab.mm, first, last, rec_end=utc(2026, 11, 21, 21).timestamp(), method="total-end")
+    assert b.hours[0] == hr(2026, 11, 19, 23) and np.isfinite(b.mm[:-1]).all()
+    assert G.STATES[b.state[-1]] == "missing" and G.F_OUTSIDE & b.flags[-1]  # after the last sample
+    assert float(np.nansum(b.mm)) == float(tab.mm.sum())
+    assert E.round_hour(datetime(2026, 11, 8, 9, 59, 59, 943000)) == datetime(2026, 11, 8, 10)
+    assert E.round_hour(datetime(2026, 11, 8, 10, 0, 0, 20000)) == datetime(2026, 11, 8, 10)
+    assert E.parse_time("8/11/2026 9:59:59 AM") == datetime(2026, 11, 8, 9, 59, 59)  # no leading zeros
+    assert E.parse_time("2026-11-22T09:00:00+13:00") == datetime(2026, 11, 22, 9)  # JSON's offset dropped
+    assert E.period_for(10) == ("2_Days", 47) and E.period_for(48) == ("1_Week", 167)
+    assert E.period_for(800) == ("1_Month", 671)
+
+
+class FakePortal(Http):
+    """ECan's portal at portal.example.test: the real site list (Esk's last sample moved back to 19/10) and, per
+    site, ``Period``'s rows back from the site's last whole hour, 0.5 mm each."""
+
+    ROWS = {"2_Days": 47, "1_Week": 167, "2_Weeks": 335, "1_Month": 742}
+
+    def __init__(self):
+        super().__init__(retries=0, backoff=0.0, sleep=lambda s: None)
+        self.sites = (ECAN / "sites_all.csv").read_bytes().replace(b"19/11/2026 8:00:00 PM", b"19/10/2026 8:00:00 PM")
+        self.last = {s.site_no: s.last_sample for s in E.parse_sites(self.sites)}
+        self.calls = []
+
+    @staticmethod
+    def stamp(t: datetime) -> str:
+        t = t - timedelta(seconds=1) if t.hour % 2 else t  # the portal's xx:59:59 jitter
+        return f"{t.day}/{t.month:02d}/{t.year} {t.hour % 12 or 12}:{t:%M:%S} {'AM' if t.hour < 12 else 'PM'}"
+
+    def _once(self, url, headers):
+        self.calls.append(url)
+        u = urllib.parse.urlsplit(url)
+        q = {k: v[0] for k, v in urllib.parse.parse_qs(u.query).items()}
+        if u.path.startswith("/data/51/") and q.get("Sites") == "All":
+            return self.sites, {}
+        if u.path.startswith("/data/78/") and q.get("Period") in self.ROWS:
+            end = self.last[q["SiteNo"]].replace(minute=0, second=0)
+            rows = [f"{q['SiteNo']},{self.stamp(end - timedelta(hours=k))},0.5"
+                    for k in range(self.ROWS[q["Period"]] - 1, -1, -1)]
+            return ("site_no,DateTime,RainfallTotal\r\n" + "\r\n".join(rows) + "\r\n").encode(), {}
+        raise urllib.error.HTTPError(url, 500, "Internal Server Error", {}, None)
+
+    def periods(self) -> dict[str, str]:
+        out = {}
+        for c in self.calls:
+            q = {k: v[0] for k, v in urllib.parse.parse_qs(urllib.parse.urlsplit(c).query).items()}
+            if "SiteNo" in q:
+                out[q["SiteNo"]] = q["Period"]
+        return out
+
+
+def _portal_cfg(tmp_path: Path):
+    d = tomllib.loads(CONFIG_PATH.read_text())
+    d["paths"]["nz_data"] = str(tmp_path)
+    d["gauges"] = {"days": 2, "keep_days": 3, "refetch_hours": 3, "request_gap_s": 0, "retries": 0,
+                   "councils": {"ec": {"name": "Test Canterbury", "kind": "ecan-portal", "region": "Canterbury",
+                                       "base_url": "https://portal.example.test/", "attribution": "ECan"}}}
+    return parse_config(d)
+
+
+def test_run_against_fake_portal(tmp_path):
+    cfg = _portal_cfg(tmp_path)
+    assert cfg.gauges.council("ec").hts == ()
+    now = utc(2026, 11, 21, 21)                                # = 22/11 09:00 NZST
+    fake = FakePortal()
+    rep = G.run_gauges(cfg, now=now, http=fake, log=lambda m: None)
+    c = rep["councils"]["ec"]
+    assert rep["answered"] and c["status"] == "ok" and c["kind"] == "ecan-portal"
+    assert (c["sites"], c["sites_active"], c["sites_skipped_inactive"], c["gauges"]) == (5, 4, 1, 4)
+    assert c["owners"] == {"ECan": 3, "ESNZ": 1, "CCC": 1}
+    # one request for the list, one per active site, the shortest period back from the site's last whole hour:
+    # Shingle Fan (09:00 NZST) needs all 48 hours (1_Week: 2_Days gives 47), the others' last whole hour is 08:00
+    assert len(fake.calls) == 5 and fake.periods() == {"231910": "1_Week", "219506": "2_Days", "325616": "2_Days",
+                                                       "326510": "2_Days"}
+    gh = G.GaugeHours.load(cfg.gauges_dir / "gauges_hourly.npz")
+    names = gh.name.tolist()
+    assert names == ["Shingle Fan", "Arthur's Pass EWS (ESNZ)", "Botanic Gardens (CCC)", "Tai Tapu Yard"]
+    assert gh.hour[-1] == hr(2026, 11, 21, 21) and len(gh.hour) == 48
+    assert gh.cell[names.index("Tai Tapu Yard")] == -1 and gh.cell[0] >= 0
+    assert G.GOOD not in gh.state  # provisional values: raw at best
+    assert set(gh.state[0].tolist()) == {G.RAW} and np.all(gh.mm[0] == 0.5)
+    # Arthur's Pass: last sample 08:00 NZST = 20Z, so the hour ending 21Z is after its record
+    ap = names.index("Arthur's Pass EWS (ESNZ)")
+    assert G.STATES[gh.state[ap, -1]] == "missing" and gh.flags[ap, -1] & G.F_OUTSIDE
+    # Botanic Gardens: last sample 08:55 NZST: the hour ending 09:00 NZST has no total yet (partly after its record)
+    bg = names.index("Botanic Gardens (CCC)")
+    assert G.STATES[gh.state[bg, -1]] == "missing" and gh.flags[bg, -1] & G.F_NO_VALUE
+    assert gh.flags[bg, -1] & G.F_PARTIAL and np.all(gh.ok[bg, :-1])
+    sites = {g["name"]: g for g in json.loads((cfg.gauges_dir / "sites.json").read_text())["gauges"]}
+    assert sites["Esk"]["active"] is False and sites["Esk"]["site_no"] == "311910"
+    assert sites["Botanic Gardens (CCC)"]["record_last"] == "2026-11-21T20:55:00Z" and sites["Shingle Fan"]["raw"]
+    assert rep["region_ids"] == {"Canterbury": "canterbury"}
+
+    # an hour later only the refetch hours are needed: the shortest period
+    fake2 = FakePortal()
+    G.run_gauges(cfg, now=utc(2026, 11, 21, 22), http=fake2, log=lambda m: None)
+    assert set(fake2.periods().values()) == {"2_Days"}
+
+
+def test_portal_site_list_failure_is_unanswered(tmp_path):
+    cfg = _portal_cfg(tmp_path)
+
+    class Down(FakePortal):
+        def _once(self, url, headers):
+            raise urllib.error.URLError("Connection reset by peer")
+
+    rep = G.run_gauges(cfg, now=utc(2026, 11, 21, 21), http=Down(), log=lambda m: None)
+    assert not rep["answered"] and rep["councils"]["ec"]["status"].startswith("failed")
+
+
+def test_portal_council_config():
+    d = tomllib.loads(CONFIG_PATH.read_text())
+    d["gauges"]["councils"]["x"] = {"name": "X", "kind": "sos", "base_url": "https://x.example/"}
+    with pytest.raises(ValueError, match="kind"):
+        parse_config(d)
+    d["gauges"]["councils"]["x"] = {"name": "X", "base_url": "https://x.example/"}  # hilltop needs hts
+    with pytest.raises(ValueError, match="lacks hts"):
+        parse_config(d)

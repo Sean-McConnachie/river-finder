@@ -1,0 +1,196 @@
+<?xml version="1.0" ?>
+<!-- REAL response, fetched 2026-11-21 21:08Z from https://envdata.tasman.govt.nz/data.hts?Service=Hilltop&amp;Request=MeasurementList&amp;Site=HY%20Takaka%20at%20Harwoods,
+     TRIMMED to its rain data sources (of 37) and a few measurements of each -->
+<HilltopServer>
+<Agency>Tasman District Council</Agency>
+<DataSource Name="Rainfall" Site="HY Takaka at Harwoods" >
+<NumItems>1</NumItems>
+<TSType>StdSeries</TSType>
+<DataType>SimpleTimeSeries</DataType>
+<Interpolation>Incremental</Interpolation>
+<ItemFormat>0</ItemFormat>
+<From>1988-01-25T05:00:00</From>
+<To>2026-11-22T09:00:00</To>
+<SensorGroup>Rainfall</SensorGroup>
+<Measurement Name="Rainfall">
+<Item>1</Item>
+<DefaultMeasurement />
+<RequestAs>Rainfall</RequestAs>
+<Divisor>1000</Divisor>
+<Units>mm</Units>
+<Format>###.#</Format>
+</Measurement>
+<Measurement Name="Synthetic Rainfall">
+<Item>1</Item>
+<DefaultMeasurement />
+<RequestAs>Synthetic Rainfall</RequestAs>
+<Units>mm</Units>
+<Format>##.#</Format>
+<MeasurementGroup>Calculated Data</MeasurementGroup>
+<VM>1</VM>
+<VMStart>1988-08-17T12:30:00</VMStart>
+<VMFinish>2026-11-22T08:00:00</VMFinish>
+<Ratset1>2</Ratset1>
+<Ratset2>15</Ratset2>
+</Measurement>
+<Measurement Name="4 hr MovAv">
+<Item>1</Item>
+<DefaultMeasurement />
+<RequestAs>4 hr MovAv</RequestAs>
+<Format>#.##</Format>
+<MeasurementGroup>Calculated Data</MeasurementGroup>
+<VM>1</VM>
+<VMStart>1975-03-28T11:00:00</VMStart>
+<VMFinish>2026-11-22T08:45:00</VMFinish>
+</Measurement>
+</DataSource>
+<DataSource Name="Raw Rainfall" Site="HY Takaka at Harwoods" >
+<NumItems>1</NumItems>
+<TSType>StdSeries</TSType>
+<DataType>SimpleTimeSeries</DataType>
+<Interpolation>Incremental</Interpolation>
+<ItemFormat>0</ItemFormat>
+<From>2010-07-28T11:30:00</From>
+<To>2026-10-28T06:30:00</To>
+<SensorGroup>Rainfall</SensorGroup>
+<Measurement Name="Raw Rainfall">
+<Item>1</Item>
+<DefaultMeasurement />
+<RequestAs>Raw Rainfall</RequestAs>
+<Divisor>1000</Divisor>
+<Units>mm</Units>
+<Format>##.#</Format>
+</Measurement>
+</DataSource>
+<DataSource Name="Checkgauge Rainfall" Site="HY Takaka at Harwoods" >
+<NumItems>1</NumItems>
+<TSType>StdSeries</TSType>
+<DataType>SimpleTimeSeries</DataType>
+<Interpolation>Incremental</Interpolation>
+<ItemFormat>0</ItemFormat>
+<From>1988-01-25T05:00:00</From>
+<To>2026-10-28T06:30:00</To>
+<SensorGroup>Rainfall</SensorGroup>
+<Measurement Name="Checkgauge Rainfall">
+<Item>1</Item>
+<DefaultMeasurement />
+<RequestAs>Checkgauge Rainfall</RequestAs>
+<Divisor>1000</Divisor>
+<Units>mm</Units>
+<Format>###.#</Format>
+</Measurement>
+</DataSource>
+<DataSource Name="Rainfall Back-up Logger" Site="HY Takaka at Harwoods" >
+<NumItems>1</NumItems>
+<TSType>StdSeries</TSType>
+<DataType>SimpleTimeSeries</DataType>
+<Interpolation>Incremental</Interpolation>
+<ItemFormat>0</ItemFormat>
+<From>2015-06-25T10:24:00</From>
+<To>2017-05-09T12:25:00</To>
+<SensorGroup>Rainfall</SensorGroup>
+<Measurement Name="Rainfall Back-up Logger">
+<Item>1</Item>
+<DefaultMeasurement />
+<RequestAs>Rainfall Back-up Logger</RequestAs>
+<Divisor>1000</Divisor>
+<Units>mm</Units>
+<Format>###.#</Format>
+</Measurement>
+</DataSource>
+<DataSource Name="Ensemble Rainfall Statistics" Site="HY Takaka at Harwoods" >
+<NumItems>4</NumItems>
+<TSType>StdSeries</TSType>
+<DataType>SimpleTimeSeries</DataType>
+<Interpolation>Histogram</Interpolation>
+<ItemFormat>0</ItemFormat>
+<From>2004-02-01T00:00:00</From>
+<To>2027-08-01T00:00:00</To>
+<SensorGroup>Rainfall</SensorGroup>
+<Measurement Name="Precipitation Month Mean">
+<Item>1</Item>
+<DefaultMeasurement />
+<RequestAs>Precipitation Month Mean</RequestAs>
+<Format>###</Format>
+<MeasurementGroup>Calculated Data</MeasurementGroup>
+</Measurement>
+</DataSource>
+<DataSource Name="Rainfall" Site="HY Takaka at Harwoods" >
+<NumItems>1</NumItems>
+<TSType>StdQualSeries</TSType>
+<DataType>SimpleTimeSeries</DataType>
+<Interpolation>Event</Interpolation>
+<ItemFormat>0</ItemFormat>
+<From>1988-01-25T05:00:00</From>
+<To>2026-11-22T09:00:00</To>
+<SensorGroup>Rainfall</SensorGroup>
+</DataSource>
+<DataSource Name="Raw Rainfall" Site="HY Takaka at Harwoods" >
+<NumItems>1</NumItems>
+<TSType>StdQualSeries</TSType>
+<DataType>SimpleTimeSeries</DataType>
+<Interpolation>Event</Interpolation>
+<ItemFormat>0</ItemFormat>
+<From>2010-07-28T11:30:00</From>
+<To>2026-10-28T06:30:00</To>
+<SensorGroup>Rainfall</SensorGroup>
+</DataSource>
+<DataSource Name="Checkgauge Rainfall" Site="HY Takaka at Harwoods" >
+<NumItems>1</NumItems>
+<TSType>StdQualSeries</TSType>
+<DataType>SimpleTimeSeries</DataType>
+<Interpolation>Event</Interpolation>
+<ItemFormat>0</ItemFormat>
+<From>1988-01-25T05:00:00</From>
+<To>2026-10-28T06:30:00</To>
+<SensorGroup>Rainfall</SensorGroup>
+</DataSource>
+<DataSource Name="Rainfall Back-up Logger" Site="HY Takaka at Harwoods" >
+<NumItems>1</NumItems>
+<TSType>StdQualSeries</TSType>
+<DataType>SimpleTimeSeries</DataType>
+<Interpolation>Event</Interpolation>
+<ItemFormat>0</ItemFormat>
+<From>2015-06-25T10:24:00</From>
+<To>2017-05-09T12:25:00</To>
+<SensorGroup>Rainfall</SensorGroup>
+</DataSource>
+<DataSource Name="Ensemble Rainfall Statistics" Site="HY Takaka at Harwoods" >
+<NumItems>4</NumItems>
+<TSType>StdQualSeries</TSType>
+<DataType>SimpleTimeSeries</DataType>
+<Interpolation>Event</Interpolation>
+<ItemFormat>0</ItemFormat>
+<From>2004-02-01T00:00:00</From>
+<To>2026-08-01T00:00:00</To>
+<SensorGroup>Rainfall</SensorGroup>
+</DataSource>
+<DataSource Name="Rainfall" Site="HY Takaka at Harwoods" >
+<NumItems>3</NumItems>
+<TSType>CheckSeries</TSType>
+<DataType>SimpleTimeSeries</DataType>
+<Interpolation>Discrete</Interpolation>
+<ItemFormat>45</ItemFormat>
+<From>1988-04-06T07:15:00</From>
+<To>2026-10-28T06:30:00</To>
+<SensorGroup>Rainfall</SensorGroup>
+<Measurement Name="Check Gauge Total">
+<Item>1</Item>
+<DefaultMeasurement />
+<RequestAs>Check Gauge Total</RequestAs>
+<Divisor>1000</Divisor>
+<Units>mm</Units>
+<Format>####</Format>
+</Measurement>
+<Measurement Name="Recorder Time">
+<Item>2</Item>
+<RequestAs>Recorder Time [Rainfall]</RequestAs>
+<Format>###</Format>
+</Measurement>
+<Measurement Name="Comment">
+<Item>3</Item>
+<RequestAs>Comment [Rainfall]</RequestAs>
+<Format>###</Format>
+</Measurement>
+</DataSource>
+</HilltopServer>
