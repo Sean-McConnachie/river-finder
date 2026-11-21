@@ -650,10 +650,6 @@ def _iso(epoch_s: float | None) -> str | None:
     return datetime.fromtimestamp(int(epoch_s), UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _parse_iso(s: str | None) -> float | None:
-    return None if not s else datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
-
-
 def _hour(h: int) -> str:
     return hour_time(h).strftime("%Y-%m-%d %H:00Z")
 
