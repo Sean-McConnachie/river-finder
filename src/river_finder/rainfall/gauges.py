@@ -747,9 +747,14 @@ def fetch_gauge(cl: HilltopClient, c: CouncilConfig, gc: GaugesConfig, g: Gauge,
         return False
     margin = 7200 if c.timezone == "Pacific/Auckland" else 3600
     total = c.method != "raw"
-    span0, span1 = (todo[0][0] - 1) * 3600, todo[-1][1] * 3600
+
+    def beyond(a: int, b: int) -> bool:  # hours a..b wholly after the record's end or before its start: no request
+        return ((rec1 is not None and rec1 <= (a - 1) * 3600) or (rec0 is not None and rec0 >= b * 3600))
+
+    asked = [(a, b) for a, b in todo if not beyond(a, b)]
+    span0, span1 = ((asked[0][0] - 1) * 3600, asked[-1][1] * 3600) if asked else (0, 0)
     qual = None
-    if c.quality:
+    if c.quality and asked:
         try:
             # to now: the code that covers the newest hours may be stamped after them (a code ends its period)
             q = cl.quality_series(g.name, g.measurement, span0 - margin, max(span1, int(now_s)) + margin)
@@ -762,6 +767,11 @@ def fetch_gauge(cl: HilltopClient, c: CouncilConfig, gc: GaugesConfig, g: Gauge,
     block, fetches = cached, list(meta.get("fetches", []))
     done = 0
     for a, b in todo:
+        if beyond(a, b):  # e.g. a closed site still in the site list: every hour "outside", nothing to ask
+            block = merge(block, hours_from_records(np.zeros(0, np.int64), np.zeros(0), a, b, rec_start=rec0,
+                                                    rec_end=rec1))
+            done += 1
+            continue
         try:
             s: Series = cl.get_data(g.name, g.measurement, (a - 1) * 3600 - margin, b * 3600 + margin, total=total,
                                     quality=c.quality)

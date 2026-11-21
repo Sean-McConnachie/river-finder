@@ -579,3 +579,15 @@ def test_pacer_spaces_requests():
     t[0] += 3.0
     p.wait()
     assert slept == [pytest.approx(0.75)]
+
+
+def test_closed_site_costs_no_data_requests(tmp_path):
+    cfg = _cfg(tmp_path)
+    closed = {"Gamma Closed": {"lat": -42.0, "lon": 172.0, "first": datetime(2001, 1, 1),
+                               "records": _tips(datetime(2026, 9, 30), datetime(2026, 10, 1))}}
+    fake = FakeHilltop(closed)
+    G.run_gauges(cfg, now=utc(2026, 11, 21, 3), http=fake, log=lambda m: None)
+    assert not [c for c in fake.calls if "Request=GetData" in c]  # neither data nor quality series
+    hours = G.GaugeHours.load(cfg.gauges_dir / "gauges_hourly.npz")
+    assert set(hours.state[0].tolist()) == {G.MISSING} and set(hours.flags[0].tolist()) == {G.F_OUTSIDE}
+    assert len(hours.hour) == 48
