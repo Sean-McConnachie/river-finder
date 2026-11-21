@@ -1014,7 +1014,7 @@ def discover(cfg: RainConfig, councils: list[str] | None = None, http: Http | No
                 except (FetchError, NotFound, HilltopError) as e:
                     p["measurements_error"] = str(e)
                     probes.append(p)
-                    log(f"{c.id}: {cl.url('MeasurementList')}: {e}")
+                    log(f"{c.id}: {e}" if isinstance(e, FetchError) else f"{c.id}: {cl.url('MeasurementList')}: {e}")
                     continue
                 m = choose_measurement(names, c.measurements)
                 p.update(measurements=len(names), rain_like=rain_like(names), chosen=m)

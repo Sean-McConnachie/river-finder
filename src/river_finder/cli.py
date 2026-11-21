@@ -229,18 +229,20 @@ def _rain(args):
             log(f"ECMWF unavailable: {e.code if isinstance(e, SystemExit) else e}")
             raise SystemExit(pipeline.EXIT_UNAVAILABLE) from None
     elif args.step == "gauges":
+        from dataclasses import replace
+
         from .rainfall import gauges
         from .rainfall.ecmwf import parse_hour
-        from .rainfall.fetch import Http
 
         now = parse_hour(args.now) if args.now else None
-        http = Http(timeout=cfg.gauges.timeout_s, retries=args.retries, log=log) if args.retries is not None else None
+        if args.retries is not None:
+            cfg = replace(cfg, gauges=replace(cfg.gauges, retries=args.retries))
         try:
             if args.discover:
-                gauges.discover(cfg, councils=args.council, http=http, now=now, log=log)
+                gauges.discover(cfg, councils=args.council, now=now, log=log)
                 return
             rep = gauges.run_gauges(cfg, councils=args.council, days=args.days, sites_only=args.sites_only, now=now,
-                                    refetch_hours=args.refetch_hours, http=http, log=log)
+                                    refetch_hours=args.refetch_hours, log=log)
         except KeyError as e:
             raise SystemExit(str(e).strip("'\"")) from None
         if not rep["answered"]:

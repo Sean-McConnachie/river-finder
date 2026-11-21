@@ -95,6 +95,9 @@ def test_errors_and_hostile_xml():
     body = '<?xml version="1.0" encoding="UTF-8"?><HilltopServer><Site Name="\xd5tira"/></HilltopServer>'
     assert [s.name for s in H.parse_site_list(body.encode("cp1252"))] == ["Õtira"]
     assert H.parse_data(b"<Hilltop><Agency>x</Agency></Hilltop>").times == []  # no Measurement: no records
+    with pytest.raises(H.HilltopError, match="unreadable record time"):
+        H.parse_data(b"<Hilltop><Measurement><Data><E><T>20/11/2026 1pm</T><I1>1</I1></E></Data></Measurement>"
+                     b"</Hilltop>")
     st = H.parse_status(fx("status.xml"))
     assert st["Agency"] == "Example Regional Council" and len(st["data_files"]) == 2
 

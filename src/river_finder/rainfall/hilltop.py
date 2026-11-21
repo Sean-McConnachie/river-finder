@@ -273,7 +273,10 @@ def parse_data(body: bytes) -> Series:
             t = el.findtext("T")
             if not t:
                 continue
-            times.append(parse_time(t))
+            try:
+                times.append(parse_time(t))
+            except ValueError:
+                raise HilltopError(f"unreadable record time {t!r}") from None
             v = el.find(f"I{item}")
             if v is None:
                 v = el.find("Value")
