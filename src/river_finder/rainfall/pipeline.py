@@ -110,6 +110,9 @@ def status(cfg: RainConfig, log=print) -> None:
             log(f"{kind} {fam}: {span}, {len(held)}/{len(rows)} hours held {prods}"
                 + (f", runs {runs}{age}" if runs else "")
                 + f", missing {[r['hour'] for r in rows if not r['product']]}")
+    from .gauges import status_line
+
+    log(status_line(cfg))
     tj = cfg.totals_path.with_suffix(".json")
     if not tj.exists():
         log(f"upstream totals: none yet ({cfg.totals_path.name}; river-finder rain totals)")

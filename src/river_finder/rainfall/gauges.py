@@ -687,8 +687,11 @@ def find_file(c: CouncilConfig, http: Http, pacer: Pacer, log=print) -> tuple[Hi
             cl = _client(c, base, hts, http, pacer)
             try:
                 names = cl.measurement_names()
-            except (FetchError, NotFound) as e:
-                tried.append(f"{cl.url('MeasurementList')}: {e}")
+            except NotFound:
+                tried.append(f"{cl.url('MeasurementList')}: HTTP 404")
+                continue
+            except FetchError as e:
+                tried.append(str(e))  # names the URL
                 continue
             except HilltopError as e:
                 answered = True

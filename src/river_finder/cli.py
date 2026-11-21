@@ -228,6 +228,24 @@ def _rain(args):
             # late or unreachable data, not a bug: a distinct exit code lets the hourly job keep the last files
             log(f"ECMWF unavailable: {e.code if isinstance(e, SystemExit) else e}")
             raise SystemExit(pipeline.EXIT_UNAVAILABLE) from None
+    elif args.step == "gauges":
+        from .rainfall import gauges
+        from .rainfall.ecmwf import parse_hour
+        from .rainfall.fetch import Http
+
+        now = parse_hour(args.now) if args.now else None
+        http = Http(timeout=cfg.gauges.timeout_s, retries=args.retries, log=log) if args.retries is not None else None
+        try:
+            if args.discover:
+                gauges.discover(cfg, councils=args.council, http=http, now=now, log=log)
+                return
+            rep = gauges.run_gauges(cfg, councils=args.council, days=args.days, sites_only=args.sites_only, now=now,
+                                    refetch_hours=args.refetch_hours, http=http, log=log)
+        except KeyError as e:
+            raise SystemExit(str(e).strip("'\"")) from None
+        if not rep["answered"]:
+            # no council server answered: unreachable or down, not a bug (the cache and outputs are kept)
+            raise SystemExit(pipeline.EXIT_UNAVAILABLE)
     elif args.step == "totals":
         pipeline.run_totals(cfg, windows=args.windows, scaled=not args.raw, rebuild_network=args.rebuild_network,
                             log=log)
@@ -321,12 +339,14 @@ def main(argv: list[str] | None = None) -> None:
     pl.add_argument("--models", nargs="*", help="cv: only these model ids (default: the whole zoo)")
     pl.add_argument("--repeats", type=int, default=5, help="cv: repeats of the 5-fold split")
     pl.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz")
-    pr = sub.add_parser("rain", help="rainfall per catchment: weights | ecmwf | totals | inputs | publish | status "
-                                     "(see src/river_finder/rainfall/, docs/live-rain.md)")
-    pr.add_argument("step", choices=["weights", "ecmwf", "totals", "inputs", "publish", "status"],
+    pr = sub.add_parser("rain", help="rainfall per catchment: weights | ecmwf | gauges | totals | inputs | publish | "
+                                     "status (see src/river_finder/rainfall/, docs/live-rain.md, docs/rain-gauges.md)")
+    pr.add_argument("step", choices=["weights", "ecmwf", "gauges", "totals", "inputs", "publish", "status"],
                     help="weights: grid-cell -> local-catchment matrices into <data>/rain/; ecmwf: ECMWF IFS observed "
                          "proxy and next-24-h forecast into <data>/rain/obs_ecmwf.npz and fc_ecmwf.npz (exit 75 when "
-                         "no run is published or the bucket does not answer); totals: upstream mm and m3 per reach and "
+                         "no run is published or the bucket does not answer); gauges: hourly rain-gauge totals from "
+                         "the councils' Hilltop servers into <data>/rain/gauges/ (gauges_hourly.npz + .json; exit 75 "
+                         "when no council answers); totals: upstream mm and m3 per reach and "
                          "window from the current buffers into <data>/rain/totals.npz (+ .json); inputs: the hourly "
                          "job's fixed inputs into --out (weights, network, viewer map, manifest); publish: per-region "
                          "rain files + index.json for the site into --out; status: config, weight files, buffers and "
@@ -342,11 +362,23 @@ def main(argv: list[str] | None = None) -> None:
     pr.add_argument("--fc", action="store_true", help="ecmwf: fill the forecast buffer (ECMWF_FC) only")
     pr.add_argument("--reader", choices=["openmeteo-s3", "ecmwf-s3"], default=None,
                     help="ecmwf: where hourly IFS rain comes from (default: ecmwf.reader in config/rainfall.toml)")
-    pr.add_argument("--now", default=None, help="ecmwf: treat this hour (YYYYMMDDHH, UTC) as now (default: the clock)")
+    pr.add_argument("--now", default=None,
+                    help="ecmwf, gauges: treat this hour (YYYYMMDDHH, UTC) as now (default: the clock)")
+    pr.add_argument("--days", type=int, default=None,
+                    help="gauges: fetch the last N days of hours (default: gauges.days in config/rainfall.toml)")
+    pr.add_argument("--council", nargs="+", default=None,
+                    help="gauges: only these council ids (default: every enabled [gauges.councils.*])")
+    pr.add_argument("--sites-only", action="store_true",
+                    help="gauges: refresh the site list and placement (sites.json) without fetching data")
+    pr.add_argument("--discover", action="store_true",
+                    help="gauges: probe each council's candidate servers and files and print what they have "
+                         "(<data>/rain/gauges/discover.json); fetches no series")
+    pr.add_argument("--refetch-hours", type=int, default=None,
+                    help="gauges: fetch the newest N hours again even if cached (default: gauges.refetch_hours)")
     pr.add_argument("--no-cache", action="store_true", help="ecmwf: ignore and do not write the decoded-field cache")
     pr.add_argument("--retries", type=int, default=None,
-                    help="ecmwf: retries per request on HTTP 429/5xx and network errors, backoff doubling from ~1 s "
-                         "(default 5)")
+                    help="ecmwf, gauges: retries per request on HTTP 429/5xx and network errors, backoff doubling from "
+                         "~1 s (default 5 for ecmwf, gauges.retries for gauges)")
     pr.add_argument("-o", "--out", type=Path, default=None,
                     help="inputs: directory for the job's inputs (the rain-inputs branch); publish: directory for "
                          "index.json and <region>.bin.gz (the rain branch)")
