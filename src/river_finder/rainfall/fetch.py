@@ -94,6 +94,9 @@ class Http:
                     raise FetchError(f"{url}: HTTP {e.code}") from None
                 last = f"HTTP {e.code}"
             except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+                if re.search(r"Tunnel connection failed: 40[37]", str(e)):
+                    # an HTTPS proxy that refuses the host: a policy, not a transient failure
+                    raise FetchError(f"{url}: refused by the proxy ({e})") from None
                 last = f"{type(e).__name__}: {e}"
             if attempt < self.retries:
                 self.stats.retries += 1

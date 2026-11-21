@@ -166,13 +166,15 @@ FILTER_ORDER = ["Northland", "Auckland", "Waikato", "Bay of Plenty", "Gisborne",
                 "Otago", "Southland"]
 
 
-def region_filters() -> gpd.GeoDataFrame:
-    """Polygons (EPSG:2193) of the river-guide regions, built from the council boundaries."""
+def region_filters(base: Path | None = None) -> gpd.GeoDataFrame:
+    """Polygons (EPSG:2193) of the river-guide regions, built from the council boundaries in ``base``
+    (default ``data/nz``: ``councils.gpkg`` and ``large_catchments.gpkg``)."""
     from shapely.geometry import box as sbox
     from shapely.ops import unary_union
 
-    c = gpd.read_file(nz_dir() / "councils.gpkg")
-    lc = gpd.read_file(nz_dir() / "large_catchments.gpkg")
+    d = Path(base) if base is not None else nz_dir()
+    c = gpd.read_file(d / "councils.gpkg")
+    lc = gpd.read_file(d / "large_catchments.gpkg")
     parts: dict[str, list] = {}
     for code, geom in zip(c["regc"], c.geometry, strict=True):
         if code in COUNCIL_TO_FILTER:
@@ -189,15 +191,16 @@ def region_filters() -> gpd.GeoDataFrame:
     return gpd.GeoDataFrame(rows, crs="EPSG:2193")
 
 
-def assign_regions(points: gpd.GeoSeries) -> np.ndarray:
+def assign_regions(points: gpd.GeoSeries, base: Path | None = None) -> np.ndarray:
     """River-guide region name for each point (EPSG:2193); nearest region for points offshore.
 
     Point-in-polygon first (prepared geometries, vectorised); only the few points left over
-    (on the coast, in estuaries) go through the much slower nearest-polygon search.
+    (on the coast, in estuaries) go through the much slower nearest-polygon search. ``base``: as
+    :func:`region_filters`.
     """
     import shapely
 
-    rf = region_filters()
+    rf = region_filters(base)
     pts = points.reset_index(drop=True)
     x, y = pts.x.to_numpy(), pts.y.to_numpy()
     out = np.full(len(pts), "", dtype=object)
