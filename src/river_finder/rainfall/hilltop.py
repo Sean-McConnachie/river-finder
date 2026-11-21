@@ -18,6 +18,11 @@ the request builder and parsers of hilltop-py 2.4 (``hilltoppy/utils.py``, ``web
     per data source: ``<DataSource Name="Rainfall"><TSType>StdSeries</TSType><DataType>SimpleTimeSeries
     </DataType><Interpolation>Incremental</Interpolation><From>..</From><To>..</To><Measurement
     Name="Rainfall"><Units>mm</Units><RequestAs>Rainfall [Rainfall]</RequestAs></Measurement>``
+    Sites keep several rain series: WCRC ``Rainfall`` (verified, to the last audit) and ``Rainfall
+    (raw)`` (live telemetry); TDC ``Rainfall`` (live) and ``Raw Rainfall`` (to the last visit).
+    ``Measurement=`` takes the ``RequestAs`` name: ``Rainfall (raw)``, not ``Rainfall [Rainfall (raw)]``
+    ("Rainfall is not a measurement in the Rainfall (raw) data source"). Spaces must be sent as
+    ``%20``: WCRC reads ``+`` literally ("No data source for Rainfall+(raw).").
 ``Request=GetData&Site=<s>&Measurement=<m>&From=<t>&To=<t>&ShowQuality=Yes``
     ``<Hilltop><Measurement SiteName=".."><DataSource ..><ItemInfo ItemNumber="1"><ItemName>Rainfall
     </ItemName><Units>mm</Units></ItemInfo></DataSource><Data DateFormat="Calendar" NumItems="1">
@@ -31,7 +36,11 @@ the request builder and parsers of hilltop-py 2.4 (``hilltoppy/utils.py``, ``web
 
 **Times.** Hilltop writes times without a zone, in whatever the council stores, and reads the
 ``From``/``To`` of a request the same way. NEMS asks recorders for NZST (UTC+12 all year), and
-Environment Canterbury says its times are NZST; a server on NZ wall-clock time is NZDT (UTC+13) from
+Environment Canterbury says its times are NZST. WCRC and TDC were checked live on 2026-11-21 (21:07Z):
+their newest records were 8-14 min old read as NZST and none was in the future, the server's own
+``P1D/now`` answered "No data from 21-Nov-2026 09:05:35 to 22-Nov-2026 09:05:35" at 21:05Z (its clock on
+NZST), and TDC keeps a separate ``Rainfall NZDT`` copy; the lag check against ECMWF is in
+``docs/rain-gauges.md``. A server on NZ wall-clock time is NZDT (UTC+13) from
 the last Sunday of September (02:00 NZST -> 03:00 NZDT) to the first Sunday of April (03:00 NZDT ->
 02:00 NZST). :func:`to_utc` takes the council's ``timezone`` (``NZST``, ``Pacific/Auckland`` or
 ``UTC``); a time that carries an offset (``Z``, ``+12:00``, as in WaterML 2) is read as given. On a

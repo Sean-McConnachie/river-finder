@@ -1,21 +1,32 @@
-"""Rain gauges (rf-t26.4): hourly totals from the councils' Hilltop servers, cached, for gauge scaling.
+"""Rain gauges (rf-t26.4): hourly totals from the councils' gauge servers, cached, for gauge scaling.
 
 ``river-finder rain gauges [--days N] [--council wcrc ecan tdc] [--sites-only] [--discover]`` reads
 ``[gauges]`` in ``config/rainfall.toml`` and, per enabled council (councils run in parallel, one
-request at a time per server with ``request_gap_s`` between them):
+request at a time per server with ``request_gap_s`` between them). For a Hilltop server (WCRC, TDC):
 
 1. **discovery**: the first ``base_url`` x ``hts`` whose file-level MeasurementList names a rainfall
-   measurement (``measurements`` hints in order; ``"Rainfall"`` also matches ``"Rainfall [Rainfall]"``);
-2. **sites**: ``SiteList&Location=LatLong&Measurement=<m>``. Each gauge is placed: NZTM2000
-   (EPSG:2193), the ECMWF 0.1° cell it falls in (``[grids.ecmwf]``, :meth:`.grid.GridSpec.cell_rc`)
-   and its scaling region (below);
-3. **per gauge**: ``MeasurementList&Site`` (first and last record time, units, the name to ask for),
-   then ``GetData`` (``ShowQuality=Yes``) for the wanted hours that are not cached yet plus the
-   newest ``refetch_hours``, in requests of at most ``chunk_days``, and the quality-code series
+   measurement (``measurements`` hints; ``"Rainfall"`` also matches ``"Rainfall [Rainfall]"``);
+2. **sites**: ``SiteList&Location=LatLong&Measurement=<m>`` for every hinted measurement the file has,
+   merged (WCRC lists 68 sites under ``Rainfall (raw)``, 54 under ``Rainfall``). Each gauge is placed:
+   NZTM2000 (EPSG:2193), the ECMWF 0.1° cell it falls in (``[grids.ecmwf]``,
+   :meth:`.grid.GridSpec.cell_rc`) and its scaling region (below);
+3. **per gauge**: ``MeasurementList&Site``; of its standard series that a hint names, the one whose
+   record reaches nearest to now (:func:`.hilltop.choose_source`: WCRC's live ``Rainfall (raw)``, not
+   its ``Rainfall`` verified to the last audit) gives the record times, units and the name to ask for
+   (``RequestAs``). A record that ended more than ``inactive_days`` ago makes the gauge inactive: no
+   data request, and no request at all on later runs until ``recheck_days`` after the check. Active
+   gauges get ``GetData`` (``ShowQuality=Yes``) for the wanted hours not cached yet plus the newest
+   ``refetch_hours``, in requests of at most ``chunk_days``, and the quality-code series
    (``tsType=StdQualSeries``) over the same span;
 4. **hours** (:func:`hours_from_records`): records summed into hours ending, with a state and flags
-   per hour; merged into the gauge's cache (newer fetch wins, hours older than ``keep_days`` dropped);
-5. **output**: ``gauges_hourly.npz`` + ``.json`` over the cached hours of every gauge of the councils run.
+   per hour; merged into the gauge's cache (newer fetch wins, hours older than ``keep_days`` dropped;
+   a change of series drops the cached hours). A series named raw (``Rainfall (raw)``) is never good;
+5. **output**: ``gauges_hourly.npz`` + ``.json`` over the cached hours of the active gauges of the
+   councils run (inactive ones stay in ``sites.json`` with ``"active": false``).
+
+ECan (``kind = "ecan-portal"``, :mod:`.ecanportal`): one site-list request (with every site's last
+sample, so inactive sites cost nothing), then one request per active gauge for the hourly totals of
+the shortest period that reaches the oldest hour it lacks (at most a month back).
 
 ``--sites-only`` stops after step 2 (site list + placement); ``--discover`` probes every candidate
 file and prints what each server has (measurements, collections, data files, a sample site, how far

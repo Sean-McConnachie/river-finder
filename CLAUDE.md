@@ -101,8 +101,8 @@ uv run river-finder rain weights --grid gsmap|ecmwf|all; rain status  # rainfall
 uv run river-finder rain ecmwf [--run latest|YYYYMMDDHH] [--obs] [--fc] [--reader openmeteo-s3|ecmwf-s3]  # ECMWF IFS hourly rain:
                                           # observed proxy to now (each hour from the newest run, leads 1-18) + next 24 h -> data/nz/rain/obs|fc_ecmwf.npz + .json (~1 min, ~35 MB)
 uv run river-finder rain gauges [--days N] [--council wcrc ecan tdc] [--sites-only] [--discover]  # rain gauges
-                                          # (Hilltop: WCRC, ECan, TDC): hourly totals, quality states, ECMWF cell and region per
-                                          # gauge -> data/nz/rain/gauges/gauges_hourly.npz + .json (docs/rain-gauges.md; unverified live)
+                                          # (Hilltop: WCRC, TDC; ECan Open Data Portal): hourly totals, quality states, ECMWF cell and
+                                          # region per active gauge -> data/nz/rain/gauges/gauges_hourly.npz + .json (docs/rain-gauges.md)
 uv run river-finder rain totals [--windows 1 2 ..] [--raw]  # upstream mm + m3 per reach and window (past/next x h) down the
                                           # network, missing-hour/product/scale flags -> data/nz/rain/totals.npz + .json (~10 s; rainfall/upstream.py)
 uv run river-finder rain inputs --out DIR; rain publish --out DIR  # live rain (docs/live-rain.md): the hourly job's inputs (~35 MB,

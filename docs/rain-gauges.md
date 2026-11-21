@@ -1,93 +1,143 @@
 # Rain gauges (rf-t26.4)
 
-Hourly rain-gauge totals from the regional councils' Hilltop servers, cached locally, for the gauge
+Hourly rain-gauge totals from the regional councils' gauge servers, cached locally, for the gauge
 scale factors of rf-t26.5 (grid totals vs gauge totals per source and region over a rolling 30 days).
-First councils: West Coast (WCRC), Canterbury (ECan), Tasman (TDC).
+First councils: West Coast (WCRC) and Tasman (TDC) through their Hilltop servers, Canterbury (ECan)
+through its Open Data Portal.
 
-Code: `src/river_finder/rainfall/hilltop.py` (client, XML, time zones) and
-`src/river_finder/rainfall/gauges.py` (hours, quality states, placement, cache, outputs; its docstring is
-the reference). Config: `[gauges]` in `config/rainfall.toml`. Tests: `tests/test_rainfall_gauges.py`
-with synthetic XML in `tests/fixtures/hilltop/`.
+Code: `src/river_finder/rainfall/hilltop.py` (Hilltop client, XML, time zones, choice of rain series),
+`src/river_finder/rainfall/ecanportal.py` (ECan's portal) and `src/river_finder/rainfall/gauges.py`
+(hours, quality states, placement, cache, outputs; its docstring is the reference). Config: `[gauges]`
+in `config/rainfall.toml`. Tests: `tests/test_rainfall_gauges.py`; fixtures in `tests/fixtures/hilltop/`
+(synthetic, plus three real WCRC/TDC answers) and `tests/fixtures/ecan/` (real, trimmed).
 
-## Status: not verified against a live server
+## Status: verified live (2026-11-21)
 
-The development container's network proxy refused every council host (HTTP 403 on CONNECT; see the
-list below), and so was fetching documentation from council sites (`www.hbrc.govt.nz`). So the client is built
-against the documented Hilltop XML format and the fixtures are hand-written from it. Before relying
-on it, run the discovery where the servers answer (any normal machine, a GitHub Actions runner):
+From the development container (`rain gauges --days 35`, all three councils in parallel, first run
+over an empty cache for ECan and WCRC's raw series; the TDC cache held 3 days):
 
-```bash
-uv run river-finder rain gauges --discover            # every council; or --council wcrc
-cat data/nz/rain/gauges/discover.json                 # per server root x .hts file: measurements,
-                                                      # collections, data files, sites, a sample
-```
+TODO_LIVE_TABLE
 
-and fix `hts`, `measurements` and `timezone` per council from what it prints. Things to check:
+Sites = in the site lists; active = record reaching within `inactive_days` (30) of now; usable =
+share of the active gauges' hours with a value (good or raw) over the 35 days asked (ECan's portal
+reaches back a month at most, see below), and over the last 30 days. Routine runs (the newest 48 h)
+cost one MeasurementList, one quality series and one GetData per active Hilltop gauge, and one request
+per active ECan gauge plus the site list; known-inactive Hilltop sites cost nothing until
+`recheck_days` (7) after their last check.
 
-- **The `.hts` file with rainfall.** Only the hosts are documented; `data.hts` (Hilltop Server's
-  usual name) is a guess for all three. `--discover` also prints `Request=Status` (the server's data
-  files) and the collections, which name the right file when `data.hts` is wrong.
-- **The time zone.** `discover.json` gives, for a sample site, how far its newest record is from now
-  read as NZST, NZ wall clock and UTC: a live gauge's newest record is minutes old in the right zone,
-  and an hour "in the future" read as NZST means the server is on NZDT. The fetch run warns about the
-  same thing per site.
-- **Quality codes.** Whether the server sends `Q1` with `ShowQuality=Yes` and has a `StdQualSeries`
-  (both optional here).
+What the first, blind version got wrong, and what changed:
+
+- **WCRC: 0 active of 54.** Each WCRC site keeps two rain series: `Rainfall`, verified up to the last
+  audit (e.g. Arthurs Pass EWS 2021-09-28 .. 2023-10-16), and `Rainfall (raw)`, the live telemetry (to
+  2026-11-22T07:00 NZST, two hours before the request). The code took `Rainfall`. Now every hinted
+  measurement's site list is read and merged (68 sites list `Rainfall (raw)`, 54 `Rainfall`, 18
+  `Rainfall (corrected)`; 69 in all), and per site the series whose record reaches nearest to now is
+  used (`hilltop.choose_source`; series within 6 h of each other go to the earlier name in
+  `measurements`, verified first). A series named raw is never `good` (WCRC sends QC 200 on it anyway).
+  A change of series drops the site's cached hours.
+- **Request names.** `Measurement=` takes the series' `RequestAs` (`Rainfall (raw)`); `Rainfall [Rainfall
+  (raw)]` is refused ("Rainfall is not a measurement in the Rainfall (raw) data source"). Spaces must be
+  `%20`: WCRC reads `+` literally ("No data source for Rainfall+(raw)."). The client always sent `%20`
+  (`urllib.parse.quote`; test `test_real_wcrc_getdata_and_request_encoding`).
+- **TDC: closed sites.** 98 of TDC's 170 `Rainfall` sites closed years ago (records to 1987 .. 2026-02).
+  They are now inactive: not in `gauges_hourly`, no data request, and no request at all on later runs
+  until a recheck. TDC's `Rainfall` is live (verified to the last visit, QC 200 after it); `Raw
+  Rainfall` ends at the last visit; 9 sites list only `Rainfall [Combined Data]`.
+- **TDC resets connections** (`Connection reset by peer`, ~4 % of requests): retried with backoff
+  (`retries = 4`), none lost.
+- **ECan's Hilltop server** (`wateruse.ecan.govt.nz`) reset every https connection; plain http does not
+  leave the container. ECan now comes from its Open Data Portal (below); the Hilltop entry is kept as
+  `[gauges.councils.ecan_hilltop]`, `enabled = false`.
+
+## Time zones
+
+All three councils send NZST (UTC+12 all year); `timezone = "NZST"` for each. Evidence, 2026-11-21:
+
+| council | newest records at the check | read as NZST | as NZDT | other |
+|---|---|---|---|---|
+| WCRC (21:09Z) | 08:55 local (5-min gauges), 06:00-08:00 (hourly ones) | 14 min old | 74 min | the server's `TimeInterval=P1D/now` at 21:05Z: "No data from 21-Nov-2026 09:05:35 to 22-Nov-2026 09:05:35": its clock is on NZST |
+| TDC (21:08Z) | `Rainfall` to 09:00, telemetry log (`Comms`) to 09:04:36 | 8 min, 4 min | 68 min, 64 min | TDC keeps a separate `Rainfall NZDT` copy of its rainfall |
+| ECan (21:22Z) | last samples 09:00-09:15 at 97 of 110 sites | 7-22 min | 67-82 min | ECan: "times are in NZ standard time; during daylight saving add one hour"; the portal's JSON/XML append `+13:00` (the server's own offset, a .NET serialisation of the same wall-clock value): not used, the CSV is |
+
+None was in the future read as NZST (the run warns when a record is more than 10 min ahead).
+
+**Lag check against ECMWF.** TODO_LAG
 
 ## Endpoints
 
-| council | server roots tried (in order) | file | where the host is documented |
-|---|---|---|---|
-| `wcrc` West Coast Regional Council | `https://hilltop.wcrc.govt.nz/`, `http://hilltop.wcrc.govt.nz/` | `data.hts` (unverified) | MfE, *Stocktake of data quality code and metadata usage in regional council water quality datasets* (2023), table of council data servers: `http://hilltop.wcrc.govt.nz/wq.hts?service=Hilltop&request=GetData...` (water quality) [1]; WCRC's flood-watch site reads a Hilltop server ("Failed to retrieve Hilltop server data" on `flood-watch.wcrc.govt.nz`) [2] |
-| `ecan` Environment Canterbury | `https://wateruse.ecan.govt.nz/`, `http://wateruse.ecan.govt.nz/` | `data.hts` (unverified) | a public Hilltop Server page at `http://wateruse.ecan.govt.nz/RiverRecorderQcEcanDaily.hts` (search index) [3]; the MfE stocktake lists `wateruse.ecan.govt.nz/wqlawa.hts` [1]; hilltop-py's tests name `http://data.ecan.govt.nz/` + `WQAll.hts` [4] |
-| `tdc` Tasman District Council | `https://envdata.tasman.govt.nz/`, `http://envdata.tasman.govt.nz/` | `data.hts` (unverified) | the MfE stocktake lists `envdata.tasman.govt.nz/WaterQuality.hts` [1]; TDC's rainfall pages cover Tasman and Nelson sites [5] |
+| council | kind | server | file / dataset | notes |
+|---|---|---|---|---|
+| `wcrc` West Coast Regional Council | hilltop | `https://hilltop.wcrc.govt.nz/` (Hilltop Server 2404.2.2.62) | `data.hts` (serves the default file, `websitedata20260424.hts` on 2026-11-21; `PublicLive.hts` answers the same) | series `Rainfall`, `Rainfall (corrected)`, `Rainfall (raw)`; hourly or 5-min incremental records, QC 200 on raw |
+| `tdc` Tasman District Council | hilltop | `https://envdata.tasman.govt.nz/` | `data.hts` | series `Rainfall` (live), `Raw Rainfall` (to the last visit); 15-min incremental records; QC 500 to the last visit, 200 after |
+| `ecan` Environment Canterbury | ecan-portal | `https://data.ecan.govt.nz/` (Open Data Portal) | `data/51` site list, `data/78` hourly totals | below |
+| `ecan_hilltop` (off) | hilltop | `https://wateruse.ecan.govt.nz/` | `data.hts` (unverified) | resets every https connection from here |
 
-The MfE stocktake was read through a search engine's summary of it (the PDF itself could not be
-fetched here). ECan's own public route for rainfall is not Hilltop: its **Open Data Portal**
-(`data.ecan.govt.nz`, collection "Rainfall": "Rainfall for individual site", "Rainfall summary for
-site", "Rainfall summary by area"; csv, json, xml) [6], and a newer **Environmental Observations
-API** on `apidevelopers.ecan.govt.nz` (sign-in and a subscription key; river flow so far) [7]. ECan
-says most of its 90+ rainfall sites record events (0.5 mm tips) and that its times are NZ standard
-time [8]. Neither is implemented: their URL templates could not be read here. If ECan's Hilltop
-server has no public rainfall file, an adapter for the Open Data Portal is the next step (same
-`HourBlock` output: records -> `hours_from_records`).
-
-Request format (all councils): Hilltop Server key-value requests, documented by Hawke's Bay Regional
-Council [9] [10] and implemented in hilltop-py 2.4 [4] (and HorizonsRC's `whurl` [11]):
+Hilltop requests (key-value, documented by Hawke's Bay Regional Council [9] [10], implemented in
+hilltop-py 2.4 [4] and HorizonsRC's `whurl` [11]):
 
 ```
 <root><file>.hts?Service=Hilltop&Request=MeasurementList                       # measurements in the file
-<root><file>.hts?Service=Hilltop&Request=SiteList&Location=LatLong&Measurement=Rainfall
-<root><file>.hts?Service=Hilltop&Request=MeasurementList&Site=<site>           # From/To, units, RequestAs
-<root><file>.hts?Service=Hilltop&Request=GetData&Site=<site>&Measurement=<m>&From=<t>&To=<t>&ShowQuality=Yes
+<root><file>.hts?Service=Hilltop&Request=SiteList&Location=LatLong&Measurement=Rainfall%20(raw)
+<root><file>.hts?Service=Hilltop&Request=MeasurementList&Site=<site>           # per series: From/To, units, RequestAs
+<root><file>.hts?Service=Hilltop&Request=GetData&Site=<site>&Measurement=<RequestAs>&From=<t>&To=<t>&ShowQuality=Yes
 <root><file>.hts?Service=Hilltop&Request=GetData&...&tsType=StdQualSeries      # the quality-code series
-   (method total-*: &Method=Total&Interval=1%20hour&Alignment=00:00)
 ```
 
-Measurement names differ between councils: `measurements = ["Rainfall", "Rainfall Total", "Rain"]` is
-tried in order against the file's MeasurementList, case-insensitively, and `"Rainfall"` also matches
-`"Rainfall [Rainfall]"` (name plus data source). Per site, the name sent with GetData is the data
-source's `RequestAs` when the server gives one.
+`Request=Status` lists the server's data files; there is no request that gives every site's record end
+at once (`MeasurementList&Measurement=` without a site lists measurements only), so record ends are
+kept in `sites.json` and known-inactive sites are skipped from it.
 
-### Hosts refused in the development container
+### ECan Open Data Portal
 
-All with `CONNECT tunnel failed, response 403` ("no rule or network setting allows this host"):
-`hilltop.wcrc.govt.nz`, `envirodata.wcrc.govt.nz`, `www.wcrc.govt.nz`, `wateruse.ecan.govt.nz`,
-`data.ecan.govt.nz`, `www.ecan.govt.nz`, `apidevelopers.ecan.govt.nz`, `envdata.tasman.govt.nz`,
-`www.tasman.govt.nz`, `www.hbrc.govt.nz` (documentation). Plain `http://` does not leave the container
-at all (no HTTP proxy). The client does not retry a proxy refusal (`fetch.Http`).
+ECan's portal (ASP.NET) answers `data/<method id>/<collection>/<dataset name>/<format>?<params>`; only
+the method id matters (any path words give the same answer), formats CSV, XML, JSON, JSONP. The
+dataset pages that document the parameters (`/Catalogue/Method?MethodId=78`) redirect to a click-through
+data agreement (a form asking for a user type and "I understand and agree"); it was not accepted. The
+parameters were found by probing the data URLs: a wrong parameter name answers HTTP 500, a right name
+with a wrong value an empty table (one request per name tried).
+
+```
+https://data.ecan.govt.nz/data/51/Rainfall/Rainfall%20summary%20by%20area/CSV?Sites=All     # or North, South
+https://data.ecan.govt.nz/data/78/Rainfall/Rainfall%20for%20individual%20site/CSV?SiteNo=231910&Period=2_Days
+https://data.ecan.govt.nz/data/134/Rainfall/Rainfall%20summary%20for%20site/CSV?SiteNo=231910  # one row (not used)
+```
+
+- **Site list** (`data/51`, `Sites=All`): 110 rows: `Site Name, Last Sample, Last Hour, RainToday, -1 Day ..
+  -7 Day, Total Rainfall, SITE_NO, ShortName, Sub_text, SiteOwner, Location (N/S), WGS84_Longitude,
+  WGS84_Latitude, OwnerLogo`. Owners: ECan 93 (written `ECan`, `Ecan`, `ECAN`), Christchurch City Council
+  11, Earth Sciences New Zealand 6; one site (Tai Tapu Yard) has no location. The last sample per site
+  makes inactive sites free.
+- **Hourly totals** (`data/78`): `site_no, DateTime, RainfallTotal`, hourly for `Period` = `2_Days`,
+  `1_Week`, `2_Weeks`, `1_Month`; `3_Months` and `1_Year` are daily; other values (`1_Day`, `7_Days`,
+  `6_Weeks`, `2_Months`, ...) give an empty table, and `StartDate`/`EndDate` are not taken. A period
+  counts back from the site's last whole hour, not from the request: 47 rows for `2_Days`, 167 for
+  `1_Week`, 742 for `1_Month` (to 22/11). So a month is the longest hourly history the portal has;
+  the cache keeps what earlier runs got (`keep_days` 60). Each run asks for the shortest period that
+  reaches the oldest hour the cache lacks. Stamps are the end of the hour, a few ms either side
+  (`9:59:59 AM`, `12:00:00 PM`; JSON `09:59:59.943`): rounded to the nearest hour. The newest row is
+  the hour ending at the last sample when that is on the hour (a part hour is not given until it is
+  complete). Checked: the 21/11 hours of Shingle Fan sum to the site list's `-1 Day` (17.5 mm).
+- No quality codes, and the data terms call the values provisional: every ECan hour is `raw`.
+
+### Hosts from the development container
+
+Reachable over https: `hilltop.wcrc.govt.nz`, `envdata.tasman.govt.nz`, `data.ecan.govt.nz`.
+`wateruse.ecan.govt.nz` resets every https connection. Refused by the proxy (HTTP 403):
+`www.ecan.govt.nz` (ECan's rainfall pages), `gis.ecan.govt.nz` (the Canterbury Maps layer of rainfall
+sites). Plain `http://` does not leave the container at all; the `http://` fallbacks in the config are
+for other machines.
 
 ## Licences and attribution
 
 | council | licence | attribution |
 |---|---|---|
 | WCRC | not stated for the Hilltop service; WCRC calls its web rainfall and river data raw (straight from telemetry, not quality controlled) and asks for data requests to hydrologydata@wcrc.govt.nz [2] | "Rainfall data: West Coast Regional Council" |
-| ECan | Canterbury Maps open data is Creative Commons Attribution; terms of the Hilltop service and the Open Data Portal not checked here; the developer APIs have their own terms of use [7] | "Rainfall data: Environment Canterbury" |
+| ECan | the Open Data Portal: "All data unless specifically stated is licensed under a Creative Commons Attribution 4.0 International License" [6]. Its data terms (`/Catalogue/Agreement`) add: Environment Canterbury is to be named as the source, without ECan, Metro or Metroinfo logos; no advertising in applications using the data without ECan's permission; data shown on a public site is to be kept current or removed; the user indemnifies ECan for losses from a breach; values are provisional, not reviewed. CCC and ESNZ gauges are served under the same page (owner per gauge in `sites.json`) | "Rainfall data: Environment Canterbury (with Christchurch City Council and Earth Sciences New Zealand gauges)" |
 | TDC | not stated for the Hilltop service: check TDC's terms before publishing anything derived | "Rainfall data: Tasman District Council" |
 
 Each council's `licence` and `attribution` are in the config and copied into `gauges_hourly.json`
-(`councils.<id>`) and the `.npz` meta. Confirm the terms before gauge data or scaled rain derived from
-it is published on the site.
+(`councils.<id>`) and the `.npz` meta. Confirm WCRC's and TDC's terms before gauge data or scaled rain
+derived from it is published on the site.
 
 ## Running
 
@@ -95,68 +145,77 @@ it is published on the site.
 uv run river-finder rain gauges                         # every enabled council: the last 35 days on the first
                                                         # run, then only new hours + the newest 48 h
 uv run river-finder rain gauges --council wcrc tdc --days 7
-uv run river-finder rain gauges --sites-only            # site list and placement only (sites.json)
-uv run river-finder rain gauges --discover              # probe servers and files (discover.json)
+uv run river-finder rain gauges --sites-only            # site lists and placement only (sites.json)
+uv run river-finder rain gauges --discover              # probe the enabled councils' servers (discover.json)
+uv run river-finder rain gauges --discover --council ecan_hilltop   # ... or a disabled one
 uv run river-finder rain gauges --refetch-hours 0       # do not fetch cached hours again
+uv run river-finder rain gauges --data /path/to/data/nz # another national data directory
 uv run river-finder rain status                         # includes a line on the gauge cache
 ```
 
 Councils run in parallel, each server one request at a time with at least `request_gap_s` (1 s)
 between requests; HTTP 429/5xx and network errors are retried `retries` times with doubling backoff.
-Per run and site: one MeasurementList, one quality series, and one GetData per `chunk_days` (10) of
-hours to fetch; a site whose record ended before the hours asked (closed sites stay in site lists) costs
-no data request. Exit status 75 when no council's server answered (as `rain ecmwf`: try later); the
-cache and the last outputs are kept. A council that fails keeps its cached gauges in the output, their
-new hours `not_fetched`.
+Hilltop, per run and active site: one MeasurementList, one quality series, and one GetData per
+`chunk_days` (10) of hours to fetch. ECan: the site list and one request per active site. Exit status
+75 when no council's server answered (as `rain ecmwf`: try later); the cache and the last outputs are
+kept. A council that fails keeps its cached gauges in the output, their new hours `not_fetched`.
 
 ## Output (`data/nz/rain/gauges/`)
 
-- `sites.json`: per council the server root, file and measurement found and when; per gauge `id`
-  (`"<council>:<site name>"`), `council`, `name`, `measurement`, `lon`/`lat` (WGS84; the server's
-  NZGD2000), `x`/`y` (NZTM2000, EPSG:2193), `cell` (flat index `row * nx + col` on `[grids.ecmwf]`, -1
-  outside or unplaced), `cell_row`, `cell_col`, `region` (network region name), `region_id` (site id,
-  `"west-coast"`), `region_method`, `units`, `interpolation`, `record_first`/`record_last` (UTC);
+- `sites.json`: per council the server root, file and measurements found, when, how many sites and
+  active ones; per gauge `id` (`"<council>:<site name>"`), `council`, `name`, `measurement` (the name
+  GetData asks for), `datasource` (the series chosen), `raw` (raw telemetry), `site_no` and `owner`
+  (ECan), `lon`/`lat` (WGS84; the server's NZGD2000), `x`/`y` (NZTM2000, EPSG:2193), `cell` (flat
+  index `row * nx + col` on `[grids.ecmwf]`, -1 outside or unplaced), `cell_row`, `cell_col`, `region`
+  (network region name), `region_id` (site id, `"west-coast"`), `region_method`, `units`,
+  `interpolation`, `record_first`/`record_last` (UTC; ECan: the last sample), `checked` (when the record
+  times were read), `active`;
 - `series/<council>/<site-slug>-<hash>.npz`: one gauge's cached hours (contiguous; `mm`, `qc`,
   `state`, `flags`, kept `keep_days` = 60) and its recent fetches;
-- `gauges_hourly.npz`: `hour` (T,) consecutive hours ending (hours since the epoch, as the rain
-  buffers), `mm` float32 (G, T) with NaN = missing, `qc` int16 (-1 none), `state` and `flags` uint8;
-  per gauge `id`, `council`, `name`, `lon`, `lat`, `x`, `y`, `cell`, `cell_row`, `cell_col`,
-  `region_of` (index into `meta.regions`, -1 none); `meta` (grid, regions and ids, councils with
-  licence and attribution, state and flag names). `GaugeHours.load` reads it;
-- `gauges_hourly.json`: the run report: per council (server, file, measurement, status, errors,
-  warnings, time-zone counts, requests and bytes), per region (gauges, how many cover >= 90 % of the
-  last 30 days), per gauge (place, cell centre, region, record times, hours per state over the cache and
-  the last 30 days, mm in the last 24 h and 30 days, last hour with a value);
+- `gauges_hourly.npz`: the active gauges only: `hour` (T,) consecutive hours ending (hours since the
+  epoch, as the rain buffers), `mm` float32 (G, T) with NaN = missing, `qc` int16 (-1 none), `state` and
+  `flags` uint8; per gauge `id`, `council`, `name`, `lon`, `lat`, `x`, `y`, `cell`, `cell_row`,
+  `cell_col`, `region_of` (index into `meta.regions`, -1 none); `meta` (grid, regions and ids,
+  councils with licence and attribution, state and flag names). `GaugeHours.load` reads it;
+- `gauges_hourly.json`: the run report: per council (kind, server, file, measurements, status, sites,
+  active sites, skipped inactive sites, gauges in the output, usable share over the output and the last
+  30 days, gauges with >= 90 % of the last 30 days, errors, warnings, time-zone counts, requests and
+  bytes, ECan's owners), per region (gauges, how many cover >= 90 % of the last 30 days), per gauge
+  (place, cell centre, region, record times, hours per state over the cache and the last 30 days, mm in
+  the last 24 h and 30 days, last hour with a value);
 - `discover.json` (`--discover` only).
 
 **Hours.** Hour `h` holds the rain in `(h - 1, h]` UTC (hour ending): a record stamped `hh:00:00`
-belongs to the hour ending `hh:00`. `method = "raw"` (default) sums the records in each hour
-(incremental tips or interval totals); an hour inside the record with no record is 0 mm.
-`total-end` / `total-start` take the server's own hourly totals instead (whether a server stamps them
-at the start or end of the hour is not documented: check before switching).
+belongs to the hour ending `hh:00`. `method = "raw"` (default for Hilltop) sums the records in each
+hour (incremental tips or interval totals); an hour inside the record with no record is 0 mm.
+`total-end` / `total-start` take the server's own hourly totals instead (whether a Hilltop server
+stamps them at the start or end of the hour is not documented: check before switching). ECan's
+portal totals are end-stamped (`total-end`); an hour without a row is missing (`no_value`).
 
-**States** (use `state <= 1`, `GaugeHours.ok`): 0 good (value, quality code >= 500 for the whole hour),
-1 raw (value, not quality coded yet: no code, QC 0 or 200, the norm for recent telemetry), 2 suspect
-(value kept, not to be used), 3 missing (NaN). **Flags** (bits): 1 gap (a `<Gap/>` covers the hour),
-2 partial (part of the hour in a gap or outside the record), 4 outside (before the record's first or
-after its last time), 8 no_value (`total-*`: no total returned), 16 range (a record unreadable or
-negative, or the hour above `max_mm_per_hour` = 200), 32 low_qc (QC 300-499 or not a NEMS code),
-64 qc_missing (QC 100), 128 not_fetched. Quality codes follow the NEMS National Quality Code Schema
-(600 good, 500 fair, 400 compromised, 100 missing record) [12]; a code in the quality series is taken
-to end the period it applies to (time after the last code is not coded yet): this convention is an
-assumption to check with `--discover`.
+**States** (use `state <= 1`, `GaugeHours.ok`): 0 good (value, quality code >= 500 for the whole hour,
+not a raw series), 1 raw (value, not quality coded yet: no code, QC 0 or 200, a raw series, or ECan),
+2 suspect (value kept, not to be used), 3 missing (NaN). **Flags** (bits): 1 gap (a `<Gap/>` covers the
+hour), 2 partial (part of the hour in a gap or outside the record), 4 outside (before the record's
+first or after its last time), 8 no_value (`total-*`, ECan: no total returned), 16 range (a record
+unreadable or negative, or the hour above `max_mm_per_hour` = 200), 32 low_qc (QC 300-499 or not a NEMS
+code), 64 qc_missing (QC 100), 128 not_fetched. Quality codes follow the NEMS National Quality Code
+Schema (600 good, 500 fair, 400 compromised, 200 not verified, 100 missing record) [12]; a code in the
+quality series ends the period it applies to (TDC's HY Takaka at Harwoods: 500 at 2026-10-28T06:30,
+the last visit, then 200 at 06:30:01 and at the record's end, 2026-11-22T09:00).
 
-**Dry spells.** A tipping-bucket gauge records nothing when it does not rain, so the hours after its
-last record cannot be told apart from an outage: they are `outside` (missing) until the gauge reports
-again; `refetch_hours` fetches them again. Over a 30-day comparison this only drops dry hours.
+**Dry spells.** A tipping-bucket gauge that sends only tips records nothing when it does not rain, so
+the hours after its last record cannot be told apart from an outage: they are `outside` (missing)
+until the gauge reports again; `refetch_hours` fetches them again. The WCRC and TDC series looked at
+send a record every interval, zeros included (WCRC hourly or 5-min, TDC 15-min), so for them the record
+end is the telemetry's last poll.
 
-**Time zones.** Hilltop sends times without a zone. `timezone = "NZST"` (UTC+12 all year, what NEMS
-asks of recorders and what ECan says it uses) is the default for all three councils; `Pacific/Auckland`
-reads NZ wall-clock time (NZDT, UTC+13, from 02:00 NZST on the last Sunday of September to 03:00 NZDT on
-the first Sunday of April): records in the repeated hour in April are placed in time order (a time that
-goes back starts the NZST pass), times in the skipped hour in September are read as NZST. `UTC` for a
-server that sends UTC. Times with an offset (`Z`, `+12:00`) are read as given. Requests (`From`/`To`)
-are sent in the same zone, with an hour of margin (two for the wall clock) that is cut off again.
+**Time zones.** `timezone = "NZST"` (UTC+12 all year) for all three, checked above.
+`Pacific/Auckland` reads NZ wall-clock time (NZDT, UTC+13, from 02:00 NZST on the last Sunday of
+September to 03:00 NZDT on the first Sunday of April): records in the repeated hour in April are placed
+in time order (a time that goes back starts the NZST pass), times in the skipped hour in September are
+read as NZST. `UTC` for a server that sends UTC. Times with an offset (`Z`, `+12:00`) are read as
+given. Requests (`From`/`To`) are sent in the same zone, with an hour of margin (two for the wall
+clock) that is cut off again.
 
 **Regions** match the reach network's (`buffer.region_of`, the river-guide regions of
 `national.region_filters`, the site's region ids): point in polygon when `councils.gpkg` and
@@ -188,10 +247,15 @@ for region, rows in g.region_rows().items():
 4. hilltop-py 2.4 (M. Kittridge, Apache-2.0), https://github.com/mullenkamp/hilltop-py (`hilltoppy/utils.py`
    `build_url`, `web_service.py`, `mountain_top.py`; tests), read from the PyPI sdist
 5. Tasman District Council, Rainfall report, https://www.tasman.govt.nz/my-region/environment/environmental-data/rainfall/report
-6. ECan Open Data Portal, Rainfall collection, https://data.ecan.govt.nz/Catalogue/Search?CollectionId=9
+6. ECan Open Data Portal, https://data.ecan.govt.nz/ : Rainfall collection, `/Catalogue/Search?CollectionId=9`
+   (datasets 78 "Rainfall for individual site", 51 "Rainfall summary by area", 134 "Rainfall summary for site");
+   data terms, `/Catalogue/Agreement?...&AgreementFile=Agreement.htm&AgreementRequirements=General` (read 2026-11-21)
 7. Environment Canterbury Developer Data Portal, https://apidevelopers.ecan.govt.nz/ (terms: /terms)
-8. Environment Canterbury, Rainfall data, https://www.ecan.govt.nz/data/rainfall-data
+8. Environment Canterbury, Rainfall data, https://www.ecan.govt.nz/data/rainfall-data (via a search engine's
+   summary: "times are in NZ standard time"; site pages `/data/rainfall-data/sitedetails/<SITE_NO>`)
 9. Hawke's Bay Regional Council, *Hilltop Server (Web Service)* (2016), https://www.hbrc.govt.nz/assets/Document-Library/Council-Data/20170426-HilltopServerTrimmed.pdf
 10. Hawke's Bay Regional Council, Time Series Data, https://www.hbrc.govt.nz/our-council/open-data/time-series-data/
 11. Horizons Regional Council, whurl (Hilltop Server URL generator), https://github.com/HorizonsRC/whurl
 12. NEMS, National Quality Code Schema v3.0.1, https://www.nems.org.nz/
+13. `data/78` with `SiteNo` and `Period` as used by public scripts, e.g. https://github.com/MatthewDWilson/rainapp
+    (`R/datahandling.R`) and https://github.com/chrisb2/water-system (`weather.py`, `Period=2_Days`)
