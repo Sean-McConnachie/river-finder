@@ -32,9 +32,10 @@ Modules
   window, upstream volume (m³) and mean depth (mm) summed over every local catchment upstream, with
   the missing hours, products and scale factors that reached it; method, flags and checks in its
   docstring.
-- :mod:`.hilltop` / :mod:`.gauges` (rf-t26.4): Hilltop Server client (site lists, measurement
-  discovery, GetData, quality series; NZST / NZ wall-clock times to UTC) and the gauge ingestion:
-  records summed into hours ending with a state (good / raw / suspect / missing) and flags per
+- :mod:`.hilltop` / :mod:`.ecanportal` / :mod:`.gauges` (rf-t26.4): Hilltop Server client (site
+  lists, measurement discovery, the per-site rain series nearest to now, GetData, quality series;
+  NZST / NZ wall-clock times to UTC; WCRC, TDC), ECan's Open Data Portal (site list, hourly totals)
+  and the gauge ingestion: records summed into hours ending with a state (good / raw / suspect / missing) and flags per
   hour, each gauge's NZTM position, ECMWF cell and scaling region, a per-site cache under
   ``<rain>/gauges/`` and ``gauges_hourly.npz`` (``GaugeHours``) for rf-t26.5; ``docs/rain-gauges.md``.
 - :mod:`.live` (rf-t26.9): the hourly GitHub Actions job's fixed inputs (``rain inputs``: weights,

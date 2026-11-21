@@ -434,7 +434,9 @@ def test_run_ecmwf_twice_does_not_double_count(tmp_path):
     logs = []
 
     def go():
-        rd = GribReader(WIN, Bucket([S3, GCS], http), native=NATIVE, cache_dir=tmp_path / "rain" / "cache")
+        # keep_days: the cache is pruned against the real clock, and these runs (2026-11-18/19) age past 3 days
+        rd = GribReader(WIN, Bucket([S3, GCS], http), native=NATIVE, cache_dir=tmp_path / "rain" / "cache",
+                        keep_days=36500)
         return run_ecmwf(cfg, reader=rd, now=now, log=logs.append)
 
     rep = go()

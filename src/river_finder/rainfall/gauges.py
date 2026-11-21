@@ -701,13 +701,12 @@ def _parse_iso(s: str | None) -> float | None:
 
 
 def known_inactive(o: Gauge | None, gc: GaugesConfig, now_s: float) -> bool:
-    """A gauge from the last site list whose record ended more than ``inactive_days`` ago and that was checked
-    less than ``recheck_days`` ago: no request this run."""
-    if o is None:
+    """A gauge of the last site list found inactive (its record had ended more than ``inactive_days`` before, or
+    it had no rain series) less than ``recheck_days`` ago: no request this run."""
+    if o is None or o.active:
         return False
-    end, checked = _parse_iso(o.record_last), _parse_iso(o.checked)
-    return (end is not None and end < now_s - gc.inactive_days * 86400 and checked is not None
-            and checked >= now_s - gc.recheck_days * 86400)
+    checked = _parse_iso(o.checked)
+    return checked is not None and checked >= now_s - gc.recheck_days * 86400
 
 
 def _carry(g: Gauge, o: Gauge) -> None:

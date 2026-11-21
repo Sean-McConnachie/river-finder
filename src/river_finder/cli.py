@@ -347,8 +347,9 @@ def main(argv: list[str] | None = None) -> None:
                     help="weights: grid-cell -> local-catchment matrices into <data>/rain/; ecmwf: ECMWF IFS observed "
                          "proxy and next-24-h forecast into <data>/rain/obs_ecmwf.npz and fc_ecmwf.npz (exit 75 when "
                          "no run is published or the bucket does not answer); gauges: hourly rain-gauge totals from "
-                         "the councils' Hilltop servers into <data>/rain/gauges/ (gauges_hourly.npz + .json; exit 75 "
-                         "when no council answers); totals: upstream mm and m3 per reach and "
+                         "the councils' Hilltop servers (WCRC, TDC) and ECan's Open Data Portal into "
+                         "<data>/rain/gauges/ (gauges_hourly.npz + .json; exit 75 when no council answers); totals: "
+                         "upstream mm and m3 per reach and "
                          "window from the current buffers into <data>/rain/totals.npz (+ .json); inputs: the hourly "
                          "job's fixed inputs into --out (weights, network, viewer map, manifest); publish: per-region "
                          "rain files + index.json for the site into --out; status: config, weight files, buffers and "
@@ -374,7 +375,7 @@ def main(argv: list[str] | None = None) -> None:
                     help="gauges: refresh the site list and placement (sites.json) without fetching data")
     pr.add_argument("--discover", action="store_true",
                     help="gauges: probe each council's candidate servers and files and print what they have "
-                         "(<data>/rain/gauges/discover.json); fetches no series")
+                         "(<data>/rain/gauges/discover.json; default: the enabled councils); fetches no series")
     pr.add_argument("--refetch-hours", type=int, default=None,
                     help="gauges: fetch the newest N hours again even if cached (default: gauges.refetch_hours)")
     pr.add_argument("--no-cache", action="store_true", help="ecmwf: ignore and do not write the decoded-field cache")
