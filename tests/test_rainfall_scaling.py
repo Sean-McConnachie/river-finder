@@ -520,3 +520,232 @@ def test_http_retries_a_body_cut_short():
 
     h = Flaky()
     assert h.get("https://bucket/key") == b"y" * 100 and h.n == 2 and h.stats.retries == 1
+
+
+# --- likely outages (rf-t26.16) ------------------------------------------------------------------------
+def test_find_outages_needs_wet_neighbours_and_a_wet_grid():
+    hours = 300
+    spec = [("ecan:Down", "Canterbury", 8, 1.70e6, 5.20e6, 1.0),     # no record for 100 h: an outage
+            ("ecan:N1", "Canterbury", 8, 1.71e6, 5.20e6, 1.0),       # its neighbours, 10-20 km away
+            ("ecan:N2", "Canterbury", 9, 1.70e6, 5.21e6, 1.0),
+            ("ecan:N3", "Canterbury", 9, 1.72e6, 5.20e6, 1.0),
+            ("ecan:Far", "Canterbury", 10, 1.80e6, 5.20e6, 1.0),     # dry too, but no gauge within 25 km
+            ("ecan:Dry", "Canterbury", 10, 1.69e6, 5.20e6, 1.0),     # dry while the grid is dry: not an outage
+            ("ecan:Short", "Canterbury", 9, 1.71e6, 5.21e6, 1.0)]    # dry for 20 h only
+    g = _gauges(spec, hours=hours, rain=_wet)
+    g.mm[0, 100:200] = 0
+    g.mm[4, 100:200] = 0
+    g.mm[5, 230:290] = 0
+    g.mm[6, 30:50] = 0
+    grid = np.ones((hours, g.n), np.float32)
+    grid[230:290, 5] = 0
+    keep = np.ones(g.n, bool)
+    o = S.find_outages(g, grid, keep, SC)
+    assert [s["id"] for s in o["spells"]] == ["ecan:Down"]
+    s = o["spells"][0]
+    assert s["dry_hours"] >= 100 and s["neighbours"] == 5 and s["neighbour_median_mm"] >= 20
+    assert s["grid_mm"] >= 100 and s["nearest"][0]["km"] == 10.0
+    assert o["mask"][0, 100:200].all() and not o["mask"][1:].any() and o["mask"][0].sum() == s["dry_hours"]
+    # the outage hours are left out like missing hours: ecan:Down keeps 2/3 of the window (< 80 %)
+    ev = S.evaluate_region(np.arange(4), g, np.arange(hours), grid, keep, SC, o["mask"])
+    out = ev["excluded"]["few_hours"]
+    assert [x["id"] for x in out] == ["ecan:Down"] and out[0]["outage_hours"] == s["dry_hours"]
+    ev = S.evaluate_region(np.arange(4), g, np.arange(hours), grid, keep, SC)                 # without the rule
+    assert ev["gauges"] == 4
+    # dropped copies confirm nothing: one wet neighbour left is too few; the rule can be switched off
+    keep[[1, 2, 3, 6]] = False
+    assert not S.find_outages(g, grid, keep, SC)["spells"]
+    off = _cfg("/nonexistent", outage_min_hours=0).scaling
+    assert not S.find_outages(g, grid, np.ones(g.n, bool), off)["mask"].any()
+
+
+# --- scaling zones (rf-t26.16) -----------------------------------------------------------------------
+ZREG = ("Auckland", "Canterbury", "Tasman", "West Coast")
+ZXY = np.array([[1.9e6, 5.9e6], [1.695e6, 5.2e6], [1.75e6, 5.2e6], [1.6e6, 5.4e6], [1.5e6, 5.3e6]])  # per row
+SPLIT = {"region": "Canterbury", "divide_km": 15.0, "near": "Canterbury near", "far": "Canterbury far"}
+DIVIDE = {"west": ["West Coast"], "east": ["Canterbury"]}
+SPEC_Z = [s for s in SPEC if s[1] != "Canterbury"] + [  # Canterbury: 1.2 x the grid near the divide, 0.5 x beyond
+    ("ecan:K", "Canterbury", 8, 1.695e6, 5.20e6, 1.2), ("ecan:L", "Canterbury", 8, 1.700e6, 5.21e6, 1.2),
+    ("ecan:M", "Canterbury", 8, 1.700e6, 5.19e6, 1.2), ("ecan:H", "Canterbury", 9, 1.72e6, 5.20e6, 0.5),
+    ("ecan:I", "Canterbury", 10, 1.73e6, 5.20e6, 0.5), ("ecan:J", "Canterbury", 10, 1.74e6, 5.20e6, 0.5)]
+
+
+def _line():
+    import shapely
+
+    return shapely.LineString([(1.69e6, 5.0e6), (1.69e6, 5.5e6)])   # the divide: x = 1690 km
+
+
+def _zdata(root, spec=SPEC_Z):
+    """As :func:`_data` with five catchments: Canterbury has one 5 km from the divide and one 60 km."""
+    from river_finder.rainfall.weights import CatchmentWeights as CW
+
+    n = 5
+    region_of = np.array([0, 1, 1, 2, 3], np.int16)
+    counts = sp.csr_matrix((np.ones(n, np.int32), (np.arange(n), [11, 8, 9, 2, 0])), shape=(n, GRID.size))
+    w = CW(GRID, counts, np.arange(n, dtype=np.int64) + 7, np.ones(n, np.int64), 1e6, np.full(n, -1, np.int64),
+           region_of, ZREG, np.ones(n, np.float32), np.ones(n, np.float32), {"built": "x", "pixel_area_m2": 1e6})
+    rain_dir = root / "rain"
+    w.save(rain_dir / "weights_ecmwf.npz")
+    _gauges(spec, hours=900).save(rain_dir / "gauges" / "gauges_hourly.npz")
+    obs = HourlyBuffer.for_weights(w, "observed")
+    for h in range(NOW_H - 23, NOW_H + 1):
+        obs.put(h, np.full(n, 2.0, np.float32), "ECMWF_OBS", run_hour=h - 3, lead=3)
+    obs.save(rain_dir / "obs_ecmwf.npz")
+    fc = HourlyBuffer.for_weights(w, "forecast")
+    fc.advance(NOW_H)
+    for h in range(NOW_H + 1, NOW_H + 25):
+        fc.put(h, np.full(n, 0.5, np.float32), "ECMWF_FC", run_hour=NOW_H - 5, lead=h - NOW_H + 5)
+    fc.save(rain_dir / "fc_ecmwf.npz")
+    Network.build(w.gid, np.full(n, -1), np.full(n, 1e6), region_of, ZREG, np.ones(n, np.float32),
+                  np.zeros(n, np.int32)).save(rain_dir / "network.npz")
+    return w
+
+
+def _zone_file(cfg, w):
+    from river_finder.rainfall import zones as Z
+
+    sc = cfg.scaling
+    zm = Z.build_zones(Z.active_splits(cfg, w.regions), sc.divide_west, sc.divide_east, ZXY, w.regions, w.region_of,
+                       w.rows_digest, _line(), w.npix)
+    zm.save(cfg.zones_path)
+    return zm
+
+
+def test_zone_map_build_place_save_and_match(tmp_path):
+    from river_finder.rainfall import zones as Z
+
+    cfg = _cfg(tmp_path, zones=[SPLIT], divide=DIVIDE)
+    w = _zdata(tmp_path)
+    zm = _zone_file(cfg, w)
+    assert zm.names == ("Auckland", "Canterbury near", "Canterbury far", "Tasman", "West Coast")
+    assert zm.parent == ("Auckland", "Canterbury", "Canterbury", "Tasman", "West Coast")
+    assert zm.zone_of.tolist() == [0, 1, 2, 3, 4] and not zm.identity
+    assert zm.divide_km[1:3].tolist() == pytest.approx([5.0, 60.0]) and np.isnan(zm.divide_km[[0, 3, 4]]).all()
+    assert zm.meta["zones_stats"]["Canterbury far"] == {"region": "Canterbury", "catchments": 1, "area_km2": 0.0}
+    zi, km = zm.gauge_zones(["Canterbury", "Canterbury", "Canterbury", "West Coast", ""],
+                            [1.704e6, 1.706e6, np.nan, 1.6e6, 1.6e6], [5.2e6] * 5)
+    assert zi.tolist() == [1, 2, 2, 4, -1] and km[:2].tolist() == pytest.approx([14.0, 16.0]) and np.isnan(km[2:]).all()
+    z2 = Z.ZoneMap.load(cfg.zones_path)
+    assert z2.names == zm.names and np.array_equal(z2.zone_of, zm.zone_of) and z2.divide.length == 500_000
+    assert z2.matches(cfg) and not z2.matches(_cfg(tmp_path, zones=[dict(SPLIT, divide_km=20.0)], divide=DIVIDE))
+    assert Z.load_zones(cfg, log=lambda m: None).names == zm.names
+    # no split of a region the network has: one zone per region, no file needed
+    other = _cfg(tmp_path, zones=[dict(SPLIT, region="Otago", near="Otago near", far="Otago far")], divide=DIVIDE)
+    assert Z.load_zones(other).identity and Z.load_zones(other).names == ZREG
+    # a stale zone file: one zone per region and a note, unless factors would be applied with the wrong zones
+    stale = _cfg(tmp_path, zones=[dict(SPLIT, divide_km=20.0)], divide=DIVIDE)
+    notes = []
+    assert Z.load_zones(stale, log=notes.append).identity and "other [[scaling.zones]]" in notes[0]
+    _factor_file(stale)
+    with pytest.raises(SystemExit, match="run river-finder rain zones"):
+        Z.load_zones(stale)
+
+
+def test_zone_config_is_checked(tmp_path):
+    with pytest.raises(ValueError, match="missing far"):
+        _cfg(tmp_path, zones=[{k: v for k, v in SPLIT.items() if k != "far"}])
+    with pytest.raises(ValueError, match="one split per region"):
+        _cfg(tmp_path, zones=[SPLIT, dict(SPLIT, near="a", far="b")])
+    with pytest.raises(ValueError, match="zone names must be distinct"):
+        _cfg(tmp_path, zones=[dict(SPLIT, far="Canterbury")])
+    with pytest.raises(ValueError, match="unknown key"):
+        _cfg(tmp_path, zones=[dict(SPLIT, km=3)])
+    with pytest.raises(ValueError, match="distinct region lists"):
+        _cfg(tmp_path, divide={"west": ["Canterbury"], "east": ["Canterbury"]})
+    sc = _cfg(tmp_path, zones=[SPLIT]).scaling
+    assert sc.split("Canterbury").near == "Canterbury near" and sc.split("Tasman") is None
+    assert sc.divide_west == ("West Coast", "Tasman") and sc.outage_min_hours == 24
+
+
+def test_rain_zones_from_region_polygons(tmp_path, monkeypatch):
+    import geopandas as gpd
+    import pandas as pd
+    from shapely.geometry import box
+
+    from river_finder.rainfall import zones as Z
+
+    cfg = _cfg(tmp_path, zones=[SPLIT], divide=DIVIDE)
+    w = _zdata(tmp_path)
+    pd.DataFrame({"gid": w.gid, "x": ZXY[:, 0], "y": ZXY[:, 1],
+                  "region": [ZREG[k] for k in w.region_of]}).to_pickle(cfg.segments_path)
+    polys = gpd.GeoDataFrame({"region": ["West Coast", "Canterbury"]},
+                             geometry=[box(1.60e6, 5.1e6, 1.69e6, 5.3e6), box(1.69e6, 5.1e6, 1.80e6, 5.3e6)],
+                             crs="EPSG:2193")
+    monkeypatch.setattr("river_finder.national.region_filters", lambda base=None: polys)
+    zm = Z.run_zones(cfg, log=lambda m: None)
+    assert zm.zone_of.tolist() == [0, 1, 2, 3, 4] and zm.meta["divide_length_km"] == pytest.approx(200.0)
+    rep = json.loads(cfg.zones_path.with_suffix(".json").read_text())
+    assert rep["zones"][1:3] == ["Canterbury near", "Canterbury far"] and rep["splits"][0]["divide_km"] == 15.0
+    with pytest.raises(SystemExit, match="not a river-guide region"):
+        Z.run_zones(_cfg(tmp_path, zones=[dict(SPLIT, region="Canterbery")], divide=DIVIDE), log=lambda m: None)
+
+
+def test_zone_split_closes_the_region_and_starts_new_versions(tmp_path):
+    plain = _cfg(tmp_path)
+    zoned = _cfg(tmp_path, zones=[SPLIT], divide=DIVIDE)
+    w = _zdata(tmp_path)
+    # one Canterbury factor: (3 x 1.2 + 3 x 0.5) / 6 = 0.85
+    doc = _scale(plain, NOW)
+    assert (doc["regions"]["Canterbury"]["factor"], doc["regions"]["Canterbury"]["version"]) == (0.85, 1)
+    # the split: without its zone file rain scale refuses (it would apply factors per the wrong zones)
+    with pytest.raises(SystemExit, match="run river-finder rain zones"):
+        _scale(zoned, NOW + timedelta(days=1))
+    _zone_file(zoned, w)
+    doc = _scale(zoned, NOW + timedelta(days=1))
+    reg = doc["regions"]
+    assert "Canterbury" not in reg and doc["closed"]["Canterbury"]["last_factor"] == 0.85
+    assert (reg["Canterbury near"]["factor"], reg["Canterbury near"]["version"]) == (1.2, 1)
+    assert (reg["Canterbury far"]["factor"], reg["Canterbury far"]["version"]) == (0.8, 1)     # 0.5: one step
+    assert reg["Canterbury far"]["parent"] == "Canterbury" and reg["West Coast"]["version"] == 2   # its own steps
+    ev = doc["last_update"]["regions"]
+    assert sorted(u["id"] for u in ev["Canterbury near"]["used"]) == ["ecan:K", "ecan:L", "ecan:M"]
+    assert ev["Canterbury far"]["ratio"] == pytest.approx(0.5) and ev["Canterbury far"]["parent"] == "Canterbury"
+    assert doc["last_update"]["gauge_zones"]["ecan:K"] == {"zone": "Canterbury near", "divide_km": 5.0}
+    assert doc["zones"]["parent"]["Canterbury far"] == "Canterbury" and doc["zones"]["splits"][0]["divide_km"] == 15
+    hist = S.load_history(zoned, "ecmwf")
+    close = next(h for h in hist if h["status"] == "closed")
+    assert close["region"] == "Canterbury" and (close["factor"], close["version"]) == (1.0, 0)
+    assert close["previous"]["factor"] == 0.85 and close["previous"]["version"] == 1
+    assert close["replaced_by"] == ["Canterbury near", "Canterbury far"] and "rf-t26.16" in close["reason"]
+    assert doc["closed"]["Canterbury"]["record"] == close["seq"]
+    new = [h for h in hist if h["seq"] > close["seq"] and h["parent"] == "Canterbury"]
+    assert [(h["region"], h["version"], h["parent"]) for h in new] == [("Canterbury near", 1, "Canterbury"),
+                                                                       ("Canterbury far", 1, "Canterbury")]
+    assert [h["seq"] for h in hist] == list(range(1, len(hist) + 1))
+    # the saved buffers moved to the zones: each catchment scaled by its zone's factor
+    for kind, raw in (("observed", 2.0), ("forecast", 0.5)):
+        b = HourlyBuffer.load(zoned.buffer_path(kind, "ecmwf"))
+        s = next(s for s in range(24) if b.hour[s] >= 0)
+        assert b.regions == ("Auckland", "Canterbury near", "Canterbury far", "Tasman", "West Coast")
+        assert b.scaled[s].tolist() == pytest.approx([raw, raw * 1.2, raw * 0.8, raw, raw * 1.5625])
+    # rain ecmwf builds its buffers per zone too
+    rd = FakeReader("fake", floor_run(NOW - timedelta(days=3)), NOW + timedelta(days=1))
+    rep = pl.run_ecmwf(zoned, reader=rd, now=NOW + timedelta(days=1), log=lambda m: None)
+    assert rep["observed"]["scale"]["zones"]["zones"][1] == "Canterbury near"
+    b = HourlyBuffer.load(zoned.buffer_path("observed", "ecmwf"))
+    assert np.allclose(b.scaled[b.hour >= 0], [1.0, 1.2, 0.8, 1.0, 1.5625])
+    # the totals say which zones' factors reached a reach
+    tot = pl.run_totals(zoned, now=NOW + timedelta(days=1), log=lambda m: None)
+    p = tot.provenance(2, "observed", 1)[0]
+    assert p["factor_version"] == {"Canterbury far": 1} and p["factor"] == {"Canterbury far": pytest.approx(0.8)}
+    assert tot.kinds["observed"].info["zones"][2] == "Canterbury far"
+    # back to one Canterbury zone: the zones are closed, Canterbury continues above its old versions
+    doc = _scale(plain, NOW + timedelta(days=2))
+    assert doc["regions"]["Canterbury"]["version"] == 2 and doc["regions"]["Canterbury"]["factor"] == 0.85
+    assert set(doc["closed"]) == {"Canterbury near", "Canterbury far"}
+    assert HourlyBuffer.load(plain.buffer_path("observed", "ecmwf")).regions == ZREG
+
+
+def test_rezone_resets_the_scale_until_factors_are_applied():
+    b = HourlyBuffer(3, "observed", ("A", "B"), np.array([0, 1, 1]))
+    b.put(10, np.array([1.0, 2.0, 3.0]), "ECMWF_OBS", run_hour=7, lead=3,
+          factors=ScaleFactors("ecmwf", ("A", "B"), [1.0, 2.0], [0, 4]))
+    assert b.scaled[10].tolist() == [1.0, 4.0, 6.0]
+    assert not b.rezone(("A", "B"), [0, 1, 1])
+    assert b.rezone(("A", "B1", "B2"), [0, 1, 2])
+    assert b.scaled[10].tolist() == [1.0, 2.0, 3.0] and b.factor_version.shape == (24, 3) and not b.factor_version.any()
+    b.apply_factors(ScaleFactors("ecmwf", ("A", "B1", "B2"), [1.0, 1.5, 0.5], [0, 1, 1]))
+    assert b.scaled[10].tolist() == [1.0, 3.0, 1.5]
+    with pytest.raises(ValueError):
+        b.rezone(("A",), [0, 1, 2])

@@ -301,8 +301,8 @@ def load_zones(cfg: RainConfig, family: str = "ecmwf", strict: bool | None = Non
     No ``[[scaling.zones]]`` for a region of the network: one zone per region (no file needed). With
     splits: ``<rain>/<zones_file>`` when it is for these rows and these splits. Otherwise ``strict``
     (default: when a factor file of ``family`` exists and ``[scaling] apply`` is on, i.e. factors would be
-    applied with the wrong zones) raises; else one zone per region is used and a note logged (the hourly job until the rain-inputs
-    branch has the file: it has no factors, so nothing is scaled either way)."""
+    applied with the wrong zones) raises; else one zone per region is used and a note logged (the hourly
+    job until the rain-inputs branch has the file: it has no factors, so nothing is scaled either way)."""
     wpath = cfg.weights_path(family)
     if not wpath.exists():
         raise SystemExit(f"no {wpath}: the scaling zones follow its rows (river-finder rain weights)")

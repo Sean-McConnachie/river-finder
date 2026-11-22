@@ -278,6 +278,40 @@ class _Nothing(Reader):
         raise AssertionError("nothing is published")
 
 
+def test_inputs_carry_the_scaling_zones(tmp_path):
+    import shapely
+
+    from river_finder.rainfall import live
+    from river_finder.rainfall import zones as Z
+
+    data, viewer, w = _national(tmp_path)
+    split = {"region": "Hawke's Bay", "divide_km": 15.0, "near": "Hawke's Bay near", "far": "Hawke's Bay far"}
+    cfg = parse_config(dict(CFG, paths={"nz_data": str(data)},
+                            scaling={"zones": [split], "divide": {"west": ["Bay of Plenty"], "east": ["Hawke's Bay"]}}))
+    with pytest.raises(SystemExit, match="run river-finder rain zones"):    # no zone file yet
+        live.build_inputs(cfg, tmp_path / "in0", viewer_dir=viewer, log=lambda m: None)
+    xy = np.column_stack([np.where(np.isin(np.arange(N), [ROW["G"], ROW["F"]]), 5e3, 40e3), np.zeros(N)])
+    zm = Z.build_zones(cfg.scaling.zones, cfg.scaling.divide_west, cfg.scaling.divide_east, xy, w.regions,
+                       w.region_of, w.rows_digest, shapely.LineString([(0, -1e5), (0, 1e5)]))
+    zm.save(cfg.zones_path)
+    m = live.build_inputs(cfg, tmp_path / "in", viewer_dir=viewer, log=lambda m: None)
+    paths = {f["path"] for f in m["files"]}
+    assert {"rain/scaling_zones.npz", "rain/weights_ecmwf.npz", "rain/network.npz"} <= paths
+    assert m["national_build"]["scaling_zones"]["zones"] == ["Bay of Plenty", "Hawke's Bay near", "Hawke's Bay far"]
+    # the job reads them from its inputs
+    job = parse_config(dict(CFG, paths={"nz_data": str(tmp_path / "in")}, scaling=cfg_scaling(cfg)))
+    got = Z.load_zones(job, log=lambda m: None)
+    assert got.names == zm.names and np.array_equal(got.zone_of, zm.zone_of)
+    hb = {k: int(got.zone_of[ROW[k]]) for k in ("G", "F", "I", "H")}                # Hawke's Bay: G, F 5 km away
+    assert hb == {"G": 1, "F": 1, "I": 2, "H": 2} and (got.zone_of[REGION_OF == 0] == 0).all()
+
+
+def cfg_scaling(cfg):
+    sc = cfg.scaling
+    return {"zones": [{"region": s.region, "divide_km": s.divide_km, "near": s.near, "far": s.far} for s in sc.zones],
+            "divide": {"west": list(sc.divide_west), "east": list(sc.divide_east)}}
+
+
 def test_ecmwf_unavailable_is_exit_75_other_errors_are_not(tmp_path, monkeypatch):
     data, _, w = _national(tmp_path)
     cfg = parse_config(dict(CFG, paths={"nz_data": str(data)}))
