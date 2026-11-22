@@ -1,0 +1,49 @@
+{
+ "built": "2026-11-20T01:17:48Z",
+ "build": {
+  "tiles": 114,
+  "pixels_assigned": 4031015000,
+  "pixels_unknown_gid": 0,
+  "land_pixels": 4179319643,
+  "land_unassigned": 148304643,
+  "strip_rows": 512,
+  "lattice_step_px": 64,
+  "build_seconds": 113.6,
+  "pixel_area_m2": 64.0
+ },
+ "interp_max_error_m": 0.005601003409296783,
+ "interp_checked_pixels": 466944,
+ "interp_cell_mismatches": 0,
+ "pixels_outside_grid": 0,
+ "lattice_blocks": 1781250,
+ "lattice_blocks_split_by_cell_edge": 191718,
+ "fallback_rows_without_cell": 0,
+ "checks": {
+  "rows": 1104794,
+  "nnz": 1278085,
+  "grid_cells": 18753,
+  "rows_empty": 0,
+  "weight_sum_max_abs_dev": 2.220446049250313e-16,
+  "cells_per_catchment_mean": 1.157,
+  "cells_per_catchment_max": 5,
+  "catchments_in_one_cell": 942736,
+  "missing_no_pixels": 0,
+  "tiny_lt_0.001_km2": 874,
+  "small_lt_0.01_km2": 76003,
+  "pixel_area_km2_total": 257985.0,
+  "table_local_km2_total": 278599.0,
+  "table_outlet_area_km2_total": 278599.0,
+  "table_local_negative": 993,
+  "area_ratio_rows_compared": 1027502,
+  "area_ratio_q05_q25_q50_q75_q95": [
+   0.8766,
+   0.992,
+   1.0,
+   1.0131,
+   1.1334
+  ],
+  "area_ratio_within_10pct": 0.8807,
+  "area_ratio_within_25pct": 0.9371
+ },
+ "file_bytes": 17815976
+}

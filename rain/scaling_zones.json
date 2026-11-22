@@ -1,0 +1,151 @@
+{
+ "built": "2026-11-22T20:21:48Z",
+ "divide_length_km": 608.6,
+ "zones_stats": {
+  "Auckland": {
+   "region": "Auckland",
+   "catchments": 16255,
+   "area_km2": 4026.6
+  },
+  "Bay of Plenty": {
+   "region": "Bay of Plenty",
+   "catchments": 53610,
+   "area_km2": 11880.1
+  },
+  "Canterbury divide": {
+   "region": "Canterbury",
+   "catchments": 19481,
+   "area_km2": 5388.5
+  },
+  "Canterbury east": {
+   "region": "Canterbury",
+   "catchments": 182165,
+   "area_km2": 38929.3
+  },
+  "Gisborne": {
+   "region": "Gisborne",
+   "catchments": 32793,
+   "area_km2": 8188.5
+  },
+  "Hawke's Bay": {
+   "region": "Hawke's Bay",
+   "catchments": 60842,
+   "area_km2": 13901.8
+  },
+  "Manawatu": {
+   "region": "Manawatu",
+   "catchments": 34348,
+   "area_km2": 7622.0
+  },
+  "Marlborough": {
+   "region": "Marlborough",
+   "catchments": 38100,
+   "area_km2": 9717.3
+  },
+  "Northland": {
+   "region": "Northland",
+   "catchments": 47615,
+   "area_km2": 11279.9
+  },
+  "Otago": {
+   "region": "Otago",
+   "catchments": 132069,
+   "area_km2": 31319.7
+  },
+  "Southland": {
+   "region": "Southland",
+   "catchments": 119632,
+   "area_km2": 30205.0
+  },
+  "Taranaki": {
+   "region": "Taranaki",
+   "catchments": 33487,
+   "area_km2": 7066.7
+  },
+  "Tasman": {
+   "region": "Tasman",
+   "catchments": 38848,
+   "area_km2": 9755.6
+  },
+  "Waikato": {
+   "region": "Waikato",
+   "catchments": 108292,
+   "area_km2": 23858.8
+  },
+  "Wanganui": {
+   "region": "Wanganui",
+   "catchments": 63019,
+   "area_km2": 14316.5
+  },
+  "Wellington": {
+   "region": "Wellington",
+   "catchments": 34060,
+   "area_km2": 7814.7
+  },
+  "West Coast": {
+   "region": "West Coast",
+   "catchments": 90178,
+   "area_km2": 22714.1
+  }
+ },
+ "format": "river-finder rain scaling zones v1",
+ "file": "scaling_zones.npz",
+ "zones": [
+  "Auckland",
+  "Bay of Plenty",
+  "Canterbury divide",
+  "Canterbury east",
+  "Gisborne",
+  "Hawke's Bay",
+  "Manawatu",
+  "Marlborough",
+  "Northland",
+  "Otago",
+  "Southland",
+  "Taranaki",
+  "Tasman",
+  "Waikato",
+  "Wanganui",
+  "Wellington",
+  "West Coast"
+ ],
+ "parent": [
+  "Auckland",
+  "Bay of Plenty",
+  "Canterbury",
+  "Canterbury",
+  "Gisborne",
+  "Hawke's Bay",
+  "Manawatu",
+  "Marlborough",
+  "Northland",
+  "Otago",
+  "Southland",
+  "Taranaki",
+  "Tasman",
+  "Waikato",
+  "Wanganui",
+  "Wellington",
+  "West Coast"
+ ],
+ "rows_digest": "6c8d0b45c128cfe4",
+ "bytes": 481613,
+ "splits": [
+  {
+   "region": "Canterbury",
+   "divide_km": 15.0,
+   "near": "Canterbury divide",
+   "far": "Canterbury east"
+  }
+ ],
+ "divide": {
+  "west": [
+   "West Coast",
+   "Tasman"
+  ],
+  "east": [
+   "Canterbury",
+   "Otago"
+  ]
+ }
+}
