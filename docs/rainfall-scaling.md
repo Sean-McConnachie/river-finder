@@ -341,7 +341,9 @@ Distinct gauges within 100 m (`last_update.copies.colocated`), all counted:
 Live run of 2026-11-22 04:41Z, the first with zones (window 2026-10-23 03:00Z .. 2026-11-22 03:00Z, 720
 h; cell store complete: 189 cells x 720 h, 99.6 % of the cell-hours from leads 1-6; likely outages
 left out). History records 4-6: Canterbury closed, the two Canterbury zones at version 1. Not forced
-(`--force` was not needed: the new zones had no version yet).
+(`--force` was not needed: the new zones had no version yet). Run again at 20:15Z with the same gauge
+cache: the same ratios, every zone held (20 h rule or below 2 %), no new record; `rain ecmwf` and
+`rain totals` at 20:00Z applied these factors.
 
 | zone | gauges listed | used | left out: copy / no location / < 80 % hours | gauge mm | ECMWF mm | ratio | median per gauge (q25-q75) | trimmed | factor | version |
 |---|---|---|---|---|---|---|---|---|---|---|

@@ -60,8 +60,8 @@ for this from a branch: a push of the workflow file can unregister the schedule 
 below; the schedule registers from `main`).
 
 1. **A daily workflow** (for example `rain-scale.yml`, once a day at an off-peak minute). It checks
-   out `rain-inputs` (the weights and `scaling_zones.npz` give the zones) and a **`rain-scaling`** branch (the gauge cache
-   and `rain/scaling/`) into one data directory. Then it runs `rain gauges --data DIR` (incremental:
+   out `rain-inputs` (the weights and `scaling_zones.npz` give the zones) and a **`rain-scaling`**
+   branch (the gauge cache and `rain/scaling/`) into one data directory. Then it runs `rain gauges --data DIR` (incremental:
    ~6 min wall clock and ~4.6 MB from the three councils, which run in parallel; ~19 min on an empty
    cache) and `rain scale --data DIR`. A day's ~24 new hours from Open-Meteo cost ~18 MB and ~25 s.
    The first backfill of an empty store costs ~380 MB and ~10 min (8 days from Open-Meteo, the rest
