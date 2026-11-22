@@ -97,6 +97,11 @@ Every hour (children 2 and 3 provide the sources)::
   ``region`` column (river-guide regions, which follow the councils), ``buffer.region_of``; the
   gauges' ``region_of`` uses the same names. ``rain publish`` publishes scaled values only with
   ``[scaling] publish = true`` (rf-t26.14).
+- rf-t26.16 (zones, done): factors are per scaling zone (:mod:`.zones`): a region, or part of one
+  (``[[scaling.zones]]``: Canterbury within 15 km of the main divide and beyond). ``rain zones``
+  writes ``<rain>/scaling_zones.npz``; a buffer's ``regions`` are the zone names and ``region_of`` the
+  zone of each catchment (``load_zones(cfg)``, ``HourlyBuffer.for_weights(w, kind, zones)``). ``rain
+  scale`` leaves likely outages out (``scaling.find_outages``).
 - rf-t26.6 (upstream, done): ``compute_totals(net, {"observed": obs, "forecast": fc}, windows)``
   sums ``WindowTotal.m3(area_m2)`` down ``net.down`` in topological order; upstream mm = upstream m³ /
   upstream pixel area. Tile-edge outlets (rf-t26.11) end their totals and are flagged.

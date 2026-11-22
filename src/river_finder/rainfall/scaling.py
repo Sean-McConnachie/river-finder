@@ -1,7 +1,10 @@
-"""Gauge scale factors per source family and region (rf-t26.5), each gauge station counted once (rf-t26.13).
+"""Gauge scale factors per source family and scaling zone (rf-t26.5, zones rf-t26.16), each gauge station
+counted once (rf-t26.13), likely outages left out (rf-t26.16).
 
 ``river-finder rain scale [--days 30] [--now YYYYMMDDHH] [--force] [--no-fetch]`` compares a source's
-grid with the rain gauges over a rolling window and keeps one factor per scaling region:
+grid with the rain gauges over a rolling window and keeps one factor per scaling zone (:mod:`.zones`: a
+network region, or part of one when ``[[scaling.zones]]`` splits it by distance to the main divide;
+each gauge goes to the zone of its region, or by its own distance to the divide):
 
 1. **gauges** (:class:`.gauges.GaugeHours`, ``<rain>/gauges/gauges_hourly.npz``): the window is the
    ``[scaling] days`` x 24 whole hours ending at "now" (or at the newest gauge hour, when the gauge
@@ -16,7 +19,12 @@ grid with the rain gauges over a rolling window and keeps one factor per scaling
    Distinct gauges within ``colocated_m`` are listed with the hourly lag that matches them best
    (ECan's own Arthur's Pass gauge runs an hour ahead of the ESNZ station 14 m away: r 0.99 at -1 h,
    0.92 at 0 h); a lag does not change a 30-day total, so they both count;
-3. **the grid side** (:class:`CellStore`, ``<rain>/scaling/<family>_cells.npz``): the source's hourly
+3. **likely outages** (:func:`find_outages`, over every hour the gauge cache holds): a gauge that is
+   down reads dry, so a spell of at least ``outage_min_hours`` dry (or unusable) hours is left out of
+   the comparison when at least ``outage_min_neighbours`` gauges within ``outage_km`` have a median of
+   at least ``outage_neighbour_mm`` over its dry hours and the grid at least ``outage_grid_mm`` at its
+   cell; the spells are reported, the gauge cache is not changed;
+4. **the grid side** (:class:`CellStore`, ``<rain>/scaling/<family>_cells.npz``): the source's hourly
    mm at every gauge cell, kept for ``keep_days`` and filled incrementally. ECMWF
    (:func:`fill_ecmwf`) follows the observed proxy's rule (:func:`.ecmwf.obs_plan`): each hour from the
    newest run that has published it within ``[ecmwf] obs_leads``, so settled hours come from leads
@@ -26,29 +34,34 @@ grid with the rain gauges over a rolling window and keeps one factor per scaling
    ECMWF's 0.1° GRIB files on AWS (kept since 2026-10-20 06z); each value records its reader, run
    and lead. Cells are 0.1° and gauges are points: the factor is a regional ratio of sums, never a
    per-gauge correction;
-4. **factor maths** (:func:`evaluate_region`, :func:`decide`), per region: the usable gauges (not a dropped
+5. **factor maths** (:func:`evaluate_region`, :func:`decide`), per zone: the usable gauges (not a dropped
    copy, on the grid, with at least ``min_usable`` of the window's hours both usable at the gauge and
    valued at its cell) give ``ratio = sum(gauge mm) / sum(grid mm at their cells)`` over exactly those
    hours. Guard rails, in order: fewer than ``min_gauges`` usable gauges -> factor 1, version 0;
    mean gauge or grid total per gauge below ``min_gauge_mm`` / ``min_grid_mm`` -> the current factor
    is held (a dry month says nothing about the bias); the ratio is clamped to ``clamp``; one update
    moves the factor by at most ``max_step`` either way; a change below ``min_change`` keeps the
-   current factor and version; a region gets a new version at most once per ``min_update_hours``
+   current factor and version; a zone gets a new version at most once per ``min_update_hours``
    (``--force`` overrides). If the grid store covers less than ``min_usable`` of the window, nothing
-   changes. Checks reported with every region, not used: the median and quartiles of the per-gauge
+   changes. Checks reported with every zone, not used: the median and quartiles of the per-gauge
    ratios and the ratio of sums without the 10 % highest and lowest per-gauge ratios;
-5. **storage** (``<rain>/scaling/factors_<family>.json``): per region the current factor, version,
-   when it was set, its status and the history record behind it; ``last_update`` holds the newest
-   evaluation of every region (gauges used with their hours and sums, guard rails), the window, the
-   input files and the copy groups. ``factors_<family>.history.jsonl`` is append-only: one line per
-   new version (``seq``, region, factor, version, previous factor and version, window, every gauge
-   used with its cell, hours and sums, the config), so each factor traces back to its gauges and
-   hours. Versions only change with the factor; version 0 always means unscaled (factor 1): a region
-   reset to unity gets version 0, the next factor ``max_version + 1``;
-6. **applying** (:func:`factors_for`): ``rain ecmwf`` scales each product listed in ``[scaling.<family>]
+6. **storage** (``<rain>/scaling/factors_<family>.json``): under ``regions``, per zone the current
+   factor, version, when it was set, its status, its network region (``parent``) and the history
+   record behind it; ``closed``: zones no longer listed (a region that was split) with their last
+   factor and versions; ``last_update`` holds the newest evaluation of every zone (gauges used with
+   their hours and sums, guard rails), the window, the input files, the copy groups, the likely
+   outages and the gauges' zones. ``factors_<family>.history.jsonl`` is append-only: one line per new
+   version (``seq``, region = the zone, parent, factor, version, previous factor and version, window,
+   every gauge used with its cell, hours and sums, the config), so each factor traces back to its
+   gauges and hours; a zone that is no longer listed gets one ``closed`` line. Versions only change
+   with the factor; version 0 always means unscaled (factor 1): a zone reset to unity gets version 0,
+   the next factor ``max_version + 1``; a new zone starts at version 1, a zone listed again above the
+   versions it had;
+7. **applying** (:func:`factors_for`): ``rain ecmwf`` scales each product listed in ``[scaling.<family>]
    products`` (ECMWF: the observed proxy and the forecast, one model) with the current factors, when
    ``[scaling] apply`` is true, and re-scales the hours it holds, so each slot stores raw, scaled,
-   factor and version per region; ``rain scale`` re-scales the saved buffers the same way. No factor
+   factor and version per zone; ``rain scale`` re-scales the saved buffers the same way (moving
+   buffers kept per other zones to the current ones). No factor
    file, an unlisted product or ``apply = false``: factor 1, version 0. ``rain publish`` publishes
    scaled values only with ``[scaling] publish = true`` (rf-t26.14: WCRC and TDC have not stated a
    licence); otherwise it publishes the raw sums.

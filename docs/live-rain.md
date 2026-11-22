@@ -85,8 +85,11 @@ below; the schedule registers from `main`).
 
 - Inputs, branch `rain-inputs`: `manifest.json` (files, sizes, sha256, the national build: segment
   table time, weights and network build times, viewer index time; config values; code commit) and
-  `rain/weights_ecmwf.npz` (+ `.json`), `rain/network.npz`, `rain/viewer.json` (site region ids ->
-  network regions with their reach counts). Laid out like a data directory, so `--data` points at it.
+  `rain/weights_ecmwf.npz` (+ `.json`), `rain/network.npz`, `rain/scaling_zones.npz` (+ `.json`: the
+  scaling zone of every catchment, rf-t26.16, `docs/rainfall-scaling.md` "Zones"), `rain/viewer.json`
+  (site region ids -> network regions with their reach counts). Laid out like a data directory, so
+  `--data` points at it. Inputs without the zone file (built before rf-t26.16) still work: the job
+  then keeps its buffers per region and says so; it has no factors yet, so nothing changes.
 - Outputs, branch `rain`: `index.json` and `<region>.bin.gz`, read by the site from
   `https://raw.githubusercontent.com/Sean-McConnachie/river-finder/rain/index.json` (CORS `*`,
   cached 5 min). About 14 MB plain, 2.1 MB gzipped in all; Canterbury, the largest, 2.5 MB plain,
@@ -105,10 +108,12 @@ below; the schedule registers from `main`).
 After `nz score` / `nz viewer` change the reaches, rebuild the weights if the reach table changed,
 then rebuild and push the inputs. `rain inputs` copies `network.npz` when it is current and otherwise
 builds it from `segments_table.pkl`; it refuses inputs whose reach counts differ from the viewer
-data in `data/viewer_nz/regions_index.json`.
+data in `data/viewer_nz/regions_index.json`, and a missing or stale scaling zone file (rf-t26.16).
+Refresh the inputs also after a change of `[[scaling.zones]]` (after `rain zones`).
 
 ```bash
 uv run river-finder rain weights --grid ecmwf          # only if segments_table.pkl changed (~2 min)
+uv run river-finder rain zones                         # catchment -> scaling zone (~10 s)
 rm -rf /tmp/rain-inputs
 uv run river-finder rain inputs --out /tmp/rain-inputs # ~35 MB; prints the regions and their reach counts
 cd /tmp/rain-inputs

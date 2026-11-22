@@ -181,7 +181,9 @@ https://data.ecan.govt.nz/data/134/Rainfall/Rainfall%20summary%20for%20site/CSV?
   has no row: North Esk has a row every 4 hours (zero heartbeats) when dry, Mount Byrne only rows while
   it rains (338 mm in 34 h on 25-26 October, then nothing for days). An hour in the period and before
   the last sample without a row is therefore 0 mm, as for Hilltop records; it cannot be told apart
-  from an outage (the portal marks none), so a long dry spell at an event gauge reads as dry.
+  from an outage (the portal marks none), so a long dry spell at an event gauge reads as dry. The
+  gauge scaling leaves out dry spells while the neighbours and ECMWF are wet (rf-t26.16,
+  `docs/rainfall-scaling.md`, "Likely outages"); the cache keeps them as they came.
 - No quality codes, and the data terms call the values provisional: every ECan hour is `raw`.
 
 ### Hosts from the development container
