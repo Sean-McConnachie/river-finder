@@ -96,10 +96,16 @@ def _upstream_main(g: pd.DataFrame) -> np.ndarray:
     return up
 
 
-def prepare(g: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+def prepare(g: gpd.GeoDataFrame, maf_cfg=None) -> gpd.GeoDataFrame:
     """Add smoothed gradient/ksn (over upstream-main + self + downstream, about 750 m) and stream
-    power."""
+    power. With the MAF correction on (``maf_cfg.apply``, default ``config/maf.toml``; see ``maf.py``),
+    ``maf_m3s`` is corrected first and ``maf_flag`` / ``maf_raw_m3s`` are added."""
+    from . import maf
+
     g = g.copy()
+    cfg = maf_cfg or maf.load_config()
+    if cfg.apply:
+        maf.apply(g, cfg, down="down_seg")
     up = _upstream_main(g)
     down = g["down_seg"].to_numpy()
     for col, out in (("gradient_m_per_km", "grad_s"), ("ksn", "ksn_s")):

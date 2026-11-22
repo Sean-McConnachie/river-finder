@@ -44,6 +44,7 @@ SEED = 20261113
 
 _RAW = ["grad_s", "steepest_50m_m_per_km", "ksn_s", "power_kw_m", "maf_m3s", "gorge_depth_m", "head_m",
         "upstream_flat_frac", "upstream_hard_frac", "bed_hard", "knick_ratio", "melton", "height_to_width"]
+_MAF_COLS = ["specific_maf_matched", "maf_raw_m3s", "maf_flag"]   # kept when present (maf.py, rf-xyk.6)
 _TO_LL = Transformer.from_crs("EPSG:2193", "EPSG:4326", always_xy=True)
 _TO_NZTM = Transformer.from_crs("EPSG:4326", "EPSG:2193", always_xy=True)
 
@@ -100,7 +101,8 @@ def national_table(rebuild: bool = False, log=print) -> pd.DataFrame:
         p = nz_dir() / "regions" / _rslug(name) / "segments_scored.gpkg"
         if not p.exists():
             continue
-        g = pyogrio.read_dataframe(p, columns=cols)
+        have = set(pyogrio.read_info(p)["fields"])
+        g = pyogrio.read_dataframe(p, columns=cols + [c for c in _MAF_COLS if c in have])
         mid = g.geometry.interpolate(0.5, normalized=True)
         f = pd.DataFrame(g.drop(columns="geometry"))
         f["region"] = name

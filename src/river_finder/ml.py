@@ -145,14 +145,16 @@ def local_area(t: pd.DataFrame) -> np.ndarray:
 def ml_table(rebuild: bool = False, log=print) -> pd.DataFrame:
     """``national_table`` plus geology, karst, OSM waterfalls/rapids, catchment and reach type.
 
-    Cached in ``data/nz/ml_table.pkl``.
+    Cached in ``data/nz/ml_table.pkl``. The MAF correction (``maf.py``, ``config/maf.toml`` or
+    ``--maf-correction``) is applied or undone to match the current setting, on the whole-NZ network, with
+    stream power and reach styles recomputed (``sync_maf``); the cache keeps what it was built with.
     """
     cache = nz_dir() / "ml_table.pkl"
     if cache.exists() and not rebuild:
-        return pd.read_pickle(cache)
+        return sync_maf(pd.read_pickle(cache), log=log)
     import pyogrio
 
-    t = national_table(log=log).copy()
+    t = sync_maf(national_table(log=log).copy(), log=log, reclassify=False)
     t0 = time.time()
     down = t["down"].to_numpy().astype(np.int64)
     order = _kahn(down)
@@ -187,6 +189,36 @@ def ml_table(rebuild: bool = False, log=print) -> pd.DataFrame:
     t = pd.concat([t, rt], axis=1)
     t.to_pickle(cache)
     log(f"ml: table {len(t)} reaches -> {cache}")
+    return t
+
+
+def sync_maf(t: pd.DataFrame, cfg=None, log=print, reclassify: bool = True) -> pd.DataFrame:
+    """Bring a national table's MAF in line with the MAF-correction setting (``maf.load_config()`` unless
+    ``cfg``): correct it (from ``maf_raw_m3s`` when it was corrected before) when ``apply`` is on, undo a
+    correction when it is off. With ``reclassify``, the reach-type columns (bankfull width comes from MAF)
+    are recomputed when MAF changed. In place; returns ``t``."""
+    from . import maf as MAF
+
+    cfg = cfg or MAF.load_config()
+    if not cfg.apply and "maf_raw_m3s" not in t.columns:
+        return t
+    before = t["maf_m3s"].to_numpy(dtype=float).copy()
+    if cfg.apply:
+        if "specific_maf_matched" not in t.columns:
+            if (nz_dir() / "tiles").exists() and "gid" in t.columns:
+                t["specific_maf_matched"] = MAF.matched_from_tiles(t, nz_dir() / "tiles")
+            else:
+                log("maf: no specific_maf_matched and no tiles; unmatched reaches are not refilled")
+        MAF.apply(t, cfg, down="down")
+        log(f"maf: correction on: {MAF.summary(t)}")
+    else:
+        MAF.revert(t)
+        log("maf: correction off: raw MAF restored")
+    if reclassify and "style" in t.columns and not np.array_equal(before, t["maf_m3s"].to_numpy(dtype=float),
+                                                                    equal_nan=True):
+        rt = RT.classify_frame(t)
+        for c in rt.columns:
+            t[c] = rt[c]
     return t
 
 

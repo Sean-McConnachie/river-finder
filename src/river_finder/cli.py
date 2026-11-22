@@ -456,7 +456,17 @@ def main(argv: list[str] | None = None) -> None:
     pv.add_argument("regions", nargs="*")
     pv.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer")
     pv.add_argument("--max-px", type=int, default=1800)
+    for name, p in sub.choices.items():
+        if name in ("score", "run", "nz", "models", "ml"):
+            p.add_argument("--maf-correction", choices=["on", "off"], default=None,
+                           help="mean annual flood sanity correction (refill unmatched reaches, cap at the gauge "
+                                "envelope; src/river_finder/maf.py): overrides [correction] apply in "
+                                "config/maf.toml (default off)")
     args = ap.parse_args(argv)
+    if getattr(args, "maf_correction", None):
+        from . import maf
+
+        maf.set_override(args.maf_correction == "on")
     if args.cmd == "nz":
         _nz(args)
         return

@@ -1,0 +1,16 @@
+# Mean annual flood (MAF) sanity correction (rf-xyk.6). Read by src/river_finder/maf.py; the findings and the
+# fit behind these numbers are in docs/audits/maf-outliers-2026-11.md.
+# --maf-correction on|off on the command line overrides `apply` (score, run, nz, models, ml).
+
+[correction]
+apply = false          # OFF by default: on changes maf_m3s, stream power, reach styles and every score.
+                       # Needs a rebuild to reach the published scores (see the audit doc).
+refill = true          # reaches with no REC1 match: specific MAF of the nearest matched reaches on the network
+                       # (main stem up, downstream), scaled by area^-b, instead of the tile median
+cap = true             # specific MAF <= envelope_margin * envelope_c * area^-envelope_b (m3/s/km2, area in km2)
+monotone = false       # also lower a reach's MAF to that of the reach below it (off: lakes and diversions
+                       # really do lower floods downstream; drops are flagged either way)
+envelope_c = 27.2      # max of MAF/A * A^b over the 593 H&C 2018 gauges of 1 km2 or more (Whataroa at SH bridge)
+envelope_b = 0.25      # MAF ~ A^0.75; the 90 % quantile slope of log specific MAF on log area at the gauges is -0.25
+envelope_margin = 1.0  # 1.0: the cap is the highest specific MAF gauged in NZ at that size
+drop_tol = 0.10        # flag "drop" where the reach below has a MAF more than 10 % lower
