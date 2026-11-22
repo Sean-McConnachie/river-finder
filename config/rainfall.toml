@@ -140,3 +140,36 @@ region = "Tasman"
 licence = "not stated for the Hilltop service: check TDC's terms before publishing"
 attribution = "Rainfall data: Tasman District Council"
 source = "https://envdata.tasman.govt.nz/data.hts (Hilltop Server); host from the MfE 2023 stocktake of council water-quality data"
+
+# Gauge scale factors (rf-t26.5, rf-t26.13; src/river_finder/rainfall/scaling.py, docs/rainfall-scaling.md): per source
+# family and region, sum(gauge mm) / sum(grid mm at the gauges' cells) over the last `days`, with guard rails.
+# `rain scale` updates <rain>/<dir>/: <family>_cells.npz (the grid's hourly mm at the gauge cells, backfilled and
+# appended), factors_<family>.json (current factor and version per region) and factors_<family>.history.jsonl
+# (every version, with the gauges, hours and sums behind it). Version 0 = unscaled (factor 1).
+[scaling]
+apply = true              # rain ecmwf (and rain scale) scale the buffers with the current factors; local totals use them
+publish = false           # rain publish: gauge-scaled values only when true. Off until WCRC and TDC state their licences
+                          # (rf-t26.14; ECan is CC BY 4.0): until then the published files carry the raw values
+dir = "scaling"           # under <rain>
+days = 30                 # the comparison window: the last 30 x 24 whole hours (ending now, or at the newest gauge hour)
+keep_days = 40            # hours of the cell store older than this are dropped
+min_gauges = 3            # fewer usable gauges (after merging copies of one station) in a region: factor 1, version 0
+min_usable = 0.8          # a gauge counts only with >= 80 % of the window's hours usable (state <= 1) and a grid value
+min_gauge_mm = 30.0       # no ratio below these mean totals per gauge over the window (gauges, grid at their cells):
+min_grid_mm = 30.0        # the current factor is held (a dry month says nothing about the bias)
+clamp = [0.5, 2.0]        # factor limits
+max_step = 1.25           # one update moves a factor by at most x1.25 (or /1.25)
+min_change = 0.02         # a change below 2 % keeps the current factor and version
+min_update_hours = 20     # at most one new version per region per 20 h (a daily update; rain scale --force overrides)
+dedupe_km = 3.0           # gauges within 3 km are compared as possible copies of one station (WCRC and TDC publish 7
+                          # of the same gauges, up to 2.4 km apart in their coordinates) ...
+dedupe_min_wet_hours = 10 # ... over their common usable hours: with >= 10 hours of rain at either, they are copies
+dedupe_equal_share = 0.95 # when >= 95 % of those hours agree within 0.05 mm (copies: 99-100 %; distinct gauges at the
+dedupe_equal_mm = 0.05    # same site: <= 53 %). One copy is kept: see docs/rainfall-scaling.md
+colocated_m = 100.0       # distinct gauges within 100 m are reported with the lag that matches them best
+
+[scaling.ecmwf]
+products = ["ECMWF_OBS", "ECMWF_FC"]   # the ECMWF factor scales the observed proxy and the forecast (one model)
+readers = ["openmeteo-s3", "ecmwf-s3"] # the cell store takes each hour from the first reader that has it (the observed
+                                       # proxy's rule: the newest run with the hour within [ecmwf] obs_leads). Open-Meteo
+                                       # keeps ~8 days of runs, ECMWF's AWS bucket the 0.1 deg runs since 2026-10-20 06z

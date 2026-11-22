@@ -1,4 +1,5 @@
-"""``config/rainfall.toml``: windows, which source feeds which metric, data paths, grids, ECMWF and gauge settings.
+"""``config/rainfall.toml``: windows, which source feeds which metric, data paths, grids, ECMWF, gauge and
+gauge-scaling settings.
 
 Validated on load; any error names the key. Paths are relative to the repository root
 (``paths.nz_data``) or to ``nz_data`` (``tiles``, ``segments``, ``rain``); the CLI's ``--data``
@@ -18,7 +19,7 @@ from .grid import NATIVE, GridSpec
 from .sources import family_products
 
 CONFIG_PATH = REPO_ROOT / "config" / "rainfall.toml"
-_TOP = {"windows", "paths", "observed", "forecast", "grids", "ecmwf", "gauges"}
+_TOP = {"windows", "paths", "observed", "forecast", "grids", "ecmwf", "gauges", "scaling"}
 _PATHS = {"nz_data", "tiles", "segments", "rain"}
 _GRID = {"lon0", "lat0", "dlon", "dlat", "nx", "ny"}
 _ECMWF = {"reader", "obs_leads", "obs_runs", "search_hours", "cache", "keep_days", "ecmwf_urls", "openmeteo_url"}
@@ -26,6 +27,10 @@ _GAUGES = {"dir", "days", "keep_days", "refetch_hours", "chunk_days", "request_g
            "max_mm_per_hour", "inactive_days", "recheck_days", "councils"}
 _COUNCIL = {"name", "kind", "enabled", "base_url", "hts", "measurements", "timezone", "method", "quality", "region",
             "licence", "attribution", "source"}
+_SCALING = {"apply", "publish", "dir", "days", "keep_days", "min_gauges", "min_usable", "min_gauge_mm", "min_grid_mm",
+            "clamp", "max_step", "min_change", "min_update_hours", "dedupe_km", "dedupe_min_wet_hours",
+            "dedupe_equal_share", "dedupe_equal_mm", "colocated_m"}
+_SCALING_SOURCE = {"products", "readers"}
 # hilltop: a Hilltop Server (:mod:`.hilltop`); ecan-portal: Environment Canterbury's Open Data Portal
 # (:mod:`.ecanportal`: hourly totals per site, no .hts file).
 KINDS = ("hilltop", "ecan-portal")
@@ -99,6 +104,49 @@ class GaugesConfig:
 
 
 @dataclass(frozen=True)
+class ScalingSource:
+    """``[scaling.<family>]``: which products of a source family the family's factors scale, and (ECMWF) the
+    readers the grid side of the comparison is backfilled from, in order (:mod:`.scaling`)."""
+
+    family: str
+    products: tuple[str, ...]
+    readers: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ScalingConfig:
+    """``[scaling]``: gauge scale factors per source family and region (rf-t26.5, :mod:`.scaling`,
+    ``docs/rainfall-scaling.md``)."""
+
+    apply: bool = True             # rain ecmwf (and rain scale) scale the buffers with the current factors
+    publish: bool = False          # rain publish: gauge-scaled values only when true (rf-t26.14: licences)
+    dir: str = "scaling"           # under <rain>: <family>_cells.npz, factors_<family>.json (+ .history.jsonl)
+    days: int = 30                 # the comparison window: the last days x 24 hours
+    keep_days: int = 40            # hours of the grid-cell store older than this are dropped
+    min_gauges: int = 3            # fewer usable (deduplicated) gauges in a region: factor 1, version 0
+    min_usable: float = 0.8        # share of the window's hours a gauge needs (gauge usable and a grid value)
+    min_gauge_mm: float = 30.0     # mean gauge total per gauge over the window below which no ratio is formed
+    min_grid_mm: float = 30.0      # ... and the same for the grid at the gauges' cells (the factor is held)
+    clamp: tuple[float, float] = (0.5, 2.0)   # factor limits
+    max_step: float = 1.25         # one update moves a factor by at most this ratio either way
+    min_change: float = 0.02       # a change smaller than this keeps the current factor and version
+    min_update_hours: int = 20     # a region gets a new version at most this often (--force overrides)
+    dedupe_km: float = 3.0         # gauges this close are compared as possible copies of one station
+    dedupe_min_wet_hours: int = 10  # common hours with rain at either needed to compare two series
+    dedupe_equal_share: float = 0.95  # copies: this share of those hours agree within dedupe_equal_mm
+    dedupe_equal_mm: float = 0.05
+    colocated_m: float = 100.0     # distinct gauges this close are listed as co-located (with their lag)
+    sources: tuple[ScalingSource, ...] = (ScalingSource("ecmwf", ("ECMWF_OBS", "ECMWF_FC"),
+                                                        ("openmeteo-s3", "ecmwf-s3")),)
+
+    def source(self, family: str) -> ScalingSource | None:
+        for s in self.sources:
+            if s.family == family:
+                return s
+        return None
+
+
+@dataclass(frozen=True)
 class RainConfig:
     windows: tuple[int, ...]
     observed_source: str
@@ -111,6 +159,7 @@ class RainConfig:
     rain: str = "rain"
     ecmwf: EcmwfConfig = EcmwfConfig()
     gauges: GaugesConfig = GaugesConfig()
+    scaling: ScalingConfig = ScalingConfig()
 
     @property
     def tiles_dir(self) -> Path:
@@ -153,6 +202,19 @@ class RainConfig:
     def gauges_dir(self) -> Path:
         """Rain-gauge cache and outputs (rf-t26.4): ``sites.json``, ``series/``, ``gauges_hourly.npz`` (+ ``.json``)."""
         return self.rain_dir / self.gauges.dir
+
+    @property
+    def scaling_dir(self) -> Path:
+        """Gauge scaling (rf-t26.5): ``<family>_cells.npz``, ``factors_<family>.json`` (+ ``.history.jsonl``)."""
+        return self.rain_dir / self.scaling.dir
+
+    def cells_path(self, family: str) -> Path:
+        """The grid side of the gauge comparison: hourly mm of ``family`` at the gauges' cells (:mod:`.scaling`)."""
+        return self.scaling_dir / f"{family}_cells.npz"
+
+    def factors_path(self, family: str) -> Path:
+        """Current scale factors of ``family`` per region; the version history is ``<stem>.history.jsonl``."""
+        return self.scaling_dir / f"factors_{family}.json"
 
     def with_data(self, nz_data: Path | None) -> RainConfig:
         return self if nz_data is None else replace(self, nz_data=Path(nz_data))
@@ -301,6 +363,64 @@ def _gauges(d) -> GaugesConfig:
                         tuple(councils))
 
 
+def _bool(v, where: str) -> bool:
+    if not isinstance(v, bool):
+        _err(f"{where} must be true or false")
+    return v
+
+
+def _scaling(d, grids: dict) -> ScalingConfig:
+    s = _keys(d, _SCALING | set(grids), "scaling")
+    base = ScalingConfig()
+    sdir = s.get("dir", base.dir)
+    if not isinstance(sdir, str) or not sdir:
+        _err("scaling.dir must be a non-empty string")
+    clamp = s.get("clamp", list(base.clamp))
+    if not isinstance(clamp, list) or len(clamp) != 2:
+        _err("scaling.clamp must be [lowest, highest]")
+    lo, hi = (_num(v, "scaling.clamp", 0.01, 100.0) for v in clamp)
+    if not lo <= 1.0 <= hi:
+        _err(f"scaling.clamp {clamp}: must contain 1")
+    days = _int(s.get("days", base.days), "scaling.days", 1, 120)
+    keep = _int(s.get("keep_days", base.keep_days), "scaling.keep_days", 1, 366)
+    if keep < days:
+        _err(f"scaling.keep_days ({keep}) must be at least scaling.days ({days})")
+    sources = {src.family: src for src in base.sources}
+    for fam in grids:
+        if fam not in s:
+            continue
+        t = _keys(s[fam], _SCALING_SOURCE, f"scaling.{fam}")
+        prods = _strs(t.get("products", list(sources[fam].products) if fam in sources else []),
+                      f"scaling.{fam}.products")
+        for tag in prods:
+            if tag not in family_products(fam):
+                _err(f"scaling.{fam}.products: {tag!r} is not a {fam} product (have {', '.join(family_products(fam))})")
+        readers = t.get("readers", list(sources[fam].readers) if fam in sources else [])
+        if fam == "ecmwf":
+            readers = _strs(readers, "scaling.ecmwf.readers")
+            bad = [r for r in readers if r not in READERS]
+            if bad or len(set(readers)) != len(readers):
+                _err(f"scaling.ecmwf.readers {list(readers)}: expected distinct names from {', '.join(READERS)}")
+        elif readers:
+            _err(f"scaling.{fam}.readers: only ECMWF has readers")
+        sources[fam] = ScalingSource(fam, prods, tuple(readers))
+    step = _num(s.get("max_step", base.max_step), "scaling.max_step", 1.0, 10.0)
+    return ScalingConfig(
+        _bool(s.get("apply", base.apply), "scaling.apply"), _bool(s.get("publish", base.publish), "scaling.publish"),
+        sdir, days, keep, _int(s.get("min_gauges", base.min_gauges), "scaling.min_gauges", 1, 1000),
+        _num(s.get("min_usable", base.min_usable), "scaling.min_usable", 0.0, 1.0),
+        _num(s.get("min_gauge_mm", base.min_gauge_mm), "scaling.min_gauge_mm", 0.0, 10_000.0),
+        _num(s.get("min_grid_mm", base.min_grid_mm), "scaling.min_grid_mm", 0.0, 10_000.0), (lo, hi), step,
+        _num(s.get("min_change", base.min_change), "scaling.min_change", 0.0, 1.0),
+        _int(s.get("min_update_hours", base.min_update_hours), "scaling.min_update_hours", 0, 24 * 60),
+        _num(s.get("dedupe_km", base.dedupe_km), "scaling.dedupe_km", 0.0, 50.0),
+        _int(s.get("dedupe_min_wet_hours", base.dedupe_min_wet_hours), "scaling.dedupe_min_wet_hours", 1, 10_000),
+        _num(s.get("dedupe_equal_share", base.dedupe_equal_share), "scaling.dedupe_equal_share", 0.5, 1.0),
+        _num(s.get("dedupe_equal_mm", base.dedupe_equal_mm), "scaling.dedupe_equal_mm", 0.0, 10.0),
+        _num(s.get("colocated_m", base.colocated_m), "scaling.colocated_m", 0.0, 10_000.0),
+        tuple(v for f, v in sources.items() if f in grids))
+
+
 def parse_config(d: dict, root: Path = REPO_ROOT) -> RainConfig:
     _keys(d, _TOP, "top level")
     windows = _windows(d.get("windows", [1, 3, 6, 12, 24]), "windows")
@@ -338,7 +458,8 @@ def parse_config(d: dict, root: Path = REPO_ROOT) -> RainConfig:
     nz = Path(paths.get("nz_data", "data/nz"))
     return RainConfig(windows, source, compare, forecast, grids, nz if nz.is_absolute() else root / nz,
                       paths.get("tiles", "tiles"), paths.get("segments", "segments_table.pkl"),
-                      paths.get("rain", "rain"), _ecmwf(d.get("ecmwf", {})), _gauges(d.get("gauges", {})))
+                      paths.get("rain", "rain"), _ecmwf(d.get("ecmwf", {})), _gauges(d.get("gauges", {})),
+                      _scaling(d.get("scaling", {}), grids))
 
 
 def load_config(path: Path | None = None, nz_data: Path | None = None) -> RainConfig:
