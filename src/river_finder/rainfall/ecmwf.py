@@ -314,6 +314,7 @@ class Reader(ABC):
     """Hourly mm on ``grid`` for (run, lead): rain of ``(run + lead - 1 h, run + lead]``."""
 
     name: str
+    cache_write = True  # False: read the decoded-field cache but do not add to it (rain scale's backfill)
 
     def __init__(self, grid: GridSpec, cache_dir: Path | None = None, keep_days: int = 3, log=None):
         self.grid, self.log = grid, log or (lambda m: None)
@@ -349,7 +350,7 @@ class Reader(ABC):
                 self._mem[key] = a
                 return a
         a = np.asarray(make(), dtype=np.float32)
-        if path is not None:
+        if path is not None and self.cache_write:
             path.parent.mkdir(parents=True, exist_ok=True)
             tmp = path.with_name(path.name + ".tmp.npy")
             np.save(tmp, a)
