@@ -19,6 +19,9 @@ Inputs: ``river-finder rain inputs --out DIR``
 - ``rain/network.npz``: the reach network (:class:`.upstream.Network`, ~17 MB), copied when it is
   current (same rows as the weights, built after ``segments_table.pkl`` last changed), else built
   from the table straight into ``DIR``. With it the job needs no segment table;
+- ``rain/scaling_zones.npz`` (+ ``.json``, ~0.7 MB; with ``[[scaling.zones]]``): the scaling zone of
+  every catchment (rf-t26.16, :mod:`.zones`), which the job's buffers keep their factors per. A job
+  whose inputs lack it (or have other zones than the config) uses one zone per region, and says so;
 - ``rain/viewer.json``: the site's regions (``regions_index.json`` of the viewer data) mapped to
   network regions: ``{id, title, name, n}``. The rows of region ``name`` in viewer (``vi``) order
   are ``network.vi`` / ``region_of`` (:meth:`.upstream.UpstreamTotals.viewer_rows`); ``n`` must equal
@@ -290,6 +293,20 @@ def build_inputs(cfg: RainConfig, out_dir: Path, viewer_dir: Path | None = None,
     net_path = rain / cfg.network_path.name
     net = _network_for_inputs(cfg, cfg.weights_path(fams[0]), net_path, log)
     files.append(net_path)
+    from .zones import load_zones
+
+    zones = None
+    zm = load_zones(cfg, fams[0], strict=True, log=log)   # one zone per region unless a split applies here
+    if not zm.identity:   # the scaling zones (rf-t26.16): the job builds its buffers per zone
+        if zm.rows_digest != net.rows_digest:
+            raise SystemExit(f"{cfg.zones_path.name} is for other rows than {net_path.name}: run rain zones")
+        for p in (cfg.zones_path, cfg.zones_path.with_suffix(".json")):
+            if p.exists():
+                shutil.copyfile(p, rain / p.name)
+                files.append(rain / p.name)
+        zones = {"file": cfg.zones_path.name, "built": zm.meta.get("built"), "zones": list(zm.names), **zm.rule()}
+        log(f"scaling zones: {cfg.zones_path} ({cfg.zones_path.stat().st_size / 1e3:.0f} kB), {len(zm.names)} zones, "
+            f"built {zm.meta.get('built')}")
     vdir = Path(viewer_dir) if viewer_dir else cfg.nz_data.parent / "viewer_nz"
     vindex = vdir / "regions_index.json"
     index = None
@@ -315,7 +332,7 @@ def build_inputs(cfg: RainConfig, out_dir: Path, viewer_dir: Path | None = None,
             "segments_table": {"file": table.name, "mtime": _mtime(table), "bytes": table.stat().st_size}
             if table.exists() else None,
             "weights": weights, "network_built": net.meta.get("built"),
-            "viewer_index": vm["source"]},
+            "viewer_index": vm["source"], "scaling_zones": zones},
         "rows": net.n, "rows_digest": net.rows_digest, "down_digest": net.down_digest,
         "network_flags": net.meta.get("flags") or net.flag_counts(),
         "config": {"windows": list(cfg.windows), "observed": cfg.observed_source, "forecast": cfg.forecast_source,

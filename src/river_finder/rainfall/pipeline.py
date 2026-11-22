@@ -35,14 +35,20 @@ def ingest(source: RainfallSource, buffer: HourlyBuffer, weights: CatchmentWeigh
     return out
 
 
-def open_buffer(cfg: RainConfig, kind: str, family: str, weights: CatchmentWeights) -> HourlyBuffer:
-    """The saved buffer of ``kind`` (observed | forecast) and ``family``, or a new empty one."""
+def open_buffer(cfg: RainConfig, kind: str, family: str, weights: CatchmentWeights, zones=None,
+                log=print) -> HourlyBuffer:
+    """The saved buffer of ``kind`` (observed | forecast) and ``family``, or a new empty one; with ``zones``
+    (a :class:`.zones.ZoneMap`) a saved buffer of other zones is moved to them (:meth:`HourlyBuffer.rezone`)."""
     p = cfg.buffer_path(kind, family)
     if p.exists():
         b = HourlyBuffer.load(p)
         b.check_rows(weights)
+        if zones is not None and b.rezone(zones.names, zones.zone_of):
+            new = ", ".join(z for z in zones.names if z not in weights.regions) or "one per region"
+            log(f"{kind} {family} buffer: moved to the scaling zones ({len(zones.names)}; new: {new}); its hours "
+                f"are re-scaled below")
         return b
-    return HourlyBuffer.for_weights(weights, kind)
+    return HourlyBuffer.for_weights(weights, kind, zones)
 
 
 # --- CLI steps ----------------------------------------------------------------------------------
@@ -174,9 +180,11 @@ def run_ecmwf(cfg: RainConfig, run: str = "latest", obs: bool = True, fc: bool =
     from .ecmwf import EcmwfSource, Reader, fc_plan, find_run, make_reader, obs_plan, parse_run, run_label
     from .fetch import Http
     from .scaling import describe_factors, factors_for
+    from .zones import load_zones
 
     ec = cfg.ecmwf
     w = CatchmentWeights.load(cfg.weights_path("ecmwf"))
+    zones = load_zones(cfg, "ecmwf", log=log)
     if isinstance(reader, Reader):  # tests pass a ready reader
         rd, name = reader, reader.name
         http = reader.bucket.http
@@ -201,7 +209,8 @@ def run_ecmwf(cfg: RainConfig, run: str = "latest", obs: bool = True, fc: bool =
         rescaled = buf.apply_factors(f)  # hours kept from earlier runs take the current factors too
         scale = {"apply": cfg.scaling.apply, "factors_file": cfg.factors_path("ecmwf").name
                  if cfg.factors_path("ecmwf").exists() else None, "regions": describe_factors(f),
-                 "hours_rescaled": rescaled}
+                 "hours_rescaled": rescaled, "zones": None if zones.identity else
+                 {"file": cfg.zones_path.name, "zones": list(zones.names), "rule": zones.rule()}}
         if scale["regions"]:
             log(f"  {tag} scaled with gauge factors {scale['regions']}")
         hours = []
@@ -241,7 +250,7 @@ def run_ecmwf(cfg: RainConfig, run: str = "latest", obs: bool = True, fc: bool =
         if latest is None:
             raise SourceUnavailable(f"no {name} run with lead {lo} h published in the last {ec.search_hours} h")
         plan, missing, end = obs_plan(rd, latest, (lo, hi), ec.obs_runs, now_hour=now_h)
-        buf = open_buffer(cfg, "observed", "ecmwf", w)
+        buf = open_buffer(cfg, "observed", "ecmwf", w, zones, log=log)
         newest = sorted(lead for r, lead in plan.values() if r == latest)
         log(f"observed: ECMWF_OBS from leads {lo}-{hi} h of {ec.obs_runs} runs up to {run_label(latest)} "
             f"({f'leads {newest[0]}-{newest[-1]} of it' if newest else 'none of its leads'}); window ends "
@@ -264,11 +273,11 @@ def run_ecmwf(cfg: RainConfig, run: str = "latest", obs: bool = True, fc: bool =
             raise SourceUnavailable(f"no {name} run covering {_hour(now_h + 1)} .. {_hour(now_h + SLOTS)} "
                                     f"published in the last {ec.search_hours} h")
         plan, missing = fc_plan(rd, frun, now_h)
-        buf = open_buffer(cfg, "forecast", "ecmwf", w)
+        buf = open_buffer(cfg, "forecast", "ecmwf", w, zones, log=log)
         held = {int(r) for r in buf.run_hour[buf.hour >= 0]}
         if buf.anchor > now_h or any(r > hour_index(frun) for r in held):
             log("forecast: the saved buffer is ahead of this request (later 'now' or newer run); starting afresh")
-            buf = HourlyBuffer.for_weights(w, "forecast")
+            buf = HourlyBuffer.for_weights(w, "forecast", zones)
         buf.advance(now_h)
         age = (now - frun) / timedelta(hours=1)
         log(f"forecast: ECMWF_FC from run {run_label(frun)} ({age:.0f} h old), hours {_hour(now_h + 1)} .. "

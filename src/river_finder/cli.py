@@ -261,6 +261,10 @@ def _rain(args):
         except (FetchError, NotFound) as e:
             log(f"ECMWF unavailable for the cell store: {e}")
             raise SystemExit(pipeline.EXIT_UNAVAILABLE) from None
+    elif args.step == "zones":
+        from .rainfall.zones import run_zones
+
+        run_zones(cfg, log=log)
     elif args.step == "totals":
         pipeline.run_totals(cfg, windows=args.windows, scaled=not args.raw, rebuild_network=args.rebuild_network,
                             log=log)
@@ -354,23 +358,26 @@ def main(argv: list[str] | None = None) -> None:
     pl.add_argument("--models", nargs="*", help="cv: only these model ids (default: the whole zoo)")
     pl.add_argument("--repeats", type=int, default=5, help="cv: repeats of the 5-fold split")
     pl.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz")
-    pr = sub.add_parser("rain", help="rainfall per catchment: weights | ecmwf | gauges | scale | totals | inputs | "
-                                     "publish | status (see src/river_finder/rainfall/, docs/live-rain.md, "
+    pr = sub.add_parser("rain", help="rainfall per catchment: weights | ecmwf | gauges | zones | scale | totals | "
+                                     "inputs | publish | status (see src/river_finder/rainfall/, docs/live-rain.md, "
                                      "docs/rain-gauges.md, docs/rainfall-scaling.md)")
-    pr.add_argument("step", choices=["weights", "ecmwf", "gauges", "scale", "totals", "inputs", "publish", "status"],
+    pr.add_argument("step", choices=["weights", "ecmwf", "gauges", "zones", "scale", "totals", "inputs", "publish",
+                                     "status"],
                     help="weights: grid-cell -> local-catchment matrices into <data>/rain/; ecmwf: ECMWF IFS observed "
                          "proxy and next-24-h forecast into <data>/rain/obs_ecmwf.npz and fc_ecmwf.npz (exit 75 when "
                          "no run is published or the bucket does not answer); gauges: hourly rain-gauge totals from "
                          "the councils' Hilltop servers (WCRC, TDC) and ECan's Open Data Portal into "
-                         "<data>/rain/gauges/ (gauges_hourly.npz + .json; exit 75 when no council answers); scale: "
-                         "gauge scale factors per region (ECMWF at the gauge cells over 30 days into "
-                         "<data>/rain/scaling/, copies of one station counted once, factors_ecmwf.json + history; "
-                         "re-scales the buffers); totals: "
+                         "<data>/rain/gauges/ (gauges_hourly.npz + .json; exit 75 when no council answers); zones: "
+                         "the scaling zones of every catchment ([[scaling.zones]]: regions split by distance to the "
+                         "main divide) into <data>/rain/scaling_zones.npz (+ .json); scale: "
+                         "gauge scale factors per zone (ECMWF at the gauge cells over 30 days into "
+                         "<data>/rain/scaling/, copies of one station counted once, likely outages left out, "
+                         "factors_ecmwf.json + history; re-scales the buffers); totals: "
                          "upstream mm and m3 per reach and "
                          "window from the current buffers into <data>/rain/totals.npz (+ .json); inputs: the hourly "
-                         "job's fixed inputs into --out (weights, network, viewer map, manifest); publish: per-region "
-                         "rain files + index.json for the site into --out; status: config, weight files, buffers and "
-                         "totals")
+                         "job's fixed inputs into --out (weights, network, scaling zones, viewer map, manifest); "
+                         "publish: per-region rain files + index.json for the site into --out; status: config, "
+                         "weight files, buffers and totals")
     pr.add_argument("--windows", type=int, nargs="+", default=None,
                     help="totals: windows in hours, any of 1..24 (default: windows in config/rainfall.toml)")
     pr.add_argument("--raw", action="store_true", help="totals: sum the raw values instead of the gauge-scaled ones")

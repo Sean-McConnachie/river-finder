@@ -533,10 +533,12 @@ def _r4(v) -> float | None:
 
 
 def evaluate_region(rows: np.ndarray, g, cols: np.ndarray, grid_vals: np.ndarray, keep: np.ndarray,
-                    sc: ScalingConfig) -> dict:
-    """The comparison for one region: gauges ``rows`` of ``g``; ``grid_vals`` (hours, gauges) is the grid's
-    mm at each gauge's cell over the window hours (NaN = no value)."""
+                    sc: ScalingConfig, outage: np.ndarray | None = None) -> dict:
+    """The comparison for one zone: gauges ``rows`` of ``g``; ``grid_vals`` (hours, gauges) is the grid's
+    mm at each gauge's cell over the window hours (NaN = no value); ``outage`` (gauges, hours of ``g``) marks
+    the hours of likely outages (:func:`find_outages`), left out like missing hours."""
     H = cols.size
+    usable = g.ok if outage is None else g.ok & ~outage
     used, excluded = [], {"copy": [], "no_cell": [], "few_hours": []}
     gsum = esum = 0.0
     hours = 0
@@ -550,17 +552,19 @@ def evaluate_region(rows: np.ndarray, g, cols: np.ndarray, grid_vals: np.ndarray
             excluded["no_cell"].append(gid)
             continue
         e = grid_vals[:, r]
-        ok = g.ok[r, cols] & np.isfinite(e)
+        ok = usable[r, cols] & np.isfinite(e)
         n = int(ok.sum())
         share = n / H if H else 0.0
+        n_out = int(outage[r, cols].sum()) if outage is not None else 0
         if share < sc.min_usable:
-            excluded["few_hours"].append({"id": gid, "usable": round(share, 3)})
+            excluded["few_hours"].append({"id": gid, "usable": round(share, 3)}
+                                         | ({"outage_hours": n_out} if n_out else {}))
             continue
         gm = float(np.nan_to_num(g.mm[r, cols])[ok].sum())
         em = float(e[ok].sum())
         used.append({"id": gid, "council": str(g.council[r]), "cell": int(g.cell[r]), "hours": n,
                      "usable": round(share, 3), "gauge_mm": round(gm, 2), "grid_mm": round(em, 2),
-                     "ratio": _r4(gm / em) if em > 0 else None})
+                     "ratio": _r4(gm / em) if em > 0 else None} | ({"outage_hours": n_out} if n_out else {}))
         gsum += gm
         esum += em
         hours += n
@@ -691,8 +695,9 @@ def describe_factors(f: ScaleFactors) -> dict:
             for k, r in enumerate(f.regions) if f.version[k] > 0}
 
 
-def apply_to_buffers(cfg: RainConfig, family: str, log=print) -> dict:
-    """Re-scale the saved buffers of ``family`` with the current factors (unity when off); returns hours per kind."""
+def apply_to_buffers(cfg: RainConfig, family: str, zones=None, log=print) -> dict:
+    """Re-scale the saved buffers of ``family`` with the current factors (unity when off), after moving them to
+    ``zones`` (a :class:`.zones.ZoneMap`) when they are kept per other zones; returns hours per kind."""
     from .sources import family_products
 
     done = {}
@@ -704,6 +709,9 @@ def apply_to_buffers(cfg: RainConfig, family: str, log=print) -> dict:
         tags = family_products(family, kind)
         if not tags:
             continue
+        if zones is not None and buf.rows_digest in ("", zones.rows_digest) and buf.rezone(zones.names,
+                                                                                            zones.zone_of):
+            log(f"{kind} {family} buffer: moved to {len(zones.names)} scaling zones")
         f = factors_for(cfg, tags[0], buf.regions)
         n = buf.apply_factors(f)
         buf.save(p)
@@ -713,20 +721,6 @@ def apply_to_buffers(cfg: RainConfig, family: str, log=print) -> dict:
 
 
 # --- the whole step ----------------------------------------------------------------------------------
-def _network_regions(cfg: RainConfig, family: str) -> tuple[str, ...]:
-    p = cfg.weights_path(family)
-    if p.exists():
-        with np.load(p, allow_pickle=False) as z:
-            return tuple(json.loads(str(z["meta"]))["regions"])
-    for kind in ("observed", "forecast"):
-        b = cfg.buffer_path(kind, family)
-        if b.exists():
-            with np.load(b, allow_pickle=False) as z:
-                return tuple(json.loads(str(z["meta"]))["regions"])
-    raise SystemExit(f"no {p.name} or buffers in {cfg.rain_dir}: the scaling regions come from them "
-                     f"(river-finder rain weights)")
-
-
 def make_readers(cfg: RainConfig, names, http=None, log=print) -> list:
     from .ecmwf import make_reader
     from .fetch import Http
@@ -742,11 +736,52 @@ def make_readers(cfg: RainConfig, names, http=None, log=print) -> list:
     return out
 
 
+def _close_record(name: str, st: dict, zm, family: str, products, seq: int, created: str, window: dict) -> dict:
+    """The history record that ends the factor of a zone that is no longer listed (a region split into zones)."""
+    into = [z for z, par in zip(zm.names, zm.parent, strict=True) if par == name and z != name]
+    km = next((s.divide_km for s in zm.splits if s.region == name), None)
+    why = (f"zone split (rf-t26.16): {name} is now scaled as {' and '.join(into)} ([[scaling.zones]]: within "
+           f"{km:g} km of the main divide or beyond); this factor no longer applies" if into
+           else f"{name} is no longer a scaling zone; this factor no longer applies")
+    return {"format": HISTORY_FORMAT, "seq": seq, "family": family, "products": list(products), "region": name,
+            "factor": 1.0, "version": 0,
+            "previous": {"factor": float(st.get("factor", 1.0)), "version": int(st.get("version", 0)),
+                         "set": st.get("set"), "record": st.get("record")},
+            "status": "closed", "reason": why, "replaced_by": into, "created": created, "window": window,
+            "zones": zm.rule()}
+
+
+def _close_zones(prev: dict, closed: dict, zm, family: str, products, seq: int, created: str, window: dict,
+                 log=print) -> tuple[dict, list[dict]]:
+    """Close the factors of ``prev`` (current states by zone) whose zone ``zm`` no longer lists: one history
+    record each (when it had a version > 0), and an entry in ``closed`` (its last factor and versions, so a
+    zone listed again continues above them). Returns the new ``closed`` and the records."""
+    closed, records = dict(closed), []
+    for name, st in prev.items():
+        if name in zm.names:
+            continue
+        rec = None
+        if int(st.get("version", 0)) > 0:
+            rec = _close_record(name, st, zm, family, products, seq, created, window)
+            records.append(rec)
+            seq += 1
+            log(f"closed {name} (factor {st.get('factor')}, version {st.get('version')}): {rec['reason']}")
+        closed[name] = {"closed": created, "record": rec["seq"] if rec else None,
+                        "reason": rec["reason"] if rec else "no longer a scaling zone (it had no factor)",
+                        "last_factor": float(st.get("factor", 1.0)), "last_version": int(st.get("version", 0)),
+                        "last_set": st.get("set"), "last_record": st.get("record"),
+                        "max_version": max(int(st.get("max_version", 0)),
+                                           int(closed.get(name, {}).get("max_version", 0))),
+                        "replaced_by": rec["replaced_by"] if rec else []}
+    return closed, records
+
+
 def run_scale(cfg: RainConfig, family: str = "ecmwf", days: int | None = None, now: datetime | None = None,
               force: bool = False, fetch: bool = True, readers=None, http=None, log=print) -> dict:
-    """Update the cell store, find copies of one station, compute and store the factors of ``family``,
-    re-scale the saved buffers (``[scaling] apply``). See the module docstring."""
+    """Update the cell store, find copies of one station and likely outages, compute and store the factors of
+    ``family`` per scaling zone, re-scale the saved buffers (``[scaling] apply``). See the module docstring."""
     from .gauges import GaugeHours
+    from .zones import load_zones
 
     sc = cfg.scaling
     src = sc.source(family)
@@ -765,7 +800,8 @@ def run_scale(cfg: RainConfig, family: str = "ecmwf", days: int | None = None, n
     gg = g.meta.get("grid")
     if gg and not GridSpec(**{k: gg[k] for k in ("name", "lon0", "lat0", "dlon", "dlat", "nx", "ny")}).same_cells(grid):
         raise SystemExit(f"{gpath.name} places gauges on another grid than [grids.{family}]: run rain gauges again")
-    regions = _network_regions(cfg, family)
+    zm = load_zones(cfg, family, strict=True, log=log)
+    zones = zm.names
     end = min(now_h, int(g.hour[-1]))
     first = end - days * 24 + 1
     cols = np.flatnonzero((g.hour >= first) & (g.hour <= end))
@@ -774,6 +810,12 @@ def run_scale(cfg: RainConfig, family: str = "ecmwf", days: int | None = None, n
                                                                   else ""))
     if end < now_h - 24:
         log(f"  note: the gauge cache ends {now_h - end} h before now (river-finder rain gauges)")
+    gregion = [g.regions[k] if k >= 0 else "" for k in g.region_of]
+    gzone, gdiv = zm.gauge_zones(gregion, g.x, g.y)
+    for s in zm.splits:
+        log(f"scaling zones: {s.region} -> {s.near} (<= {s.divide_km:g} km from the main divide, "
+            f"{int((gzone == zm.zone_index(s.near)).sum())} gauges) and {s.far} "
+            f"({int((gzone == zm.zone_index(s.far)).sum())} gauges)")
 
     # copies of one station
     cp = find_copies(g, cols, sc, _home_regions(cfg))
@@ -781,8 +823,11 @@ def run_scale(cfg: RainConfig, family: str = "ecmwf", days: int | None = None, n
     log(f"copies of one station: {len(cp['groups'])} stations with copies, {int((~keep).sum())} copies dropped "
         f"({cp['pairs_checked']} pairs within {sc.dedupe_km:g} km compared over {cp['compared']['hours']} h, "
         f"{cp['compared']['first_hour']} .. {cp['compared']['last_hour']})")
+    ids = np.asarray(g.id).astype(str)
     for grp in cp["groups"]:
         log(f"  kept {grp['kept']}; dropped {', '.join(grp['dropped'])}: {next(iter(grp['why'].values()))}")
+        k = int(np.flatnonzero(ids == grp["kept"])[0])
+        grp["zone"] = zones[gzone[k]] if gzone[k] >= 0 else None
     for c in cp["colocated"]:
         if c.get("note"):
             log(f"  co-located, not copies: {c['a']} and {c['b']}, {c['distance_m']:.0f} m apart: {c['note']}")
@@ -820,47 +865,74 @@ def run_scale(cfg: RainConfig, family: str = "ecmwf", days: int | None = None, n
     log(f"cell store: {summ['cells']} cells, {summ['first']} .. {summ['last']}, by reader {summ['by_reader']}; "
         f"window coverage {coverage:.1%}" + ("" if grid_ok else f" (< {sc.min_usable:.0%}: factors held)"))
 
+    # likely outages: dry spells while the neighbours and the grid are wet, over every cached gauge hour
+    grid_all = store.values(np.maximum(g.cell, 0), int(g.hour[0]), int(g.hour[-1]))   # (hours of g, gauges)
+    grid_all[:, np.asarray(g.cell) < 0] = np.nan
+    out = find_outages(g, grid_all, keep, sc)
+    outage = out["mask"]
+    councils_of = np.asarray(g.council).astype(str)
+    n_win = {c: int(outage[councils_of == c][:, cols].sum()) for c in sorted(set(councils_of.tolist()))}
+    log(f"likely outages: {len(out['spells'])} dry spells at {len({x['id'] for x in out['spells']})} gauges "
+        f"({out['spells_checked']} spells of >= {sc.outage_min_hours} dry hours checked); "
+        f"{int(outage[:, cols].sum())} gauge-hours of the window left out (by council {n_win})")
+    for x in out["spells"]:
+        log(f"  {x['id']}: dry {x['dry_hours']} h, {x['from']} .. {x['to']}; {x['neighbours']} neighbours, median "
+            f"{x['neighbour_median_mm']:.1f} mm; ECMWF {x['grid_mm']:.1f} mm")
+
     # evaluate and decide
     grid_vals = store.values(np.maximum(g.cell, 0), first, end)   # (hours, gauges): each gauge's cell
     grid_vals[:, np.asarray(g.cell) < 0] = np.nan
-    prev = (load_factors(cfg, family) or {}).get("regions", {})
+    old = load_factors(cfg, family) or {}
+    prev = old.get("regions", {})
     hist = load_history(cfg, family)
     seq = (hist[-1]["seq"] + 1) if hist else 1
     when, created = clock, _iso(clock)
-    gidx = {r: k for k, r in enumerate(g.regions)}
-    rows_by = g.region_rows()
     window = {"from": _hour(first - 1), "to": _hour(end), "first_hour": _hour(first), "last_hour": _hour(end),
               "hours": int(end - first + 1), "days": days}
     cfg_snap = {k: getattr(sc, k) for k in ("days", "min_gauges", "min_usable", "min_gauge_mm", "min_grid_mm",
                                             "clamp", "max_step", "min_change", "min_update_hours", "dedupe_km",
-                                            "dedupe_min_wet_hours", "dedupe_equal_share", "dedupe_equal_mm")}
+                                            "dedupe_min_wet_hours", "dedupe_equal_share", "dedupe_equal_mm",
+                                            "outage_min_hours", "outage_km", "outage_min_neighbours",
+                                            "outage_neighbour_mm", "outage_grid_mm")}
     cfg_snap["clamp"] = list(sc.clamp)
+    cfg_snap["zones"] = zm.rule()
     inputs = {"gauges": {"file": str(gpath.relative_to(cfg.rain_dir)), "created": g.meta.get("created"),
                          "hours": [_hour(g.hour[0]), _hour(g.hour[-1])]},
               "cells": {"file": str(cfg.cells_path(family).relative_to(cfg.rain_dir)), **summ,
-                        "window_coverage": round(coverage, 4)}}
-    states, evals, records = {}, {}, []
-    for r in regions:
-        rows = rows_by.get(r, np.zeros(0, np.int64)) if r in gidx else np.zeros(0, np.int64)
-        ev = evaluate_region(rows, g, cols, grid_vals, keep, sc)
-        p = prev.get(r, {"factor": 1.0, "version": 0, "set": None, "max_version": 0})
+                        "window_coverage": round(coverage, 4)},
+              "zones": {"file": None if zm.identity else cfg.zones_path.name, "built": zm.meta.get("built"),
+                        "rows_digest": zm.rows_digest}}
+    # factors of zones no longer listed (a region split into zones) are closed: a history record each
+    closed, records = _close_zones(prev, old.get("closed", {}), zm, family, src.products, seq, created, window, log)
+    seq += len(records)
+    states, evals = {}, {}
+    for zi, r in enumerate(zones):
+        rows = np.flatnonzero(gzone == zi)
+        ev = evaluate_region(rows, g, cols, grid_vals, keep, sc, outage)
+        ev["parent"] = zm.parent[zi]
+        p = prev.get(r)
+        if p is None:  # a new zone, or one listed again: its versions continue above any it had
+            p = {"factor": 1.0, "version": 0, "set": None, "max_version": int(closed.get(r, {}).get("max_version", 0))}
         dec = decide(p, ev, sc, when, force=force, grid_ok=grid_ok)
         ev["decision"] = {k: dec[k] for k in ("status", "reason", "guards", "target", "stepped")}
         evals[r] = ev
         st = {"factor": dec["factor"], "version": dec["version"], "status": dec["status"], "reason": dec["reason"],
-              "set": p.get("set"), "record": p.get("record"),
+              "set": p.get("set"), "record": p.get("record"), "parent": zm.parent[zi],
               "max_version": max(int(p.get("max_version", 0)), dec["version"])}
         if dec["changed"]:
+            members = set(ids[rows].tolist())
             rec = {"format": HISTORY_FORMAT, "seq": seq, "family": family, "products": list(src.products),
-                   "region": r, "factor": dec["factor"], "version": dec["version"],
+                   "region": r, "parent": zm.parent[zi], "factor": dec["factor"], "version": dec["version"],
                    "previous": {"factor": float(p.get("factor", 1.0)), "version": int(p.get("version", 0))},
                    "status": dec["status"], "reason": dec["reason"], "created": created, "window": window,
                    "evaluation": {k: v for k, v in ev.items() if k != "decision"}, "guards": dec["guards"],
-                   "copies_dropped": [x for grp in cp["groups"] for x in grp["dropped"] if grp["region"] == r],
+                   "copies_dropped": [x for grp in cp["groups"] for x in grp["dropped"] if grp.get("zone") == r],
+                   "outages": [x for x in out["spells"] if x["id"] in members],
                    "config": cfg_snap, "inputs": inputs}
             records.append(rec)
             st.update(set=created, record=seq)
             seq += 1
+        closed.pop(r, None)  # listed again: its old records stay in the history
         states[r] = st
     if records:
         hp = history_path(cfg, family)
@@ -869,30 +941,43 @@ def run_scale(cfg: RainConfig, family: str = "ecmwf", days: int | None = None, n
             for rec in records:
                 fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
     councils = g.meta.get("councils", {})
+    split = {s.region for s in zm.splits}
+    gauge_zones = {ids[i]: {"zone": zones[gzone[i]], "divide_km": round(float(gdiv[i]), 2)
+                            if np.isfinite(gdiv[i]) else None}
+                   for i in range(g.n) if gzone[i] >= 0 and zm.parent[gzone[i]] in split}
     doc = {"format": FACTORS_FORMAT, "family": family, "products": list(src.products), "updated": created,
-           "version_doc": "0 = unscaled (factor 1); versions > 0 are unique per region and only change with the factor",
-           "regions": states,
+           "version_doc": "0 = unscaled (factor 1); versions > 0 are unique per zone and only change with the factor",
+           "zones_doc": "the keys of regions are the scaling zones: a network region, or part of one (parent); "
+                        "closed: zones no longer listed, with their last factor",
+           "regions": states, "closed": closed,
+           "zones": {"file": None if zm.identity else cfg.zones_path.name, **zm.rule(),
+                     "parent": dict(zip(zones, zm.parent, strict=True))},
            "councils": {cid: {k: c.get(k) for k in ("name", "attribution", "licence", "base_url")}
                         for cid, c in councils.items()},
            "last_update": {"created": created, "now": _hour(now_h), "window": window, "config": cfg_snap,
                            "inputs": inputs, "fill": fill, "trimmed_hours": trimmed, "forced": force,
-                           "copies": {k: v for k, v in cp.items() if k != "keep"}, "regions": evals,
+                           "copies": {k: v for k, v in cp.items() if k != "keep"},
+                           "outages": {"rule": out["rule"], "spells_checked": out["spells_checked"],
+                                       "spells": out["spells"], "window_hours": int(outage[:, cols].sum()),
+                                       "window_hours_by_council": n_win},
+                           "gauge_zones": gauge_zones, "regions": evals,
                            "new_records": [rec["seq"] for rec in records]}}
     _write_json(cfg.factors_path(family), doc)
     log_table(doc, log)
-    log(f"factors -> {cfg.factors_path(family)}; {len(records)} new version records -> "
+    log(f"factors -> {cfg.factors_path(family)}; {len(records)} new history records -> "
         f"{history_path(cfg, family).name}")
     if sc.apply:
-        doc["applied"] = apply_to_buffers(cfg, family, log=log)
+        doc["applied"] = apply_to_buffers(cfg, family, zm, log=log)
     else:
         log("[scaling] apply = false: the buffers are left as they are (rain ecmwf writes them unscaled)")
     return doc
 
 
 def log_table(doc: dict, log=print) -> None:
-    """The per-region table of a factors document."""
+    """The per-zone table of a factors document."""
     ev = doc["last_update"]["regions"]
-    log(f"{'region':<14} {'gauges':>6} {'gauge mm':>9} {'grid mm':>9} {'ratio':>6} {'median':>6} {'target':>6} "
+    w = max([18] + [len(r) for r in doc["regions"]])
+    log(f"{'zone':<{w}} {'gauges':>6} {'gauge mm':>9} {'grid mm':>9} {'ratio':>6} {'median':>6} {'target':>6} "
         f"{'factor':>6} {'ver':>3}  status")
     quiet = []
     for r, st in doc["regions"].items():
@@ -904,17 +989,25 @@ def log_table(doc: dict, log=print) -> None:
 
         def f(v, w=6, p=3):
             return f"{v:>{w}.{p}f}" if isinstance(v, int | float) else f"{'-':>{w}}"
-        log(f"{r:<14} {e['gauges']:>3}/{e['gauges_listed']:<2} {f(e['gauge_mm'], 9, 1)} {f(e['grid_mm'], 9, 1)} "
+        log(f"{r:<{w}} {e['gauges']:>3}/{e['gauges_listed']:<2} {f(e['gauge_mm'], 9, 1)} {f(e['grid_mm'], 9, 1)} "
             f"{f(e['ratio'])} {f(e['check'].get('median_ratio'))} {f(d.get('target'))} {st['factor']:>6.3f} "
             f"{st['version']:>3}  {st['status']}: {st['reason']}")
     if quiet:
-        log(f"{len(quiet)} regions without gauges: factor 1, version 0 ({', '.join(quiet)})")
+        log(f"{len(quiet)} zones without gauges: factor 1, version 0 ({', '.join(quiet)})")
+    for r, c in doc.get("closed", {}).items():
+        if c.get("closed") == doc["last_update"]["created"] and c.get("record"):
+            log(f"closed: {r} (was {c['last_factor']:.3f} v{c['last_version']}; record {c['record']}): {c['reason']}")
 
 
 def status_lines(cfg: RainConfig) -> list[str]:
-    """Lines for ``rain status``: the current factors and the cell store of each scaling source."""
+    """Lines for ``rain status``: the zones, the current factors and the cell store of each scaling source."""
     out = [f"scaling: apply {str(cfg.scaling.apply).lower()}, publish {str(cfg.scaling.publish).lower()} "
            f"(window {cfg.scaling.days} d; {cfg.scaling_dir})"]
+    if cfg.scaling.zones:
+        have = cfg.zones_path.exists()
+        out.append("  zones: " + "; ".join(f"{s.region} -> {s.near} (<= {s.divide_km:g} km from the main divide), "
+                                           f"{s.far}" for s in cfg.scaling.zones)
+                   + (f" ({cfg.zones_path.name})" if have else f" (no {cfg.zones_path.name} yet: rain zones)"))
     for src in cfg.scaling.sources:
         d = load_factors(cfg, src.family)
         if d is None:
@@ -923,8 +1016,13 @@ def status_lines(cfg: RainConfig) -> list[str]:
         sc = [f"{r} {s['factor']:.3f} v{s['version']}" for r, s in d["regions"].items() if s["version"] > 0]
         w = d["last_update"]["window"]
         out.append(f"  {src.family} {d['updated']} (window {w['from']} .. {w['to']}; products "
-                   f"{', '.join(d['products'])}): " + ("; ".join(sc) if sc else "no region scaled")
-                   + f"; {sum(1 for s in d['regions'].values() if s['version'] == 0)} regions at version 0")
+                   f"{', '.join(d['products'])}): " + ("; ".join(sc) if sc else "no zone scaled")
+                   + f"; {sum(1 for s in d['regions'].values() if s['version'] == 0)} zones at version 0"
+                   + (f"; closed: {', '.join(d['closed'])}" if d.get("closed") else ""))
+        o = d["last_update"].get("outages")
+        if o and o.get("spells"):
+            out.append(f"  {src.family} likely outages: {len(o['spells'])} dry spells, {o['window_hours']} gauge-hours "
+                       f"of the window left out")
         cp = cfg.cells_path(src.family)
         if cp.exists():
             s = CellStore.load(cp).summary()

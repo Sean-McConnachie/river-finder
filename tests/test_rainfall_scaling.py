@@ -498,7 +498,7 @@ def test_status_lines_and_table(tmp_path):
     logs = []
     S.run_scale(cfg, now=NOW, readers=_readers(NOW), log=logs.append)
     text = "\n".join(logs)
-    assert "West Coast" in text and "1 regions without gauges" in text and "kept wcrc:A" in text
+    assert "West Coast" in text and "1 zones without gauges" in text and "kept wcrc:A" in text
     lines = S.status_lines(cfg)
     assert "West Coast 1.250 v1" in lines[1] and "Canterbury 0.900 v1" in lines[1] and "cells" in lines[2]
     assert json.loads(cfg.factors_path("ecmwf").read_text())["format"] == S.FACTORS_FORMAT

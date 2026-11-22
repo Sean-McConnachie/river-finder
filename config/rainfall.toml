@@ -167,9 +167,38 @@ dedupe_min_wet_hours = 10 # ... over their common usable hours: with >= 10 hours
 dedupe_equal_share = 0.95 # when >= 95 % of those hours agree within 0.05 mm (copies: 99-100 %; distinct gauges at the
 dedupe_equal_mm = 0.05    # same site: <= 53 %). One copy is kept: see docs/rainfall-scaling.md
 colocated_m = 100.0       # distinct gauges within 100 m are reported with the lag that matches them best
+# Likely outages (rf-t26.16): a gauge that is down reads dry (no record = 0 mm; ECan's event gauges send no row for a
+# dry hour). A spell of >= outage_min_hours dry (or unusable) hours at a gauge is left out of the comparison when
+# >= outage_min_neighbours gauges within outage_km have a median of >= outage_neighbour_mm over its dry hours and
+# ECMWF has >= outage_grid_mm at its cell (2026-11-22: 7 spells at 5 gauges, 2181 gauge-hours of the window)
+outage_min_hours = 24     # 0 = off
+outage_km = 25.0
+outage_min_neighbours = 2
+outage_neighbour_mm = 20.0
+outage_grid_mm = 20.0
+zones_file = "scaling_zones.npz"   # under <rain>: catchment -> scaling zone (river-finder rain zones; an input of the
+                                   # hourly job, copied by rain inputs)
 
 [scaling.ecmwf]
 products = ["ECMWF_OBS", "ECMWF_FC"]   # the ECMWF factor scales the observed proxy and the forecast (one model)
 readers = ["openmeteo-s3", "ecmwf-s3"] # the cell store takes each hour from the first reader that has it (the observed
                                        # proxy's rule: the newest run with the hour within [ecmwf] obs_leads). Open-Meteo
                                        # keeps ~8 days of runs, ECMWF's AWS bucket the 0.1 deg runs since 2026-10-20 06z
+
+# Scaling zones (rf-t26.16; src/river_finder/rainfall/zones.py, docs/rainfall-scaling.md "Zones"). A factor is computed
+# and applied per zone. A region without a [[scaling.zones]] entry is one zone, named after the region; a region with
+# one is split by distance to the main divide: catchments and gauges within divide_km are zone `near`, the rest `far`.
+# Zone names are the ids of the factor history (a new name starts at version 1). After a change: river-finder rain
+# zones, then rain inputs (the hourly job reads the zone file from the rain-inputs branch).
+[scaling.divide]                 # the main divide: the border of the `west` regions with the `east` regions
+west = ["West Coast", "Tasman"]
+east = ["Canterbury", "Otago"]
+
+# Canterbury: gauges within 15 km of the divide see 1.20 x ECMWF (11 gauges; 1.19 and 1.21 in the two 15-day halves),
+# the others 0.51 x (97 gauges; 0.47 / 0.54). ECMWF's 9 km orography spreads the divide's rain east into the foothills.
+[[scaling.zones]]
+region = "Canterbury"
+divide_km = 15.0
+near = "Canterbury divide"
+far = "Canterbury east"
+

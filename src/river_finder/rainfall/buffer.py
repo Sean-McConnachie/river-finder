@@ -5,8 +5,10 @@ for valid hour ``h`` (hours since the epoch, hour ending). Per slot it keeps the
 product (code, see :data:`.sources.PRODUCTS`), the source string, run and lead time (forecasts),
 what the last write replaced, how often the slot was written and when. Per slot and catchment it
 keeps raw mm and scaled mm (float32, NaN = no value). Scale factors are per source family and
-region (rf-t26.5), so they are stored per slot and region, with ``region_of`` mapping each
-catchment to its region; ``scaled = raw * factor[slot, region_of]``.
+scaling zone (rf-t26.5; zones since rf-t26.16, :mod:`.zones`: a network region or part of one), so
+they are stored per slot and zone. The buffer's ``regions`` are the zone names and ``region_of`` maps
+each catchment to its zone; ``scaled = raw * factor[slot, region_of]``. :meth:`HourlyBuffer.rezone`
+moves a buffer to other zones (its hours become unscaled until factors are applied again).
 
 Two kinds:
 
@@ -144,9 +146,31 @@ class HourlyBuffer:
         self.factor_version = np.zeros((s, r), dtype=np.int32)
 
     @classmethod
-    def for_weights(cls, weights, kind: str = "observed") -> HourlyBuffer:
-        """A buffer whose rows are the catchments (rows) of a :class:`.weights.CatchmentWeights`."""
-        return cls(weights.n, kind, weights.regions, weights.region_of, weights.rows_digest)
+    def for_weights(cls, weights, kind: str = "observed", zones=None) -> HourlyBuffer:
+        """A buffer whose rows are the catchments (rows) of a :class:`.weights.CatchmentWeights`, scaled per
+        ``zones`` (a :class:`.zones.ZoneMap`; default: one zone per network region)."""
+        if zones is None:
+            return cls(weights.n, kind, weights.regions, weights.region_of, weights.rows_digest)
+        if zones.rows_digest != weights.rows_digest:
+            raise ValueError("the scaling zones are for other rows than the weights")
+        return cls(weights.n, kind, zones.names, zones.zone_of, weights.rows_digest)
+
+    def same_zones(self, names, zone_of) -> bool:
+        return self.regions == tuple(names) and np.array_equal(self.region_of, np.asarray(zone_of, dtype=np.int16))
+
+    def rezone(self, names, zone_of) -> bool:
+        """Scale per other zones: every held hour becomes unscaled (factor 1, version 0) until factors for the new
+        zones are applied (:meth:`apply_factors`). Returns False when the zones are the same."""
+        names, zone_of = tuple(names), np.asarray(zone_of, dtype=np.int16)
+        if self.same_zones(names, zone_of):
+            return False
+        if zone_of.shape != (self.n,) or (self.n and zone_of.max(initial=-1) >= len(names)):
+            raise ValueError("zone_of needs one zone index (or -1) per catchment")
+        self.regions, self.region_of = names, zone_of
+        self.factor = np.ones((self.slots, len(names)), dtype=np.float32)
+        self.factor_version = np.zeros((self.slots, len(names)), dtype=np.int32)
+        self.scaled = self.raw.copy()
+        return True
 
     # --- hours held -----------------------------------------------------------------------------
     def span(self) -> tuple[int, int]:

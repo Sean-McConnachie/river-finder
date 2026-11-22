@@ -539,7 +539,8 @@ class KindTotals:
     scale: np.ndarray         # uint8 RAW | SCALED
     product_tags: tuple[str, ...]
     slots: dict[str, np.ndarray]   # per hour of the longest window, oldest first
-    info: dict = field(default_factory=dict)   # source, buffer, anchor, per-window summary
+    info: dict = field(default_factory=dict)   # source, buffer, anchor, per-window summary; zones (the buffer's)
+    up_zones: np.ndarray | None = None   # uint32/64 bit per scaling zone (info["zones"]) upstream (rf-t26.16)
 
     def index(self, x: int) -> int:
         try:
@@ -676,11 +677,16 @@ class UpstreamTotals:
 
     def provenance(self, row: int, kind: str, x: int) -> list[dict]:
         """Every hour of window ``x`` for reach ``row``: product, source, run, lead and the factor
-        version and factor of each region upstream of the reach."""
+        version and factor of each scaling zone upstream of the reach (zones: the buffer's, rf-t26.16;
+        totals saved before zones name the regions)."""
         k = self.kind(kind)
         k.index(x)
         s = k.slots
-        regs = [i for i in range(len(self.regions)) if int(self.up_regions[row]) >> i & 1]
+        if k.up_zones is not None and k.info.get("zones"):
+            names, bits = tuple(k.info["zones"]), int(k.up_zones[row])
+        else:
+            names, bits = self.regions, int(self.up_regions[row])
+        regs = [i for i in range(len(names)) if bits >> i & 1]
         out = []
         for j in _window_hours(kind, s["hour"], x):
             code = int(s["product"][j])
@@ -688,8 +694,8 @@ class UpstreamTotals:
                         "source": str(s["source"][j]) or None,
                         "run": _hour(s["run_hour"][j]) if s["run_hour"][j] >= 0 else None,
                         "lead": int(s["lead"][j]) if s["lead"][j] >= 0 else None,
-                        "factor_version": {self.regions[i]: int(s["factor_version"][j, i]) for i in regs},
-                        "factor": {self.regions[i]: float(s["factor"][j, i]) for i in regs}})
+                        "factor_version": {names[i]: int(s["factor_version"][j, i]) for i in regs},
+                        "factor": {names[i]: float(s["factor"][j, i]) for i in regs}})
         return out
 
     # --- files ----------------------------------------------------------------------------------
@@ -705,6 +711,8 @@ class UpstreamTotals:
                 arrays[f"{p}_{f}"] = getattr(k, f)
             for f, v in k.slots.items():
                 arrays[f"{p}_slot_{f}"] = v
+            if k.up_zones is not None:
+                arrays[f"{p}_up_zones"] = k.up_zones
         meta = dict(self.meta, format=FORMAT, regions=list(self.regions),
                     kinds={kind: {"windows": list(k.windows), "product_tags": list(k.product_tags), **k.info}
                            for kind, k in self.kinds.items()})
@@ -733,7 +741,8 @@ class UpstreamTotals:
                 slots = {f[len(p) + 6:]: z[f] for f in z.files if f.startswith(f"{p}_slot_")}
                 info = {k: v for k, v in km.items() if k not in ("windows", "product_tags")}
                 kinds[kind] = KindTotals(kind, tuple(km["windows"]), *(z[f"{p}_{f}"] for f in cls.PER_WINDOW),
-                                         tuple(km["product_tags"]), slots, info)
+                                         tuple(km["product_tags"]), slots, info,
+                                         z[f"{p}_up_zones"] if f"{p}_up_zones" in z.files else None)
         return cls(static, tuple(meta["regions"]), kinds, meta)
 
 
@@ -812,9 +821,11 @@ def compute_totals(net: Network, buffers: dict[str, HourlyBuffer], windows=(1, 3
                 "mass_balance_max_rel_err": float(resid.max()) if n else 0.0,
                 "outlets_m3": at_outlets, "local_m3": total_local,
                 "outlets_vs_local_rel_err": abs(at_outlets - total_local) / max(total_local, 1.0)})
-        k = KindTotals(kind, xs, mm, mx[c], mf, bits[c], bits[c2], lo.tags, slots, {})
+        up_zones = accumulate(order, down, _region_bits(buf.region_of, len(buf.regions)), "or")
+        k = KindTotals(kind, xs, mm, mx[c], mf, bits[c], bits[c2], lo.tags, slots, {}, up_zones)
         k.info = _kind_info(kind, buf, int(np.bitwise_or.reduce(lo.scale, axis=None)) if lo.scale.size else 0,
                             now_hour, (anchor or {}).get(kind), info_w)
+        k.info["zones"] = list(buf.regions)   # the scaling zones of the slot factors (rf-t26.16)
         kinds[kind] = k
     timing["finish_s"] = round(time.perf_counter() - t3, 3)
     timing["total_s"] = round(time.perf_counter() - t0, 3)
