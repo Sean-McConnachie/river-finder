@@ -475,15 +475,16 @@ about 30 days of daily updates, the window is all Open-Meteo.
 - A Tasman zone for the inland basins (0.73 x vs 1.12 x, "Zones"): to be checked with a second window.
 - The outage rule marks hours left out of the comparison only (`scaling.find_outages` gives the mask;
   `rain validate` applies it too). It does not catch a half-dead gauge that still tips now and then:
-  Colliers Creek recorded 2 mm in the October storm against 203 mm in its cell and 200-360 mm at its
+  Colliers Creek recorded 2 mm in the October storm against 203 mm in its cell and 150-360 mm at its
   neighbours. A rule on event totals against the neighbours would catch it.
 - The West Coast: a zone factor does not fix its catchment totals (rf-t26.7). A finer unit is a
   candidate: by latitude or by orographic band (30 days: the central band 1.08, the north 0.94, the south
   0.91). Check it on a second window before adding it, as for Tasman.
 - Satellite rain (IMERG) is deferred. The storm comparison with IMERG Final could not be made: NASA's
   hosts are blocked here, it needs an Earthdata Login, and IMERG Final for November 2026 is out about
-  March 2027 (`docs/rainfall-validation-westcoast-2026-11.md`, "IMERG"). The design is per source family: a `[scaling.<family>]` table,
-  `<family>_cells.npz` and `factors_<family>.json`, and buffers scaled by family. A satellite source
+  March 2027 (`docs/rainfall-validation-westcoast-2026-11.md`, "IMERG"). The design is per source
+  family: a `[scaling.<family>]` table, `<family>_cells.npz` and `factors_<family>.json`, and buffers
+  scaled by family. A satellite source
   needs a filler for its grid in place of `fill_ecmwf`.
 - Gauges without coordinates (18 in the three councils) are not compared. Their site pages may give
   a location.

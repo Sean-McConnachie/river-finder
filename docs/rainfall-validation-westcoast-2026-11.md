@@ -35,7 +35,7 @@ is a check. It was made with `rain validate` (code: `src/river_finder/rainfall/v
 - **The timing is good.** For the zone's gauge mean, the hourly correlation is 0.98 at lag 0, the best lag
   is 0 h, and 3-hour sums give r 0.985. ECMWF's rain centroid is 0.9 h early. Its peak is lower and
   broader: 8.3 mm/h at 15Z against the gauges' 10.1 mm/h at 19Z. Per gauge, the median r is 0.88, and 31
-  of the 43 gauges have their best lag at 0 or -1 h. On the Haast, ECMWF is 3-5 h early (r 0.55-0.63).
+  of the 43 gauges have their best lag at 0 or -1 h. On the Haast, ECMWF is 1-5 h early (r 0.55-0.63).
 - **The October storm gives the same result.** On 24-27 October, raw ECMWF has 95 % of the gauge rain, and
   the factor in use makes the bias worse (-5 to -15 mm). The 30-day ratio gives the same result as raw.
   The Hokitika is low and the Grey and Ahaura are high again.
@@ -56,7 +56,7 @@ What follows from this:
    storm makes this pattern stronger (1.19 / 0.93 / 0.75), and the 30 days show it weaker, so it is a
    candidate and not yet a result.
 3. The outage rule does not catch a half-dead gauge. In the October storm, Colliers Creek recorded 2 mm
-   while its cell had 203 mm and its neighbours 200-360 mm. The gauge was not dry for 24 hours, so the
+   while its cell had 203 mm and its neighbours 150-360 mm. The gauge was not dry for 24 hours, so the
    rule did not mark it. A rule that compares event totals with the neighbours would catch this kind of
    failure (proposed follow-up). Tasman's HY Matiri at Lake Outlet (2 mm against 32 mm in its cell) is
    another candidate.
@@ -294,10 +294,10 @@ Per gauge, the best lags are: -5 h at 1 gauge, -3 h at 3, -2 h at 3, -1 h at 10,
 5. The median r at lag 0 is 0.88. ECMWF is in phase with the storm, and its rain arrives about an hour
 early. Its peak is flatter: the zone's gauge mean peaks 22 % above ECMWF's peak (10.1 against 8.3
 mm/h), and the Hokitika's 57 % above it (24.2 against 15.4 mm/h). In the central catchments, ECMWF's
-peak comes up to 4 h before the gauges' heaviest hours (15 Nov 18-20Z). In the south (Haast) the front came 3-5 h later than ECMWF had
-it, which matches the gauges flagged at +3/+4 h in the lag check of `docs/rain-gauges.md` (that page
-writes the sign the other way round). Hourly r is lower than the r of 3-hour sums: a gauge is a point
-and a cell is 9 km.
+peak comes up to 4 h before the gauges' heaviest hours (15 Nov 18-20Z). In the south, the front reached
+the Haast gauges 1-5 h later than ECMWF had it (the catchment: 3 h). This matches the gauges flagged at
++3/+4 h in the lag check of `docs/rain-gauges.md` (that page writes the sign the other way round).
+Hourly r is lower than the r of 3-hour sums: a gauge is a point and a cell is 9 km.
 
 ## In sample and out of sample
 

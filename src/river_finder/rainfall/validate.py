@@ -462,7 +462,7 @@ def run_validate(cfg: RainConfig, start: str, end: str, regions=("West Coast",),
                  http=None, log=print) -> dict:
     """Validate the gauge-scaled ECMWF against the gauges for the event (START, END]; see the module docstring.
     ``exclude``: gauge ids left out of everything (factors included), for a sensitivity run. Writes
-    ``validate_<regions>_<START>_<END>[_without-<n>]`.json`` and ``.md`` into ``out_dir`` (default
+    ``validate_<regions>_<START>_<END>[_without-<n>].json`` and ``.md`` into ``out_dir`` (default
     ``<rain>/validation``)."""
     from .gauges import GaugeHours
     from .scaling import _home_regions, evaluate_region, find_copies, find_outages, load_factors, open_store
