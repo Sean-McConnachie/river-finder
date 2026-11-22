@@ -51,9 +51,9 @@ scaling needs state that grows from day to day:
 
 - the gauge cache `rain/gauges/` (`sites.json` and `series/`: ~0.8 MB; `gauges_hourly.npz` + `.json`:
   ~0.3 MB);
-- the cell store `rain/scaling/ecmwf_cells.npz` (ECMWF at the 189 gauge cells over 40 days: ~0.3 MB);
-- the factor file `rain/scaling/factors_ecmwf.json` (~0.1 MB) and its append-only history
-  (`.history.jsonl`, ~30 kB per new version).
+- the cell store `rain/scaling/ecmwf_cells.npz` (ECMWF at the 189 gauge cells: 92 kB for 30 days);
+- the factor file `rain/scaling/factors_ecmwf.json` (72 kB) and its append-only history
+  (`.history.jsonl`, ~13 kB per new version).
 
 The proposal is a separate daily job and a small extra step in the hourly one. Do not edit `rain.yml`
 for this from a branch: a push of the workflow file can unregister the schedule (see the 60-day rule
@@ -64,7 +64,7 @@ below; the schedule registers from `main`).
    and `rain/scaling/`) into one data directory. Then it runs `rain gauges --data DIR` (incremental:
    ~6 min wall clock and ~4.6 MB from the three councils, which run in parallel; ~19 min on an empty
    cache) and `rain scale --data DIR`. A day's ~24 new hours from Open-Meteo cost ~18 MB and ~25 s.
-   The first backfill of an empty store costs ~340 MB and ~10 min (8 days from Open-Meteo, the rest
+   The first backfill of an empty store costs ~380 MB and ~10 min (8 days from Open-Meteo, the rest
    from ECMWF's GRIB files). Last, it force-pushes `rain-scaling` as one orphan commit, as the hourly
    job does with `rain` (~1.5 MB; the history file keeps the record of every version, so git history is
    not needed). A failed council keeps its cached gauges, and their new hours read `not_fetched`.
