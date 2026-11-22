@@ -315,7 +315,8 @@ def _home_regions(cfg: RainConfig) -> dict[str, str]:
 
 
 def _corr(a: np.ndarray, b: np.ndarray) -> float | None:
-    if a.size < 3 or a.std() == 0 or b.std() == 0:
+    a, b = np.asarray(a, dtype=np.float64), np.asarray(b, dtype=np.float64)
+    if a.size < 3 or np.ptp(a) == 0 or np.ptp(b) == 0:  # a constant series has no correlation
         return None
     return round(float(np.corrcoef(a, b)[0, 1]), 3)
 
@@ -331,11 +332,15 @@ def _lag_corr(a: np.ndarray, b: np.ndarray, oka: np.ndarray, okb: np.ndarray, k:
     return _corr(a[ia][m].astype(np.float64), b[ib][m].astype(np.float64)), int(m.sum())
 
 
-def find_copies(g, cols: np.ndarray, sc: ScalingConfig, home: dict[str, str] | None = None) -> dict:
-    """Gauges that are copies of one station, over the window columns ``cols`` of ``g``
-    (:class:`.gauges.GaugeHours`). Returns ``keep`` (bool per gauge), ``groups`` (one per station with
-    several copies: kept, dropped, why, the pairwise checks) and ``colocated`` (distinct gauges within
-    ``colocated_m``, with the hourly lag that matches them best)."""
+def find_copies(g, cols: np.ndarray, sc: ScalingConfig, home: dict[str, str] | None = None,
+                detect_cols: np.ndarray | None = None) -> dict:
+    """Gauges of ``g`` (:class:`.gauges.GaugeHours`) that are copies of one station.
+
+    Series are compared over ``detect_cols`` (default: every hour held, so that a dry window does not
+    hide a copy); the copy kept is chosen on the window columns ``cols``. Returns ``keep`` (bool per
+    gauge), ``groups`` (one per station with several copies: kept, dropped, why, the pairwise checks)
+    and ``colocated`` (distinct gauges within ``colocated_m``, with the hourly lag that matches them
+    best)."""
     from .gauges import GOOD
 
     G = g.n
@@ -352,10 +357,13 @@ def find_copies(g, cols: np.ndarray, sc: ScalingConfig, home: dict[str, str] | N
     d = np.hypot(x[:, None] - x[None, :], y[:, None] - y[None, :])
     near = placed[:, None] & placed[None, :] & (d <= max(sc.dedupe_km * 1000.0, sc.colocated_m))
     near &= np.triu(np.ones((G, G), dtype=bool), 1)
-    ok = g.ok[:, cols]
-    mm = np.where(ok, np.nan_to_num(g.mm[:, cols]), 0.0).astype(np.float32)
-    usable = ok.sum(axis=1)
+    dc = np.arange(g.hour.size) if detect_cols is None else np.asarray(detect_cols)
+    ok = g.ok[:, dc]
+    mm = np.where(ok, np.nan_to_num(g.mm[:, dc]), 0.0).astype(np.float32)
+    usable = g.ok[:, cols].sum(axis=1)
     good = (g.state[:, cols] == GOOD).sum(axis=1)
+    out["compared"] = {"first_hour": _hour(g.hour[dc[0]]) if dc.size else None,
+                       "last_hour": _hour(g.hour[dc[-1]]) if dc.size else None, "hours": int(dc.size)}
     parent = list(range(G))
 
     def root(i):
@@ -387,18 +395,19 @@ def find_copies(g, cols: np.ndarray, sc: ScalingConfig, home: dict[str, str] | N
         elif d[i, j] <= sc.colocated_m:
             lags = {}
             for k in range(-3, 4):
-                lags[k] = _lag_corr(g.mm[i, cols], g.mm[j, cols], ok[i], ok[j], k)[0]
+                lags[k] = _lag_corr(g.mm[i, dc], g.mm[j, dc], ok[i], ok[j], k)[0]
             valid = {k: v for k, v in lags.items() if v is not None}
             best = max(valid, key=valid.get) if valid else None
             info.update(r_by_lag={str(k): v for k, v in lags.items()}, best_lag_h=best,
                         why_not_copy=("too few wet hours to compare" if n_wet < sc.dedupe_min_wet_hours
                                       else f"{share:.0%} of wet hours agree (< {sc.dedupe_equal_share:.0%})"))
             notes = []
-            if best is not None and best != 0:
-                notes.append(f"{info['b']} matches {info['a']} best {abs(best)} h "
-                             f"{'earlier' if best < 0 else 'later'} (r {valid[best]:.2f} vs "
-                             f"{valid.get(0, float('nan')):.2f} at 0 h): its hours run {abs(best)} h "
-                             f"{'ahead' if best < 0 else 'behind'}; a 30-day total is not affected")
+            if best is not None and best != 0 and valid[best] >= 0.9:
+                # r(k) pairs a[h] with b[h + k]: k < 0 means b records the same rain |k| h earlier
+                ahead, behind = (info["b"], info["a"]) if best < 0 else (info["a"], info["b"])
+                notes.append(f"{ahead} runs {abs(best)} h ahead of {behind} (r {valid[best]:.2f} shifted "
+                             f"{abs(best)} h, {valid.get(0, float('nan')):.2f} as stamped); a 30-day total is "
+                             "not affected")
             sa, sb = info["sum_a_mm"], info["sum_b_mm"]
             if min(sa, sb) > 0 and max(sa, sb) / min(sa, sb) > 1.5:
                 notes.append(f"totals differ {max(sa, sb) / min(sa, sb):.1f}-fold {d[i, j]:.0f} m apart: one "
@@ -529,7 +538,8 @@ def decide(prev: dict, ev: dict, sc: ScalingConfig, now: datetime, force: bool =
         return out
 
     if not grid_ok:
-        return hold("held", "the grid store does not cover the window: nothing changes", "grid_coverage")
+        return hold("held" if v0 else "unity", "the grid store does not cover the window: nothing changes",
+                    "grid_coverage")
     if ev["gauges"] < sc.min_gauges:
         reason = (f"{ev['gauges']} usable gauge{'s' if ev['gauges'] != 1 else ''} (< {sc.min_gauges}): "
                   "factor 1, version 0")
@@ -699,7 +709,8 @@ def run_scale(cfg: RainConfig, family: str = "ecmwf", days: int | None = None, n
     cp = find_copies(g, cols, sc, _home_regions(cfg))
     keep = cp["keep"]
     log(f"copies of one station: {len(cp['groups'])} stations with copies, {int((~keep).sum())} copies dropped "
-        f"({cp['pairs_checked']} pairs within {sc.dedupe_km:g} km checked)")
+        f"({cp['pairs_checked']} pairs within {sc.dedupe_km:g} km compared over {cp['compared']['hours']} h, "
+        f"{cp['compared']['first_hour']} .. {cp['compared']['last_hour']})")
     for grp in cp["groups"]:
         log(f"  kept {grp['kept']}; dropped {', '.join(grp['dropped'])}: {next(iter(grp['why'].values()))}")
     for c in cp["colocated"]:
