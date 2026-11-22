@@ -111,8 +111,11 @@ def status(cfg: RainConfig, log=print) -> None:
                 + (f", runs {runs}{age}" if runs else "")
                 + f", missing {[r['hour'] for r in rows if not r['product']]}")
     from .gauges import status_line
+    from .scaling import status_lines
 
     log(status_line(cfg))
+    for line in status_lines(cfg):
+        log(line)
     tj = cfg.totals_path.with_suffix(".json")
     if not tj.exists():
         log(f"upstream totals: none yet ({cfg.totals_path.name}; river-finder rain totals)")
@@ -162,9 +165,15 @@ def run_ecmwf(cfg: RainConfig, run: str = "latest", obs: bool = True, fc: bool =
     hours ``now+1 .. now+24`` of one run (``latest``: the newest that has them all). Buffers go to
     ``<rain>/obs_ecmwf.npz`` and ``<rain>/fc_ecmwf.npz``, each with a ``.json`` report of the last
     ingest (source, run, lead and product of every hour, missing hours, windows, download).
+
+    Gauge scale factors (rf-t26.5, :func:`.scaling.factors_for`): with ``[scaling] apply`` on, each
+    product listed in ``[scaling.ecmwf] products`` is scaled with the current ``factors_ecmwf.json``
+    (unity without one), and every hour the buffer holds is re-scaled with them, so all its slots
+    carry the same factor versions; the reports say which (``scale``).
     """
     from .ecmwf import EcmwfSource, Reader, fc_plan, find_run, make_reader, obs_plan, parse_run, run_label
     from .fetch import Http
+    from .scaling import describe_factors, factors_for
 
     ec = cfg.ecmwf
     w = CatchmentWeights.load(cfg.weights_path("ecmwf"))
@@ -187,7 +196,14 @@ def run_ecmwf(cfg: RainConfig, run: str = "latest", obs: bool = True, fc: bool =
 
     def ingest_plan(kind: str, tag: str, buf: HourlyBuffer, plan, missing, start_h: int, end_h: int, extra: dict):
         b0, s0, t0 = http.stats.bytes, http.stats.requests, time.monotonic()
-        res = ingest(EcmwfSource(rd, tag, plan), buf, w, hour_time(start_h), hour_time(end_h))
+        f = factors_for(cfg, tag, buf.regions)
+        res = ingest(EcmwfSource(rd, tag, plan), buf, w, hour_time(start_h), hour_time(end_h), {f.family: f})
+        rescaled = buf.apply_factors(f)  # hours kept from earlier runs take the current factors too
+        scale = {"apply": cfg.scaling.apply, "factors_file": cfg.factors_path("ecmwf").name
+                 if cfg.factors_path("ecmwf").exists() else None, "regions": describe_factors(f),
+                 "hours_rescaled": rescaled}
+        if scale["regions"]:
+            log(f"  {tag} scaled with gauge factors {scale['regions']}")
         hours = []
         for r in res:
             r_run, lead = plan[r.hour]
@@ -204,7 +220,7 @@ def run_ecmwf(cfg: RainConfig, run: str = "latest", obs: bool = True, fc: bool =
         rep = {"product": tag, "reader": name, "written": datetime.now(UTC).isoformat(timespec="seconds"),
                "now": _hour(now_h), **extra, "hours": hours, "missing": [_hour(h) for h in missing],
                # scaled: some hour held used gauge scale factors (version > 0, rf-t26.5); version 0 = raw
-               "scaled": any(v > 0 for v in versions), "factor_versions": versions,
+               "scaled": any(v > 0 for v in versions), "factor_versions": versions, "scale": scale,
                "windows": window_summary(buf, w, cfg.windows), "buffer": table,
                "download": {"bytes": http.stats.bytes - b0, "requests": http.stats.requests - s0,
                             "seconds": round(time.monotonic() - t0, 1)}}
@@ -320,6 +336,36 @@ def _log_area_check(c: dict, log) -> None:
         log(f"  {k:>14}: {v['reaches']:>7} reaches, ratio q01 {q[0]:.3f} q05 {q[1]:.3f} median {q[3]:.4f} "
             f"q95 {q[5]:.3f} q99 {q[6]:.3f}; within 1/5/10 %: {v['within_1pct']:.1%} / {v['within_5pct']:.1%} / "
             f"{v['within_10pct']:.1%}")
+
+
+def raw_totals(cfg: RainConfig, like, log=print):
+    """The unscaled sums of the current buffers, for the same windows, anchors and runs as ``like`` (an
+    :class:`.upstream.UpstreamTotals` of scaled values): what ``rain publish`` publishes while
+    ``[scaling] publish`` is off. Refuses buffers that changed since ``like`` was computed."""
+    from .upstream import compute_totals
+
+    net = load_network(cfg, log=log)
+    if net.rows_digest != like.meta.get("rows_digest"):
+        raise SystemExit(f"{cfg.network_path.name} rows differ from {cfg.totals_path.name}: run rain totals again")
+    bufs = {}
+    for kind, k in like.kinds.items():
+        fam = k.info.get("family") or (cfg.observed_source if kind == "observed" else cfg.forecast_source)
+        p = cfg.buffer_path(kind, fam)
+        if not p.exists():
+            raise SystemExit(f"no {p.name} to sum unscaled for {kind}: run rain ecmwf and rain totals again")
+        b = HourlyBuffer.load(p)
+        runs = sorted({_hour(int(r)) for r in b.run_hour[b.hour >= 0] if r >= 0})
+        if _hour(b.anchor) != k.info.get("anchor") or runs != k.info.get("runs"):
+            raise SystemExit(f"{p.name} changed since {cfg.totals_path.name} was computed: run rain totals again")
+        bufs[kind] = b
+    now = like.meta.get("now")
+    now_h = hour_index(datetime.strptime(now, "%Y-%m-%d %H:00Z").replace(tzinfo=UTC)) if now else None
+    tot = compute_totals(net, bufs, like.windows, scaled=False, now_hour=now_h)
+    for kind, k in like.kinds.items():
+        tot.kinds[kind].info.update(family=k.info.get("family"), buffer=k.info.get("buffer"))
+    tot.meta["now"] = now
+    tot.meta["scaled_totals"] = {"created": like.meta.get("created"), "values": like.meta.get("values")}
+    return tot
 
 
 def run_totals(cfg: RainConfig, windows=None, scaled: bool = True, rebuild_network: bool = False,

@@ -51,6 +51,7 @@ Published files: ``river-finder rain publish --out DIR`` (the contract for the m
      "regions": [{"id": "canterbury", "title": "Canterbury", "file": "canterbury.bin.gz", "n": 109254,
                   "bytes": 462243, "raw_bytes": 2516554, "sha256": "..."}],   # bytes: the .gz file
      "omitted": {"kaimai": "..."}, "totals": {"created", "rows", "rows_digest", "scaled", "values"},
+     "scaling": {"publish": false, "apply": true, "scaled": false, "withheld": true, "note": "..."},
      "summary": "...", "inputs": {...}, "job": {...}}
 
 ``observed.window_end`` is normally ``now`` (the forecast starts at the next hour); it lags ``now`` by
@@ -58,7 +59,12 @@ Published files: ``river-finder rain publish --out DIR`` (the contract for the m
 and under ``totals``) is true only when some value used gauge scale factors (rf-t26.5, factor version
 > 0); ``scale`` is ``raw`` (no factors yet), ``scaled``, ``mixed`` or ``none``, as the per-reach
 ``<p>_scale_<x>h`` bits below; ``totals.values`` says which array was summed (``raw`` after
-``rain totals --raw``).
+``rain totals --raw``, or when scaled values are withheld). ``scaling`` says whether gauge-scaled
+values may be published (``[scaling] publish``, off until the gauge licences are confirmed,
+rf-t26.14) and were: ``withheld`` = the local totals are scaled but the files carry the raw sums of
+the same buffers; when scaled values are published it lists the factors per family and region
+(``factors``: factor, version, when set; the window), and the gauge councils join ``licences`` and
+the attribution.
 
 ``<region id>.bin.gz``: one gzip member (``mtime`` 0) holding a little-endian binary file:
 
@@ -476,14 +482,63 @@ def _summary(index: dict) -> str:
     return "; ".join(parts) + f" [{index['ecmwf']['reader']}]"
 
 
+SCALING_WITHHELD = ("gauge-scaled values are computed locally but not published: [scaling] publish = false until "
+                    "WCRC and TDC state a licence for their gauge data (rf-t26.14); these are the raw ECMWF sums")
+
+
+def _scaling_block(cfg: RainConfig, t: UpstreamTotals, withheld: bool) -> tuple[dict, list[dict], str]:
+    """``index.json`` ``scaling``, the gauge councils' licences and attribution when scaled values are published."""
+    from .scaling import load_factors
+
+    block = {"publish": cfg.scaling.publish, "apply": cfg.scaling.apply, "scaled": bool(t.meta.get("scaled")),
+             "withheld": withheld}
+    if withheld:
+        block["note"] = SCALING_WITHHELD
+        return block, [], ""
+    if not t.meta.get("scaled"):
+        block["note"] = "no gauge scale factor applied (factor version 0 everywhere)"
+        return block, [], ""
+    fams = sorted({k.info.get("family") for k in t.kinds.values() if k.info.get("scaled")} - {None})
+    licences, attr, factors = [], [], {}
+    for fam in fams:
+        d = load_factors(cfg, fam)
+        if d is None:
+            continue
+        factors[fam] = {"products": d["products"], "updated": d["updated"],
+                        "window": d["last_update"]["window"],
+                        "regions": {r: {"factor": s["factor"], "version": s["version"], "set": s["set"]}
+                                    for r, s in d["regions"].items() if s["version"] > 0}}
+        used = {u["council"] for r in factors[fam]["regions"]
+                for u in d["last_update"]["regions"].get(r, {}).get("used", [])}
+        for cid in sorted(used):
+            c = d.get("councils", {}).get(cid, {})
+            licences.append({"name": f"Rain gauges: {c.get('name', cid)}", "licence": c.get("licence", ""),
+                             "url": c.get("base_url", "")})
+            if c.get("attribution"):
+                attr.append(c["attribution"])
+    block["factors"] = factors
+    block["note"] = ("observed and forecast ECMWF rain scaled per region to the rain gauges over the last "
+                     f"{cfg.scaling.days} days (docs/rainfall-scaling.md)")
+    return block, licences, ("; scaled to rain gauges (" + "; ".join(attr) + ")" if attr else "")
+
+
 def publish(cfg: RainConfig, out_dir: Path, now: datetime | None = None, log=print) -> dict:
-    """Per-region files and ``index.json`` from the current ``totals.npz`` (see the module doc)."""
+    """Per-region files and ``index.json`` from the current ``totals.npz`` (see the module doc).
+
+    Gauge-scaled sums are published only with ``[scaling] publish = true``; otherwise, when the totals
+    are scaled, the raw sums of the same buffers are published instead (:func:`.pipeline.raw_totals`)."""
     path = cfg.totals_path
     if not path.exists():
         raise SystemExit(f"no {path}: run river-finder rain totals first")
     t = UpstreamTotals.load(path)
     if not t.kinds:
         raise SystemExit(f"{path} holds no totals")
+    withheld = bool(t.meta.get("scaled")) and not cfg.scaling.publish
+    if withheld:
+        from .pipeline import raw_totals
+
+        log("[scaling] publish = false: the totals are gauge-scaled; publishing the raw sums of the same buffers")
+        t = raw_totals(cfg, t, log=log)
     vpath = cfg.rain_dir / VIEWER_MAP
     if vpath.exists():
         vm = json.loads(vpath.read_text())
@@ -500,6 +555,8 @@ def publish(cfg: RainConfig, out_dir: Path, now: datetime | None = None, log=pri
     fc = _kind_summary(t, "forecast", generated)
     sources = sorted({s for k in (obs, fc) if k for s in k["sources"]})
     attr, licences = attribution(sources)
+    scaling, gauge_licences, gauge_attr = _scaling_block(cfg, t, withheld)
+    attr, licences = attr[:-1] + gauge_attr + ".", licences + gauge_licences
     tags = [tag for k in (obs, fc) if k for tag in k["products"]]
     head_common = {"schema": SCHEMA, "format": FORMAT, "generated": _iso(generated), "now": t.meta.get("now"),
                    "windows": list(t.windows), "rows_digest": t.meta.get("rows_digest"),
@@ -534,6 +591,7 @@ def publish(cfg: RainConfig, out_dir: Path, now: datetime | None = None, log=pri
         "attribution": attr, "licences": licences, "regions": regions, "omitted": vm.get("omitted", {}),
         "totals": {"created": t.meta.get("created"), "rows": t.n, "rows_digest": t.meta.get("rows_digest"),
                    "scaled": bool(t.meta.get("scaled")), "values": t.meta.get("values")},
+        "scaling": scaling,
         "inputs": {k: manifest.get(k) for k in ("created", "code", "national_build", "rows_digest")}
         if manifest else None,
         "job": _job(),
