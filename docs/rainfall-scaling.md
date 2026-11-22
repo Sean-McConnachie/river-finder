@@ -25,9 +25,10 @@ uv run river-finder rain scale --days 30 --now 2026112203 --force --no-fetch   #
 2. **Gauge side.** `gauges_hourly.npz`. A gauge hour counts when its state is good or raw
    (`state <= 1`: suspect and missing hours are left out).
 3. **Copies of one station (rf-t26.13).** Some stations are in the files of two councils. Gauges
-   within 3 km of each other (`dedupe_km`) are compared over every hour the gauge cache holds. If at least 10 of
-   their common usable hours have rain at either gauge (`dedupe_min_wet_hours`), and at least 95 % of those hours
-   agree within 0.05 mm (`dedupe_equal_share`, `dedupe_equal_mm`), the two gauges are copies. Groups
+   within 3 km of each other (`dedupe_km`) are compared over every hour the gauge cache holds. If at
+   least 10 of their common usable hours have rain at either gauge (`dedupe_min_wet_hours`), and at
+   least 95 % of those hours agree within 0.05 mm (`dedupe_equal_share`, `dedupe_equal_mm`), the two
+   gauges are copies. Groups
    of copies count as one station. The copy kept is the one with more usable hours in the window.
    On a tie, the kept copy is the one whose council's home region (`[gauges.councils.*] region`)
    holds the gauge, then the one with more quality-coded (good) hours, then the lower id. Each group
@@ -40,7 +41,8 @@ uv run river-finder rain scale --days 30 --now 2026112203 --force --no-fetch   #
    obs_leads` (1-18 h). So settled hours come from leads 1-6, and an hour first taken at a longer
    lead (the newest hours) is replaced when the next run has it. For each run, the readers are tried
    in `[scaling.ecmwf] readers` order: Open-Meteo first (the reader of the live buffers), then ECMWF's
-   own 0.1° GRIB files on AWS (3-hourly steps split evenly into hours: exact over 30 days). Each
+   own 0.1° GRIB files on AWS (3-hourly steps split evenly into hours, which only matters at the
+   window's edges and at gauge hours left out). Each
    value records its reader, run and lead. A gauge is a point and a cell is 0.1°, so the factor is
    a regional ratio of sums, never a per-gauge correction.
 5. **Factor.** Per region, the usable gauges are the gauges that are not a dropped copy, have a cell
@@ -67,8 +69,9 @@ uv run river-finder rain scale --days 30 --now 2026112203 --force --no-fetch   #
 
 Regions are those of the reach network (the river-guide regions of the segment table, which follow
 the councils: `buffer.region_of`). The gauges' regions use the same names (`docs/rain-gauges.md`,
-"Regions"). Regions with no gauges (the North Island, Otago, Southland, ...) stay at factor 1, version 0.
-The factor applies to every catchment of its region, upstream of the gauges or not.
+"Regions"). Regions without gauge councils yet (the North Island, Southland, ...) and regions with
+fewer than 3 gauges (Marlborough and Otago now) stay at factor 1, version 0. The factor applies to
+every catchment of its region, upstream of the gauges or not.
 
 ## Versions, storage and traceability
 
@@ -83,7 +86,8 @@ The factor applies to every catchment of its region, upstream of the gauges or n
   the full evaluation (every gauge id with its cell, hours and sums), the copies dropped in the
   region, the config and the inputs. So any factor traces back to its gauges and hours.
 - Versions change only with the factor. Version 0 always means unscaled (factor 1). A region reset to
-  unity gets version 0, and its next factor gets `max_version + 1`, so versions above 0 are unique per region.
+  unity gets version 0, and its next factor gets `max_version + 1`, so versions above 0 are unique per
+  region.
 - Each buffer slot stores raw mm, scaled mm, and the factor and version per region
   (`HourlyBuffer.factor`, `.factor_version`; `slot_table()` lists the versions per hour). The upstream
   totals carry the scale bits per reach (1 raw, 2 scaled, 3 mixed) and the factor versions per window.
@@ -116,8 +120,10 @@ changed after `rain totals`). `index.json` says so:
 ```
 
 With `publish = true`, the scaled sums are published. `scaled` is `true`, `scale` is `scaled` or
-`mixed`, the region files' scale bits are 2 in scaled regions, and `scaling.factors.ecmwf` lists the
-factor, version and time per region with the window. The councils whose gauges are behind a published
+`mixed`, and `scaling.factors.ecmwf` lists the factor, version and time per region with the window.
+The region files' scale bits are 2 in scaled regions, 1 in regions at version 0, and 3 (mixed) where
+a reach's upstream catchment crosses from one into the other (live: 610 West Coast reaches, 1631
+Canterbury, 1590 Otago). The councils whose gauges are behind a published
 factor are added to `licences` and to the attribution.
 
 ## Duplicates and co-located gauges (rf-t26.13)

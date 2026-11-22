@@ -7,9 +7,10 @@ grid with the rain gauges over a rolling window and keeps one factor per scaling
    ``[scaling] days`` x 24 whole hours ending at "now" (or at the newest gauge hour, when the gauge
    cache is older); a gauge hour counts when its state is good or raw (``state <= 1``);
 2. **copies of one station** (:func:`find_copies`): gauges within ``dedupe_km`` whose common usable
-   hours with rain agree within ``dedupe_equal_mm`` for at least ``dedupe_equal_share`` of them are
-   copies of one record (WCRC and TDC both publish 7 gauges; WCRC's Arthurs Pass EWS is ECan's ESNZ
-   station). One copy is kept: the one with more usable hours in the window, then the one whose
+   hours with rain (over every hour the gauge cache holds, so a dry window hides no copy) agree
+   within ``dedupe_equal_mm`` for at least ``dedupe_equal_share`` of them are copies of one record
+   (WCRC and TDC both publish 7 gauges; WCRC's Arthurs Pass EWS is ECan's ESNZ station). One copy is
+   kept: the one with more usable hours in the window, then the one whose
    council's home region (``[gauges.councils.*] region``) it lies in, then the one with more
    quality-coded (good) hours, then the lower id; every group records what was kept and why.
    Distinct gauges within ``colocated_m`` are listed with the hourly lag that matches them best
@@ -25,7 +26,7 @@ grid with the rain gauges over a rolling window and keeps one factor per scaling
    ECMWF's 0.1° GRIB files on AWS (kept since 2026-10-20 06z); each value records its reader, run
    and lead. Cells are 0.1° and gauges are points: the factor is a regional ratio of sums, never a
    per-gauge correction;
-4. **factor maths** (:func:`evaluate`, :func:`decide`), per region: the usable gauges (not a dropped
+4. **factor maths** (:func:`evaluate_region`, :func:`decide`), per region: the usable gauges (not a dropped
    copy, on the grid, with at least ``min_usable`` of the window's hours both usable at the gauge and
    valued at its cell) give ``ratio = sum(gauge mm) / sum(grid mm at their cells)`` over exactly those
    hours. Guard rails, in order: fewer than ``min_gauges`` usable gauges -> factor 1, version 0;
