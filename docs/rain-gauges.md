@@ -39,8 +39,9 @@ headwaters), West Coast 57, Marlborough 2 (TDC: Pelorus, Motueka at Red Hills), 
 North Branch, Makarora). **Duplicates:** WCRC and TDC publish the same 7 gauges (Aorere at Perry
 Saddle, Cobb, Karamea, Mokihinui, Wangapeka, Maruia, Matakitaki; e.g. `wcrc:Karamea Rv @ Garibaldi`
 and `tdc:HY Karamea at Garibaldi`: identical hourly values, r = 1.00), and WCRC's `Arthurs Pass EWS` is
-ECan's `Arthur's Pass EWS (ESNZ)`. Both copies are in `gauges_hourly`: rf-t26.5 should count such a
-station once.
+ECan's `Arthur's Pass EWS (ESNZ)`. Both copies are in `gauges_hourly`; `rain scale` counts each such
+station once (rf-t26.13, `docs/rainfall-scaling.md`: copies found from the series, one kept, the reason
+recorded).
 
 What the first, blind version got wrong, and what changed:
 
@@ -201,7 +202,8 @@ for other machines.
 
 Each council's `licence` and `attribution` are in the config and copied into `gauges_hourly.json`
 (`councils.<id>`) and the `.npz` meta. Confirm WCRC's and TDC's terms before gauge data or scaled rain
-derived from it is published on the site.
+derived from it is published on the site (rf-t26.14): until then `[scaling] publish = false` keeps the
+published rain files raw (`docs/rainfall-scaling.md`).
 
 ## Running
 
@@ -288,7 +290,8 @@ clock) that is cut off again.
 with the most catchment area in the gauge's ECMWF cell (`weights_ecmwf.npz`), else the council's
 `region`. A WCRC gauge in the upper Buller is in Tasman, an ECan gauge at Arthur's Pass in Canterbury.
 
-For rf-t26.5:
+For rf-t26.5 (done: `river-finder rain scale`, `src/river_finder/rainfall/scaling.py`,
+`docs/rainfall-scaling.md`), the gauge side in short:
 
 ```python
 from river_finder.rainfall.config import load_config

@@ -1,7 +1,7 @@
 """HTTP for the rainfall sources: byte-range GETs from public buckets, with retries, mirrors and a tally.
 
 - :class:`Http` does one GET (whole object, a byte range, or the last ``n`` bytes) and retries
-  transient failures (HTTP 429/5xx, network errors) with exponential backoff and jitter. S3 answers
+  transient failures (HTTP 429/5xx, network errors, bodies cut short) with exponential backoff and jitter. S3 answers
   ``503 SlowDown`` when a prefix is busy: on 2026-11-19 the ECMWF bucket refused every request for
   several minutes in a row. ``Http.stats`` counts requests, bytes and seconds for the CLI report.
 - :class:`Bucket` is a list of mirrors of one public bucket (S3 or Google Cloud Storage, both
@@ -20,6 +20,7 @@ credentials.
 
 from __future__ import annotations
 
+import http.client
 import random
 import re
 import time
@@ -93,7 +94,9 @@ class Http:
                 if e.code not in RETRY_STATUS:
                     raise FetchError(f"{url}: HTTP {e.code}") from None
                 last = f"HTTP {e.code}"
-            except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+            # http.client.HTTPException: a body cut short (IncompleteRead: S3 dropped one 2026-11-22 in the
+            # middle of a ~0.5 MB range) or a malformed answer; transient like a reset connection
+            except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.HTTPException) as e:
                 if re.search(r"Tunnel connection failed: 40[37]", str(e)):
                     # an HTTPS proxy that refuses the host: a policy, not a transient failure
                     raise FetchError(f"{url}: refused by the proxy ({e})") from None

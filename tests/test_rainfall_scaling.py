@@ -12,8 +12,7 @@ import numpy as np
 import pytest
 import scipy.sparse as sp
 
-from river_finder.rainfall import CatchmentWeights, GridSpec, HourlyBuffer, Network, hour_index, hour_time
-from river_finder.rainfall import live
+from river_finder.rainfall import CatchmentWeights, GridSpec, HourlyBuffer, Network, hour_index, hour_time, live
 from river_finder.rainfall import pipeline as pl
 from river_finder.rainfall import scaling as S
 from river_finder.rainfall.buffer import ScaleFactors
@@ -503,3 +502,21 @@ def test_status_lines_and_table(tmp_path):
     lines = S.status_lines(cfg)
     assert "West Coast 1.250 v1" in lines[1] and "Canterbury 0.900 v1" in lines[1] and "cells" in lines[2]
     assert json.loads(cfg.factors_path("ecmwf").read_text())["format"] == S.FACTORS_FORMAT
+
+
+def test_http_retries_a_body_cut_short():
+    import http.client
+
+    class Flaky(Http):
+        def __init__(self):
+            super().__init__(retries=2, backoff=0.0, sleep=lambda s: None)
+            self.n = 0
+
+        def _once(self, url, headers):
+            self.n += 1
+            if self.n == 1:
+                raise http.client.IncompleteRead(b"x" * 10, 90)   # S3 dropped the connection mid-body
+            return b"y" * 100, {}
+
+    h = Flaky()
+    assert h.get("https://bucket/key") == b"y" * 100 and h.n == 2 and h.stats.retries == 1

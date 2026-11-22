@@ -259,12 +259,13 @@ def ecmwf_pick(readers, h: int, leads: tuple[int, int]):
 
 
 def fill_ecmwf(store: CellStore, readers, cells, first: int, last: int, leads: tuple[int, int],
-               log=print) -> dict:
+               log=print, checkpoint=None, every: int = 48) -> dict:
     """Fill hours ``first .. last`` at ``cells`` from ECMWF ``readers`` (in order of preference).
 
     An hour is left alone when every cell has a value from the newest run that can have it (leads
     from ``leads[0]``); otherwise :func:`ecmwf_pick` names the run and reader, and cells with no value
-    or one from an older run take the new value."""
+    or one from an older run take the new value. ``checkpoint()`` (e.g. saving the store) runs after
+    every ``every`` hours read, with a progress line."""
     from .ecmwf import floor_run, run_label
 
     store.ensure(cells, first, last)
@@ -300,6 +301,11 @@ def fill_ecmwf(store: CellStore, readers, cells, first: int, last: int, leads: t
         name = readers[k].name
         stats["by_reader"][name] = stats["by_reader"].get(name, 0) + 1
         stats["runs"].add(run_label(r))
+        done = stats["written"] + stats["replaced"]
+        if done % every == 0:
+            log(f"  {done} hours read, up to {_hour(h)} ({stats['by_reader']}, {time.monotonic() - t0:.0f} s)")
+            if checkpoint:
+                checkpoint()
     stats["runs"] = sorted(stats["runs"])
     stats["seconds"] = round(time.monotonic() - t0, 1)
     if stats["no_run"]:
@@ -715,7 +721,7 @@ def run_scale(cfg: RainConfig, family: str = "ecmwf", days: int | None = None, n
         log(f"  kept {grp['kept']}; dropped {', '.join(grp['dropped'])}: {next(iter(grp['why'].values()))}")
     for c in cp["colocated"]:
         if c.get("note"):
-            log(f"  co-located, not copies ({c['distance_m']:.0f} m): {c['note']}")
+            log(f"  co-located, not copies: {c['a']} and {c['b']}, {c['distance_m']:.0f} m apart: {c['note']}")
 
     # the grid side
     store = open_store(cfg, family)
@@ -731,14 +737,17 @@ def run_scale(cfg: RainConfig, family: str = "ecmwf", days: int | None = None, n
         b0, q0 = (http.stats.bytes, http.stats.requests) if http else (0, 0)
         log(f"cell store {cfg.cells_path(family)}: {cells.size} cells; filling {_hour(first)} .. {_hour(end)} "
             f"from {', '.join(r.name for r in readers)} (leads {cfg.ecmwf.obs_leads[0]}-{cfg.ecmwf.obs_leads[1]} h)")
-        fill = fill_ecmwf(store, readers, cells, first, end, cfg.ecmwf.obs_leads, log=log)
+        try:
+            fill = fill_ecmwf(store, readers, cells, first, end, cfg.ecmwf.obs_leads, log=log,
+                              checkpoint=lambda: store.save(cfg.cells_path(family)))
+        finally:  # what was read so far is kept, also when a download fails
+            store.save(cfg.cells_path(family))
         if http:
             fill["download"] = {"bytes": http.stats.bytes - b0, "requests": http.stats.requests - q0}
         log(f"  {fill['written']} hours written, {fill['replaced']} replaced by a newer run, {fill['settled']} "
             f"settled, {len(fill['no_run'])} with no run; by reader {fill['by_reader']}"
             + (f"; {fill['download']['bytes'] / 1e6:.1f} MB in {fill['download']['requests']} requests"
                if http else "") + f", {fill['seconds']} s")
-        store.save(cfg.cells_path(family))
     else:
         store.ensure(cells, first, end)
     coverage = store.coverage(cells, first, end)

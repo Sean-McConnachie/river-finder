@@ -38,6 +38,11 @@ Modules
   and the gauge ingestion: records summed into hours ending with a state (good / raw / suspect / missing) and flags per
   hour, each gauge's NZTM position, ECMWF cell and scaling region, a per-site cache under
   ``<rain>/gauges/`` and ``gauges_hourly.npz`` (``GaugeHours``) for rf-t26.5; ``docs/rain-gauges.md``.
+- :mod:`.scaling` (rf-t26.5, rf-t26.13): gauge scale factors per source family and region: the
+  grid's hourly mm at the gauge cells (``CellStore``, backfilled by the observed proxy's rule),
+  copies of one station counted once (``find_copies``), ratio of sums over 30 days with guard rails
+  (``evaluate_region``, ``decide``), ``factors_<family>.json`` + an append-only version history, and
+  ``factors_for(cfg, product, regions)`` for the buffers; ``docs/rainfall-scaling.md``.
 - :mod:`.live` (rf-t26.9): the hourly GitHub Actions job's fixed inputs (``rain inputs``: weights,
   network, viewer map, manifest; the ``rain-inputs`` branch) and the files it publishes (``rain
   publish``: ``index.json`` + one ``<region>.bin.gz`` per site region; the ``rain`` branch). The
@@ -86,9 +91,12 @@ Every hour (children 2 and 3 provide the sources)::
 - rf-t26.4 (gauges): ``river-finder rain gauges`` fills ``<rain>/gauges/``; ``GaugeHours.load(...)``
   gives hours x gauges (``mm``, ``state``, ``ok``), ``window(hours=720)``, ``region_rows()`` (the
   network's region names) and each gauge's ``cell`` on the ECMWF grid.
-- rf-t26.5 (scaling): build ``ScaleFactors(family, buffer.regions, factor, version)`` and pass them
-  to ``ingest``; ``buffer.apply_factors`` re-scales hours already held. Regions are the segment
-  table's ``region`` column (river-guide regions, which follow the councils), ``buffer.region_of``.
+- rf-t26.5 (scaling, done): ``river-finder rain scale`` writes ``<rain>/scaling/factors_ecmwf.json``;
+  ``rain ecmwf`` passes ``factors_for(cfg, tag, buffer.regions)`` (a ``ScaleFactors``) to ``ingest``
+  and re-scales the hours held with ``buffer.apply_factors``. Regions are the segment table's
+  ``region`` column (river-guide regions, which follow the councils), ``buffer.region_of``; the
+  gauges' ``region_of`` uses the same names. ``rain publish`` publishes scaled values only with
+  ``[scaling] publish = true`` (rf-t26.14).
 - rf-t26.6 (upstream, done): ``compute_totals(net, {"observed": obs, "forecast": fc}, windows)``
   sums ``WindowTotal.m3(area_m2)`` down ``net.down`` in topological order; upstream mm = upstream m³ /
   upstream pixel area. Tile-edge outlets (rf-t26.11) end their totals and are flagged.

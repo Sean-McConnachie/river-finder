@@ -38,9 +38,48 @@ When no newer ECMWF run is out yet, the job still publishes: same runs, honest t
 (`index.json` gives every run's age). The observed window ends at "now" unless no run has published
 the newest hours within 18 h of its base time (ECMWF or Open-Meteo hours late); it then ends at the
 newest hour one has, and `observed.hours_behind_now` says by how much. `scaled` in `index.json` is
-true only once gauge scale factors (rf-t26.5) are applied; until then it is false and every reach's
-scale bits read 1 (raw). The gauge totals they will come from are fetched by `rain gauges`
-(`docs/rain-gauges.md`), not by this job yet.
+true only once gauge scale factors (rf-t26.5, `docs/rainfall-scaling.md`) are applied and may be
+published; until then it is false and every reach's scale bits read 1 (raw). This job has no factor
+file (`rain scale` runs locally), and `[scaling] publish = false` (rf-t26.14: gauge licences) keeps
+published values raw anyway; `index.json` `scaling` says which. "Gauge scaling in the job" below is
+the design for running it here.
+
+## Gauge scaling in the job (design, not built)
+
+`rain scale` (`docs/rainfall-scaling.md`) runs locally for now. The hourly job is stateless, and
+scaling needs state that grows from day to day:
+
+- the gauge cache `rain/gauges/` (`sites.json` and `series/`: ~0.8 MB; `gauges_hourly.npz` + `.json`:
+  ~0.3 MB);
+- the cell store `rain/scaling/ecmwf_cells.npz` (ECMWF at the 189 gauge cells over 40 days: ~0.3 MB);
+- the factor file `rain/scaling/factors_ecmwf.json` (~0.1 MB) and its append-only history
+  (`.history.jsonl`, ~30 kB per new version).
+
+The proposal is a separate daily job and a small extra step in the hourly one. Do not edit `rain.yml`
+for this from a branch: a push of the workflow file can unregister the schedule (see the 60-day rule
+below; the schedule registers from `main`).
+
+1. **A daily workflow** (for example `rain-scale.yml`, once a day at an off-peak minute). It checks
+   out `rain-inputs` (the weights give the regions) and a **`rain-scaling`** branch (the gauge cache
+   and `rain/scaling/`) into one data directory. Then it runs `rain gauges --data DIR` (incremental:
+   ~6 min wall clock and ~4.6 MB from the three councils, which run in parallel; ~19 min on an empty
+   cache) and `rain scale --data DIR`. A day's ~24 new hours from Open-Meteo cost ~18 MB and ~25 s.
+   The first backfill of an empty store costs ~340 MB and ~10 min (8 days from Open-Meteo, the rest
+   from ECMWF's GRIB files). Last, it force-pushes `rain-scaling` as one orphan commit, as the hourly
+   job does with `rain` (~1.5 MB; the history file keeps the record of every version, so git history is
+   not needed). A failed council keeps its cached gauges, and their new hours read `not_fetched`.
+   The guard rails then hold the factors (gauges with less than 80 % of the hours drop out, and a
+   region with fewer than 3 gauges goes back to factor 1).
+2. **The hourly job** gets one step before `rain ecmwf`: download `rain/scaling/factors_ecmwf.json`
+   from the `rain-scaling` branch into `rain-data/rain/scaling/` (raw.githubusercontent.com, ~0.1 MB,
+   under a second; a failed download leaves no file, which means factor 1, version 0). `rain ecmwf`
+   then scales the buffers, and `rain totals` sums scaled values. While `[scaling] publish = false`,
+   `rain publish` sums the raw values again (+~8 s: it loads the network and accumulates a second
+   time), so until rf-t26.14 is settled the step can simply be left out and the job stays as it is.
+3. **To check first**, with a `workflow_dispatch` run: do the council servers answer GitHub's runners?
+   TDC resets 4-6 % of the connections from the development container, and ECan's Hilltop server
+   resets all of them, so ECan comes from its portal. The 60-day rule applies to the daily workflow
+   too.
 
 ## Where the files are
 

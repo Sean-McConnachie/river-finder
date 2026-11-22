@@ -103,6 +103,10 @@ uv run river-finder rain ecmwf [--run latest|YYYYMMDDHH] [--obs] [--fc] [--reade
 uv run river-finder rain gauges [--days N] [--council wcrc ecan tdc] [--sites-only] [--discover]  # rain gauges
                                           # (Hilltop: WCRC, TDC; ECan Open Data Portal): hourly totals, quality states, ECMWF cell and
                                           # region per active gauge -> data/nz/rain/gauges/gauges_hourly.npz + .json (docs/rain-gauges.md)
+uv run river-finder rain scale [--days 30] [--now YYYYMMDDHH] [--force] [--no-fetch]  # gauge scale factors per region: ECMWF
+                                          # at the gauge cells (incremental store), copies of one station counted once, ratio of sums
+                                          # with guard rails -> data/nz/rain/scaling/factors_ecmwf.json + .history.jsonl; re-scales the
+                                          # buffers ([scaling] apply; publish = false until rf-t26.14; docs/rainfall-scaling.md)
 uv run river-finder rain totals [--windows 1 2 ..] [--raw]  # upstream mm + m3 per reach and window (past/next x h) down the
                                           # network, missing-hour/product/scale flags -> data/nz/rain/totals.npz + .json (~10 s; rainfall/upstream.py)
 uv run river-finder rain inputs --out DIR; rain publish --out DIR  # live rain (docs/live-rain.md): the hourly job's inputs (~35 MB,
