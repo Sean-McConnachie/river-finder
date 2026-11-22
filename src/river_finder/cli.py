@@ -270,7 +270,8 @@ def _rain(args):
         http = Http(retries=args.retries if args.retries is not None else 5, log=log)
         try:
             run_validate(cfg, args.event[0], args.event[1], regions=args.region, catchments=args.catchment,
-                         fetch=not args.no_fetch, margin=args.margin, out_dir=args.out, http=http, log=log)
+                         fetch=not args.no_fetch, margin=args.margin, out_dir=args.out, exclude=args.exclude_gauge,
+                         http=http, log=log)
         except (FetchError, NotFound) as e:
             log(f"ECMWF unavailable for the event: {e}")
             raise SystemExit(pipeline.EXIT_UNAVAILABLE) from None
@@ -422,6 +423,9 @@ def main(argv: list[str] | None = None) -> None:
                     help="validate: outlet reaches, as river names (the largest reach of that name in the regions), "
                          "gids or NAME=GID (default for the West Coast: Haast, Waiho, Whataroa, Wanganui, Hokitika, "
                          "Arahura, Taramakau, Grey, Ahaura, Buller, Karamea)")
+    pr.add_argument("--exclude-gauge", nargs="+", default=(), metavar="ID",
+                    help="validate: gauge ids (council:site) left out of everything, factors included (a "
+                         "sensitivity run)")
     pr.add_argument("--margin", type=int, default=12,
                     help="validate: ECMWF hours read on each side of the event, for the lags (default 12)")
     pr.add_argument("--council", nargs="+", default=None,

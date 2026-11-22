@@ -79,6 +79,7 @@ VARIANTS = {
     "in_use": "x the factor in use",
     "window": "x the 30-day ratio (window of the factor file)",
     "leo": "x the 30-day ratio without the event",
+    "event": "x the event's own ratio (in sample, the best one factor can do)",
     "logo": "x the 30-day ratio without the event and the gauge",
     "loco": "x the 30-day ratio without the event and the catchment's gauges",
 }
@@ -190,7 +191,7 @@ def timing(x, y, first: int, pad: int, max_lag: int = MAX_LAG) -> dict:
 
 # --- ECMWF over the event ------------------------------------------------------------------------------
 def store_path(cfg: RainConfig, first: int, last: int, family: str = "ecmwf") -> Path:
-    """``<rain>/validation/<family>_grid_<from>_<to>.npz``: hours ending ``first .. last`` (labels: from = first - 1)."""
+    """``<rain>/validation/<family>_grid_<from>_<to>.npz``: hours ending ``first .. last`` (from = first - 1)."""
     return cfg.rain_dir / "validation" / f"{family}_grid_{_label(first - 1)}_{_label(last)}.npz"
 
 
@@ -457,10 +458,12 @@ def _selected_zones(zm, regions) -> list[int]:
 
 
 def run_validate(cfg: RainConfig, start: str, end: str, regions=("West Coast",), catchments=None,
-                 fetch: bool = True, margin: int = 12, out_dir: Path | None = None, readers=None, http=None,
-                 log=print) -> dict:
+                 fetch: bool = True, margin: int = 12, out_dir: Path | None = None, exclude=(), readers=None,
+                 http=None, log=print) -> dict:
     """Validate the gauge-scaled ECMWF against the gauges for the event (START, END]; see the module docstring.
-    Writes ``validate_<regions>_<START>_<END>.json`` and ``.md`` into ``out_dir`` (default ``<rain>/validation``)."""
+    ``exclude``: gauge ids left out of everything (factors included), for a sensitivity run. Writes
+    ``validate_<regions>_<START>_<END>[_without-<n>]`.json`` and ``.md`` into ``out_dir`` (default
+    ``<rain>/validation``)."""
     from .gauges import GaugeHours
     from .scaling import _home_regions, evaluate_region, find_copies, find_outages, load_factors, open_store
     from .zones import load_zones
@@ -500,12 +503,17 @@ def run_validate(cfg: RainConfig, start: str, end: str, regions=("West Coast",),
 
     # gauges, cleaned as the scaling does
     cp = find_copies(g, cols, sc, _home_regions(cfg))
-    keep = cp["keep"]
+    keep = cp["keep"].copy()
+    ids = np.asarray(g.id).astype(str)
+    exclude = sorted(set(exclude or ()))
+    unknown = [x for x in exclude if x not in set(ids.tolist())]
+    if unknown:
+        raise SystemExit(f"--exclude-gauge: no gauge {', '.join(unknown)}")
+    keep &= ~np.isin(ids, exclude)    # counted as a dropped copy: out of the factors and the estimates
     out = find_outages(g, grid_all, keep, sc)
     outage = out["mask"]
     gregion = [g.regions[k] if k >= 0 else "" for k in g.region_of]
     gzone, gdiv = zm.gauge_zones(gregion, g.x, g.y)
-    ids = np.asarray(g.id).astype(str)
     usable = g.ok & ~outage
     log(f"gauges {gpath.name} ({g.meta.get('created')}): {g.n} gauges; event {_hour(first - 1)} .. {_hour(last)} "
         f"({T} h); {int((~keep).sum())} copies dropped, {len(out['spells'])} likely outages "
@@ -516,6 +524,11 @@ def run_validate(cfg: RainConfig, start: str, end: str, regions=("West Coast",),
              for zi, z in enumerate(zones) if (gzone == zi).any()}
     fv = factor_variants(g, keep, outage, gzone, zones, doc, stores, sc, (first, last))
     fz = fv["zones"]
+    for z, ev in evals.items():   # the event's own ratio: what one factor per zone could do at best
+        if z in fz:
+            f_ev = float(min(max(ev["ratio"], sc.clamp[0]), sc.clamp[1])) if ev["ratio"] else 1.0
+            fz[z]["event"] = {"factor": round(f_ev, 4), "ratio": ev["ratio"], "gauges": ev["gauges"],
+                              "gauge_mm": ev["gauge_mm"], "grid_mm": ev["grid_mm"]}
     row_of = {gid: k for k, gid in enumerate(ids)}
 
     def fac(z, kind):
@@ -536,7 +549,7 @@ def run_validate(cfg: RainConfig, start: str, end: str, regions=("West Coast",),
                    "gauge_peak_mm": _r(np.nanmax(x), 1) if np.isfinite(x).any() else None,
                    "model": {"raw": round(em, 1), "in_use": round(em * fac(z, "in_use"), 1),
                              "window": round(em * fac(z, "window"), 1), "leo": round(em * fac(z, "leo"), 1),
-                             "logo": round(em * f_logo, 1)},
+                             "logo": round(em * f_logo, 1), "event": round(em * fac(z, "event"), 1)},
                    "logo_factor": f_logo, "timing": tm}
             if np.isfinite(gdiv[i]):
                 row["divide_km"] = round(float(gdiv[i]), 1)
@@ -554,7 +567,7 @@ def run_validate(cfg: RainConfig, start: str, end: str, regions=("West Coast",),
         if rs:
             obs = np.array([r["gauge_mm"] for r in rs])
             rep["metrics"] = {k: error_metrics([r["model"][k] for r in rs], obs) for k in
-                              ("raw", "in_use", "window", "leo", "logo")}
+                              ("raw", "in_use", "window", "leo", "logo", "event")}
             rep["summary"] = _event_summary(g, rs, row_of, usable, cols, first, ev_vals)
             full = [row_of[r["id"]] for r in rs if r["hours"] == T]
             if full:
@@ -577,7 +590,7 @@ def run_validate(cfg: RainConfig, start: str, end: str, regions=("West Coast",),
             have = [c for c in catch if c["gauge"].get(est) is not None]
             if have:
                 cmetrics[est] = {k: error_metrics([c["model"][k] for c in have], [c["gauge"][est] for c in have])
-                                 for k in ("raw", "in_use", "window", "leo", "loco")}
+                                 for k in ("raw", "in_use", "window", "leo", "loco", "event")}
 
     # the two ECMWF stores at the gauge cells, over the event
     gc = np.unique(cells_g[~no_cell])
@@ -594,7 +607,7 @@ def run_validate(cfg: RainConfig, start: str, end: str, regions=("West Coast",),
         "format": FORMAT, "created": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "event": {"start": _hour(first - 1), "end": _hour(last), "first_hour": _hour(first), "last_hour": _hour(last),
                   "hours": T, "margin_h": margin},
-        "regions": list(regions), "zones": [zones[i] for i in sel],
+        "regions": list(regions), "zones": [zones[i] for i in sel], "excluded_gauges": exclude,
         "inputs": {"gauges": {"file": str(gpath.relative_to(cfg.rain_dir)), "created": g.meta.get("created"),
                               "hours": [_hour(g.hour[0]), _hour(g.hour[-1])]},
                    "factors": {"updated": (doc or {}).get("updated"), "window": fv["window"]},
@@ -612,7 +625,8 @@ def run_validate(cfg: RainConfig, start: str, end: str, regions=("West Coast",),
         "seconds": round(time.monotonic() - t0, 1)}
     out_dir = Path(out_dir) if out_dir else cfg.rain_dir / "validation"
     out_dir.mkdir(parents=True, exist_ok=True)
-    stem = f"validate_{slug(regions or ['all'])}_{_label(first - 1)}_{_label(last)}"
+    stem = (f"validate_{slug(regions or ['all'])}_{_label(first - 1)}_{_label(last)}"
+            + (f"_without-{len(exclude)}" if exclude else ""))
     (out_dir / f"{stem}.json").write_text(json.dumps(report, indent=1, ensure_ascii=False))
     md = render_markdown(report)
     (out_dir / f"{stem}.md").write_text(md)
@@ -649,7 +663,7 @@ def _catchments(cfg, specs, regions, zm, g, gzone, gauges, row_of, usable, cols,
                 log) -> list[dict]:
     import pandas as pd
 
-    from .upstream import Network
+    from .upstream import FLAG_NAMES, Network
     from .weights import CatchmentWeights
 
     w = CatchmentWeights.load(cfg.weights_path("ecmwf"))
@@ -698,7 +712,7 @@ def _catchments(cfg, specs, regions, zm, g, gzone, gauges, row_of, usable, cols,
         zsel = np.flatnonzero(cc["zone_share"] > 1e-4)
         raw = float(ucell @ Etot)
 
-        def scaled(kind, factors=None):
+        def scaled(kind, factors=None, u=u):
             f = np.array([(factors or {}).get(zm.names[z], fz[zm.names[z]][kind]["factor"] if zm.names[z] in fz
                                               else 1.0) for z in range(len(zm.names))])
             return float((f[:, None] * u).sum(axis=0) @ Etot)
@@ -734,8 +748,10 @@ def _catchments(cfg, specs, regions, zm, g, gzone, gauges, row_of, usable, cols,
             "gauges_inside": [{"id": uid[k], "gauge_mm": _r(gtot[k], 1), "raw_mm": used[uid[k]]["raw_mm"]}
                               for k in inside],
             "idw_gauges": idw_gauges,
+            "flags": [n for b, n in FLAG_NAMES.items() if net.flags[t["row"]] & b],
             "model": {"raw": _r(raw, 1), "in_use": _r(scaled("in_use"), 1), "window": _r(scaled("window"), 1),
-                      "leo": _r(scaled("leo"), 1), "loco": _r(scaled("leo", loco), 1)},
+                      "leo": _r(scaled("leo"), 1), "loco": _r(scaled("leo", loco), 1),
+                      "event": _r(scaled("event"), 1)},
             "loco_factors": loco, "gauge": est, "timing": tm})
         log(f"catchment {t['name']} (gid {t['gid']}, {cc['area_km2']:.0f} km2): ECMWF {raw:.0f} mm, in use "
             f"{scaled('in_use'):.0f}; gauges inside {len(inside)}: {est['inside']}, idw {est['idw']}, guided "
@@ -773,7 +789,8 @@ def render_markdown(rep: dict) -> str:
         s = zr.get("summary")
         if s:
             L += [f"{s['gauges']} gauges: mean {_f(s['mean_mm'])} mm, median {_f(s['median_mm'])}, max "
-                  f"{_f(s['max_mm'])} ({s['max_gauge']}); {s['over_100mm']} over 100 mm, {s['over_200mm']} over 200 mm. "
+                  f"{_f(s['max_mm'])} ({s['max_gauge']}); {s['over_100mm']} over 100 mm, {s['over_200mm']} over "
+                  f"200 mm. "
                   f"Wettest hour {_f(s['peak_hour_mm'])} mm ({s['peak_hour_gauge']}, hour ending {s['peak_hour']}); "
                   f"gauge mean peaks at {_f(s['mean_peak_mm'])} mm/h ({s['mean_peak_hour']}); "
                   f"{s['wet_hours_mean_ge_1mm']} h with a gauge mean >= 1 mm/h ({s['wet_from']} .. {s['wet_to']}). "
@@ -786,7 +803,11 @@ def render_markdown(rep: dict) -> str:
                   f"| in use | {iu['factor']:.3f} (version {iu['version']}) | factor file, set {iu['set']} |",
                   f"| 30-day window | {wi['factor']:.3f} | {wi['why']}, {wi['gauges']} gauges |",
                   f"| window without the event | {le['factor']:.3f} | {le['why']}, {le['gauges']} gauges, "
-                  f"{le['hours']} h |", ""]
+                  f"{le['hours']} h |"]
+            if "event" in f:
+                L.append(f"| the event alone | {f['event']['factor']:.3f} | ratio {_f(f['event']['ratio'], 3)}, "
+                         f"{f['event']['gauges']} gauges |")
+            L.append("")
         ex = zr.get("excluded") or {}
         if ex:
             few = ", ".join(f"{x['id']}" for x in ex.get("few_hours", []))
@@ -794,7 +815,7 @@ def render_markdown(rep: dict) -> str:
                   f"{len(ex.get('few_hours', []))} with < 80 % of the hours usable" + (f" ({few})" if few else "")
                   + ".", ""]
         if zr.get("metrics"):
-            L += _metric_rows(zr["metrics"], ("raw", "in_use", "window", "leo", "logo")) + [""]
+            L += _metric_rows(zr["metrics"], ("raw", "in_use", "window", "leo", "logo", "event")) + [""]
         tmz = zr.get("timing")
         if tmz:
             lag = "-" if tmz["best_lag_h"] is None else f"{tmz['best_lag_h']:+d}"
@@ -802,8 +823,9 @@ def render_markdown(rep: dict) -> str:
                   f"{lag} h (r {_f(tmz['r_best'], 2)}), 3-hour sums r {_f(tmz['r3'], 2)}; peak "
                   f"{_f(tmz.get('gauge_peak_mm'))} mm/h at {tmz.get('gauge_peak_hour')} (gauges) vs "
                   f"{_f(tmz.get('model_peak_mm'))} at {tmz.get('model_peak_hour')} (ECMWF); centroid lag "
-                  f"{_f(tmz.get('centroid_lag_h'), 2)} h. Per gauge: median r {_f(zr['timing_per_gauge']['median_r0'], 2)}"
-                  f", best lags {zr['timing_per_gauge']['best_lag_counts']}.", ""]
+                  f"{_f(tmz.get('centroid_lag_h'), 2)} h. Per gauge: median r "
+                  f"{_f(zr['timing_per_gauge']['median_r0'], 2)}, best lags "
+                  f"{zr['timing_per_gauge']['best_lag_counts']}.", ""]
         rows = [r for r in rep["gauges"] if r["zone"] == z]
         if rows:
             L += ["| gauge | hours | gauge mm | ECMWF raw | gauge / raw | x in use | x no event | x no event, no gauge "
@@ -822,14 +844,17 @@ def render_markdown(rep: dict) -> str:
               "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
         for c in rep["catchments"]:
             t = c["timing"] or {}
-            zs = ", ".join(f"{k} {v:.0%}" for k, v in c["zones"].items())
+            zs = ", ".join(f"{k} {v:.0%}" if v >= 0.005 else f"{k} < 1 %" for k, v in c["zones"].items())
             lag = t.get("best_lag_h")
-            L.append(f"| {c['name']} | {c['gid']} | {_f(c['area_km2'], 0)} | {zs} | {len(c['gauges_inside'])} | "
+            short = (f" (area short: {_f(c['table_area_km2'], 0)} in the table)" if "area_short" in c["flags"]
+                     else "")
+            L.append(f"| {c['name']} | {c['gid']} | {_f(c['area_km2'], 0)}{short} | {zs} | {len(c['gauges_inside'])} | "
                      f"{_f(c['model']['raw'])} | {_f(c['model']['in_use'])} | {_f(c['model']['leo'])} | "
                      f"{_f(c['model']['loco'])} | {_f(c['gauge']['inside'])} | {_f(c['gauge']['idw'])} | "
                      f"{_f(c['gauge']['guided'])} | {_f(t.get('r0'), 2)} | {'-' if lag is None else f'{lag:+d}'} |")
         L.append("")
         for est, m in rep["catchment_metrics"].items():
-            L += [f"Against the {est} estimate:", ""] + _metric_rows(m, ("raw", "in_use", "window", "leo", "loco"))
+            L += [f"Against the {est} estimate:", ""] + _metric_rows(m, ("raw", "in_use", "window", "leo", "loco",
+                                                                           "event"))
             L.append("")
     return "\n".join(L)
