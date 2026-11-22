@@ -261,6 +261,19 @@ def _rain(args):
         except (FetchError, NotFound) as e:
             log(f"ECMWF unavailable for the cell store: {e}")
             raise SystemExit(pipeline.EXIT_UNAVAILABLE) from None
+    elif args.step == "validate":
+        from .rainfall.fetch import FetchError, Http, NotFound
+        from .rainfall.validate import run_validate
+
+        if not args.event:
+            raise SystemExit("rain validate needs --event START END (UTC hours YYYYMMDDHH)")
+        http = Http(retries=args.retries if args.retries is not None else 5, log=log)
+        try:
+            run_validate(cfg, args.event[0], args.event[1], regions=args.region, catchments=args.catchment,
+                         fetch=not args.no_fetch, margin=args.margin, out_dir=args.out, http=http, log=log)
+        except (FetchError, NotFound) as e:
+            log(f"ECMWF unavailable for the event: {e}")
+            raise SystemExit(pipeline.EXIT_UNAVAILABLE) from None
     elif args.step == "zones":
         from .rainfall.zones import run_zones
 
@@ -361,8 +374,8 @@ def main(argv: list[str] | None = None) -> None:
     pr = sub.add_parser("rain", help="rainfall per catchment: weights | ecmwf | gauges | zones | scale | totals | "
                                      "inputs | publish | status (see src/river_finder/rainfall/, docs/live-rain.md, "
                                      "docs/rain-gauges.md, docs/rainfall-scaling.md)")
-    pr.add_argument("step", choices=["weights", "ecmwf", "gauges", "zones", "scale", "totals", "inputs", "publish",
-                                     "status"],
+    pr.add_argument("step", choices=["weights", "ecmwf", "gauges", "zones", "scale", "totals", "validate", "inputs",
+                                     "publish", "status"],
                     help="weights: grid-cell -> local-catchment matrices into <data>/rain/; ecmwf: ECMWF IFS observed "
                          "proxy and next-24-h forecast into <data>/rain/obs_ecmwf.npz and fc_ecmwf.npz (exit 75 when "
                          "no run is published or the bucket does not answer); gauges: hourly rain-gauge totals from "
@@ -372,7 +385,9 @@ def main(argv: list[str] | None = None) -> None:
                          "main divide) into <data>/rain/scaling_zones.npz (+ .json); scale: "
                          "gauge scale factors per zone (ECMWF at the gauge cells over 30 days into "
                          "<data>/rain/scaling/, copies of one station counted once, likely outages left out, "
-                         "factors_ecmwf.json + history; re-scales the buffers); totals: "
+                         "factors_ecmwf.json + history; re-scales the buffers); validate: one past storm, ECMWF raw "
+                         "and gauge-scaled against the gauges and over catchments (--event; docs/rainfall-scaling.md) "
+                         "into <data>/rain/validation/; totals: "
                          "upstream mm and m3 per reach and "
                          "window from the current buffers into <data>/rain/totals.npz (+ .json); inputs: the hourly "
                          "job's fixed inputs into --out (weights, network, scaling zones, viewer map, manifest); "
@@ -394,10 +409,21 @@ def main(argv: list[str] | None = None) -> None:
     pr.add_argument("--force", action="store_true",
                     help="scale: a new factor version even within scaling.min_update_hours of the last one")
     pr.add_argument("--no-fetch", action="store_true",
-                    help="scale: use the cell store as it is (no ECMWF downloads)")
+                    help="scale: use the cell store as it is (no ECMWF downloads); validate: use the saved "
+                         "event store")
     pr.add_argument("--days", type=int, default=None,
                     help="gauges: fetch the last N days of hours (default: gauges.days in config/rainfall.toml); "
                          "scale: the comparison window in days (default: scaling.days)")
+    pr.add_argument("--event", nargs=2, metavar=("START", "END"), default=None,
+                    help="validate: the storm, UTC hours YYYYMMDDHH (the rain in (START, END])")
+    pr.add_argument("--region", nargs="+", default=["West Coast"],
+                    help="validate: scaling zones or network regions to report (default: West Coast)")
+    pr.add_argument("--catchment", nargs="+", default=None,
+                    help="validate: outlet reaches, as river names (the largest reach of that name in the regions), "
+                         "gids or NAME=GID (default for the West Coast: Haast, Waiho, Whataroa, Wanganui, Hokitika, "
+                         "Arahura, Taramakau, Grey, Ahaura, Buller, Karamea)")
+    pr.add_argument("--margin", type=int, default=12,
+                    help="validate: ECMWF hours read on each side of the event, for the lags (default 12)")
     pr.add_argument("--council", nargs="+", default=None,
                     help="gauges: only these council ids (default: every enabled [gauges.councils.*])")
     pr.add_argument("--sites-only", action="store_true",
@@ -409,11 +435,13 @@ def main(argv: list[str] | None = None) -> None:
                     help="gauges: fetch the newest N hours again even if cached (default: gauges.refetch_hours)")
     pr.add_argument("--no-cache", action="store_true", help="ecmwf: ignore and do not write the decoded-field cache")
     pr.add_argument("--retries", type=int, default=None,
-                    help="ecmwf, gauges, scale: retries per request on HTTP 429/5xx and network errors, backoff "
-                         "doubling from ~1 s (default 5 for ecmwf and scale, gauges.retries for gauges)")
+                    help="ecmwf, gauges, scale, validate: retries per request on HTTP 429/5xx and network errors, "
+                         "backoff doubling from ~1 s (default 5 for ecmwf, scale and validate, gauges.retries for "
+                         "gauges)")
     pr.add_argument("-o", "--out", type=Path, default=None,
                     help="inputs: directory for the job's inputs (the rain-inputs branch); publish: directory for "
-                         "index.json and <region>.bin.gz (the rain branch)")
+                         "index.json and <region>.bin.gz (the rain branch); validate: directory for the report "
+                         "(default <data>/rain/validation)")
     pr.add_argument("--viewer", type=Path, default=None,
                     help="inputs: viewer data with regions_index.json (default: <data>/../viewer_nz)")
     pr.add_argument("--data", type=Path, default=None,
