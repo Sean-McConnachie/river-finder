@@ -1,4 +1,4 @@
-# Rain gauge scaling (rf-t26.5, rf-t26.13, rf-t26.16)
+# Rain gauge scaling (rf-t26.5, rf-t26.13, rf-t26.16, rf-t26.7)
 
 The ECMWF rain the site shows (the observed proxy and the next-24-h forecast, `docs/live-rain.md`)
 comes from a 9 km model. Over steep terrain it misses part of the orographic rain, and elsewhere it can
@@ -9,6 +9,13 @@ cells. Local totals are scaled by it. The published files are not scaled yet (se
 A scaling zone is a network region, or part of one: Canterbury is split at 15 km from the main
 divide into **Canterbury divide** and **Canterbury east** (rf-t26.16, "Zones" below). Gauges that are
 probably down (dry while their neighbours and ECMWF are wet) are left out ("Likely outages").
+
+**Validated on two West Coast storms** (rf-t26.7, `docs/rainfall-validation-westcoast-2026-11.md`):
+raw ECMWF had 94-95 % of the gauge rain. The West Coast factor in use (0.906, version 1) made both storms
+about 10 % worse, and its successor (the 30-day ratio, 1.007) gives the same result as raw. The West
+Coast errors are spatial (central Westland low, north and south high, ±30-50 % by catchment), so no zone
+factor removes them. The Canterbury divide factor (1.195) removed a -16 % bias in the November storm,
+also out of sample.
 
 Code: `src/river_finder/rainfall/scaling.py` (its docstring is the reference) and
 `src/river_finder/rainfall/zones.py` (the zones). Config: `[scaling]`, `[scaling.ecmwf]`,
@@ -23,6 +30,7 @@ uv run river-finder rain ecmwf           # new buffers, scaled with the current 
 uv run river-finder rain totals          # local upstream totals (scaled)
 uv run river-finder rain status          # includes the factors and the cell store
 uv run river-finder rain scale --days 30 --now 2026112203 --force --no-fetch   # options
+uv run river-finder rain validate --event 2026111412 2026111712 --region "West Coast"   # one past storm (rf-t26.7)
 ```
 
 ## Method
@@ -326,7 +334,8 @@ Distinct gauges within 100 m (`last_update.copies.colocated`), all counted:
   ESNZ series shifted 1 h, 0.92 as stamped; 636.5 vs 621.4 mm). This is the open point of
   `docs/rain-gauges.md`. A 1 h offset does not change a 30-day total. The two are different
   instruments (2 % of wet hours agree), so both count. It matters to hourly comparisons only, for
-  example rf-t26.7's storm checks.
+  example rf-t26.7's storm checks. In the November storm both Arthur's Pass gauges have their best lag at
+  +1 h against ECMWF (r 0.89 and 0.94 at lag 0), so the storm does not settle which one is off.
 - `wcrc:Haast Rv @ Roaring Billy` and `wcrc:Haast Rv @ Roaring Billy WCRC`, 10 m apart: r 1.00 at
   0 h, but only 53 % of the wet hours agree and the totals differ by 2 % (390 vs 381 mm). So they are
   two gauges, or one gauge processed twice. The WCRC one ended on 2026-11-02 and is left out by
@@ -376,13 +385,49 @@ Reading the table:
   gauge councils yet.
 
 The first run (04:11Z, records 1-3, one zone per region, no outage rule): West Coast 0.906 (ratio
-0.906), Tasman 1.037, Canterbury 0.800 (target 0.720). These factors come from one 30-day window that
-the West Coast storm validation (rf-t26.7) has not checked yet. They are local only: `[scaling]
-publish = false`.
+0.906), Tasman 1.037, Canterbury 0.800 (target 0.720). They are local only: `[scaling] publish = false`.
+The storm validation (rf-t26.7) checked the West Coast and Canterbury divide factors on the storms of
+14-17 November and 24-27 October: "Validation" below.
 
 Per zone, `factors_ecmwf.json` -> `last_update.regions.<zone>.used` lists each gauge with its hours,
 sums and ratio (and `outage_hours`), and `by_council` gives the sums per council (Tasman: TDC 66
 gauges, ratio 1.042; one WCRC gauge, 0.79).
+
+### Change history
+
+Every new version is one line of `factors_ecmwf.history.jsonl` (`seq`). All six so far are from
+2026-11-22, with the window 2026-10-23 03:00Z .. 2026-11-22 03:00Z:
+
+| seq | set (UTC) | zone | factor | version | previous | status | why |
+|---|---|---|---|---|---|---|---|
+| 1 | 04:11 | Canterbury | 0.800 | 1 | 1, v0 | scaled | ratio 0.720 (109 gauges), max step |
+| 2 | 04:11 | Tasman | 1.037 | 1 | 1, v0 | scaled | ratio 1.037 (67 gauges) |
+| 3 | 04:11 | West Coast | 0.906 | 1 | 1, v0 | scaled | ratio 0.906 (44 gauges, three of them dead: before the outage rule) |
+| 4 | 04:41 | Canterbury | 1 | 0 | 0.800, v1 | closed | zone split (rf-t26.16): Canterbury divide and Canterbury east |
+| 5 | 04:41 | Canterbury divide | 1.195 | 1 | 1, v0 | scaled | ratio 1.195 (11 gauges) |
+| 6 | 04:41 | Canterbury east | 0.800 | 1 | 1, v0 | scaled | ratio 0.508 (97 gauges), max step |
+
+Pending at the next daily run (held by the 20 h rule at 20:16Z): West Coast 1.007 (version 2) and
+Canterbury east 0.640 (version 2, then 0.512).
+
+## Validation (rf-t26.7)
+
+`river-finder rain validate --event START END [--region ...] [--catchment ...]`
+(`src/river_finder/rainfall/validate.py`) compares ECMWF raw and scaled with the gauges for one past
+storm, both per gauge and over catchments. It also reports the factor in use, the window's ratio, the
+ratio without the storm's hours (out of sample), and leave-gauge-out and leave-catchment-out factors.
+The catchment totals are the upstream mean depths of `rain totals`. They are compared with three
+gauge-based estimates (inside mean, IDW, ECMWF-guided), and the hourly timing is checked too. The report
+is `docs/rainfall-validation-westcoast-2026-11.md`, and the tests are in
+`tests/test_rainfall_validate.py`. Results for the West Coast:
+
+| storm | gauges | raw: ECMWF / gauge | x factor in use (0.906) | x 30-day ratio without the storm | x storm's own ratio | catchments vs IDW: raw / in use |
+|---|---|---|---|---|---|---|
+| 14-17 Nov (mean 147 mm, max 453.5) | 43 | 0.94, RMSE 58 mm | 0.85, 63 mm | 0.94 (0.996), 58 mm | 1.00 (1.062), 56 mm | 0.97 / 0.88 |
+| 24-27 Oct (mean 108 mm, max 362.5) | 42 (without Colliers Ck) | 0.95, RMSE 44 mm | 0.86, 47 mm | 0.95 (0.998), 44 mm | 1.00 (1.049), 43 mm | 1.03 / 0.93 |
+
+Timing: the zone's hourly r at lag 0 was 0.98 and 0.95, and the best lag 0 h in both storms. ECMWF's
+rain centroid was 1-2 h early, and its peak hour was 18-27 % lower.
 
 ## The grid side: how far back the sources go
 
@@ -428,11 +473,16 @@ about 30 days of daily updates, the window is all Open-Meteo.
 ## Not done here
 
 - A Tasman zone for the inland basins (0.73 x vs 1.12 x, "Zones"): to be checked with a second window.
-- The outage rule marks hours left out of the comparison only; the gauge cache and rf-t26.7's storm
-  checks still see the dry hours (`scaling.find_outages` gives the mask).
-- The West Coast storm validation of rf-t26.7: do the scaled hourly totals beat raw ECMWF at gauges
-  that were left out (or in a cross-validation by gauge)?
-- Satellite rain (IMERG) is deferred. The design is per source family: a `[scaling.<family>]` table,
+- The outage rule marks hours left out of the comparison only (`scaling.find_outages` gives the mask;
+  `rain validate` applies it too). It does not catch a half-dead gauge that still tips now and then:
+  Colliers Creek recorded 2 mm in the October storm against 203 mm in its cell and 200-360 mm at its
+  neighbours. A rule on event totals against the neighbours would catch it.
+- The West Coast: a zone factor does not fix its catchment totals (rf-t26.7). A finer unit is a
+  candidate: by latitude or by orographic band (30 days: the central band 1.08, the north 0.94, the south
+  0.91). Check it on a second window before adding it, as for Tasman.
+- Satellite rain (IMERG) is deferred. The storm comparison with IMERG Final could not be made: NASA's
+  hosts are blocked here, it needs an Earthdata Login, and IMERG Final for November 2026 is out about
+  March 2027 (`docs/rainfall-validation-westcoast-2026-11.md`, "IMERG"). The design is per source family: a `[scaling.<family>]` table,
   `<family>_cells.npz` and `factors_<family>.json`, and buffers scaled by family. A satellite source
   needs a filler for its grid in place of `fill_ecmwf`.
 - Gauges without coordinates (18 in the three councils) are not compared. Their site pages may give

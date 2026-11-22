@@ -43,6 +43,10 @@ Modules
   copies of one station counted once (``find_copies``), ratio of sums over 30 days with guard rails
   (``evaluate_region``, ``decide``), ``factors_<family>.json`` + an append-only version history, and
   ``factors_for(cfg, product, regions)`` for the buffers; ``docs/rainfall-scaling.md``.
+- :mod:`.validate` (rf-t26.7): ``rain validate --event START END``: one past storm, ECMWF raw and
+  gauge-scaled against the gauges (factor in use, window ratio, ratio without the storm, leave-out
+  factors), over catchments (upstream totals against gauge-based estimates) and in timing;
+  ``docs/rainfall-validation-westcoast-2026-11.md``.
 - :mod:`.live` (rf-t26.9): the hourly GitHub Actions job's fixed inputs (``rain inputs``: weights,
   network, viewer map, manifest; the ``rain-inputs`` branch) and the files it publishes (``rain
   publish``: ``index.json`` + one ``<region>.bin.gz`` per site region; the ``rain`` branch). The
@@ -102,6 +106,10 @@ Every hour (children 2 and 3 provide the sources)::
   writes ``<rain>/scaling_zones.npz``; a buffer's ``regions`` are the zone names and ``region_of`` the
   zone of each catchment (``load_zones(cfg)``, ``HourlyBuffer.for_weights(w, kind, zones)``). ``rain
   scale`` leaves likely outages out (``scaling.find_outages``).
+- rf-t26.7 (storm validation, done): ``run_validate(cfg, start, end, regions, catchments)`` reuses the
+  scaling's gauge cleaning (``find_copies``, ``find_outages``, ``evaluate_region``), reads the event's
+  ECMWF on every cell into ``<rain>/validation/`` (``fill_ecmwf``) and the upstream cells of each outlet
+  from the weights and ``network.npz``.
 - rf-t26.6 (upstream, done): ``compute_totals(net, {"observed": obs, "forecast": fc}, windows)``
   sums ``WindowTotal.m3(area_m2)`` down ``net.down`` in topological order; upstream mm = upstream m³ /
   upstream pixel area. Tile-edge outlets (rf-t26.11) end their totals and are flagged.
