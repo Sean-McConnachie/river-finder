@@ -148,6 +148,21 @@ def test_prepare_applies_the_correction_only_when_on():
     assert np.allclose(on["power_kw_m"], 1000 * 9.81 * on["maf_m3s"] * on["grad_s"] / 1e6)
 
 
+def test_corrected_frame_round_trips_through_gpkg(tmp_path):
+    import geopandas as gpd
+    from shapely.geometry import LineString
+
+    area, q, matched, down = _river()
+    g = gpd.GeoDataFrame({"down_seg": down, "area_km2": area, "maf_m3s": np.round(q, 2),
+                          "specific_maf_matched": matched},
+                         geometry=[LineString([(i, 0), (i + 1, 0)]) for i in range(6)], crs="EPSG:2193")
+    maf.apply(g, MafConfig(), down="down_seg")
+    g.to_file(tmp_path / "s.gpkg", layer="segments", driver="GPKG")
+    back = gpd.read_file(tmp_path / "s.gpkg")
+    assert back["maf_flag"].fillna("").tolist() == ["", "", "refill", "refill", "", ""]
+    assert np.allclose(back["maf_raw_m3s"], np.round(q, 2))
+
+
 def test_cli_switch_sets_the_override(monkeypatch):
     from river_finder import cli
 

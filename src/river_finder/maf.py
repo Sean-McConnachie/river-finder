@@ -276,7 +276,7 @@ def apply(f: pd.DataFrame, cfg: MafConfig | None = None, down: str = "down", mat
     f["maf_m3s"] = np.round(r.maf, 2)
     if "specific_maf" in f.columns:
         f["specific_maf"] = np.round(r.specific, 4)
-    f["maf_flag"] = pd.Categorical(r.flag)
+    f["maf_flag"] = r.flag.astype(str)   # plain strings: written as-is to segments_scored.gpkg
     _power(f)
     return f
 
