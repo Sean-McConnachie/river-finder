@@ -29,8 +29,11 @@ _COUNCIL = {"name", "kind", "enabled", "base_url", "hts", "measurements", "timez
             "licence", "attribution", "source"}
 _SCALING = {"apply", "publish", "dir", "days", "keep_days", "min_gauges", "min_usable", "min_gauge_mm", "min_grid_mm",
             "clamp", "max_step", "min_change", "min_update_hours", "dedupe_km", "dedupe_min_wet_hours",
-            "dedupe_equal_share", "dedupe_equal_mm", "colocated_m"}
+            "dedupe_equal_share", "dedupe_equal_mm", "colocated_m", "outage_min_hours", "outage_km",
+            "outage_min_neighbours", "outage_neighbour_mm", "outage_grid_mm", "zones", "zones_file", "divide"}
 _SCALING_SOURCE = {"products", "readers"}
+_ZONE = {"region", "divide_km", "near", "far"}
+_DIVIDE = {"west", "east"}
 # hilltop: a Hilltop Server (:mod:`.hilltop`); ecan-portal: Environment Canterbury's Open Data Portal
 # (:mod:`.ecanportal`: hourly totals per site, no .hts file).
 KINDS = ("hilltop", "ecan-portal")
@@ -114,6 +117,18 @@ class ScalingSource:
 
 
 @dataclass(frozen=True)
+class ZoneSplit:
+    """``[[scaling.zones]]``: a network region scaled as two zones, by distance to the main divide (rf-t26.16):
+    catchments and gauges within ``divide_km`` are zone ``near``, the others ``far``. Zone names are the ids of
+    the factor history: a new name starts at version 1."""
+
+    region: str
+    divide_km: float
+    near: str
+    far: str
+
+
+@dataclass(frozen=True)
 class ScalingConfig:
     """``[scaling]``: gauge scale factors per source family and region (rf-t26.5, :mod:`.scaling`,
     ``docs/rainfall-scaling.md``)."""
@@ -138,11 +153,31 @@ class ScalingConfig:
     colocated_m: float = 100.0     # distinct gauges this close are listed as co-located (with their lag)
     sources: tuple[ScalingSource, ...] = (ScalingSource("ecmwf", ("ECMWF_OBS", "ECMWF_FC"),
                                                         ("openmeteo-s3", "ecmwf-s3")),)
+    # likely outages (rf-t26.16, :func:`.scaling.find_outages`): a dry spell of >= outage_min_hours at a gauge
+    # while >= outage_min_neighbours gauges within outage_km have a median >= outage_neighbour_mm and the grid
+    # >= outage_grid_mm at its cell is left out (0 = off)
+    outage_min_hours: int = 24
+    outage_km: float = 25.0
+    outage_min_neighbours: int = 2
+    outage_neighbour_mm: float = 20.0
+    outage_grid_mm: float = 20.0
+    # scaling zones (rf-t26.16, :mod:`.zones`): regions split by distance to the main divide; none = one zone
+    # per network region (rf-t26.5)
+    zones: tuple[ZoneSplit, ...] = ()
+    zones_file: str = "scaling_zones.npz"   # under <rain>: catchment -> zone (rain zones; an input of the job)
+    divide_west: tuple[str, ...] = ("West Coast", "Tasman")   # the main divide: the border of these regions ...
+    divide_east: tuple[str, ...] = ("Canterbury", "Otago")    # ... with these
 
     def source(self, family: str) -> ScalingSource | None:
         for s in self.sources:
             if s.family == family:
                 return s
+        return None
+
+    def split(self, region: str) -> ZoneSplit | None:
+        for z in self.zones:
+            if z.region == region:
+                return z
         return None
 
 
@@ -215,6 +250,11 @@ class RainConfig:
     def factors_path(self, family: str) -> Path:
         """Current scale factors of ``family`` per region; the version history is ``<stem>.history.jsonl``."""
         return self.scaling_dir / f"factors_{family}.json"
+
+    @property
+    def zones_path(self) -> Path:
+        """Scaling zones per catchment (rf-t26.16, :mod:`.zones`): an input of the hourly job, next to the weights."""
+        return self.rain_dir / self.scaling.zones_file
 
     def with_data(self, nz_data: Path | None) -> RainConfig:
         return self if nz_data is None else replace(self, nz_data=Path(nz_data))
@@ -405,20 +445,64 @@ def _scaling(d, grids: dict) -> ScalingConfig:
             _err(f"scaling.{fam}.readers: only ECMWF has readers")
         sources[fam] = ScalingSource(fam, prods, tuple(readers))
     step = _num(s.get("max_step", base.max_step), "scaling.max_step", 1.0, 10.0)
+    zones = []
+    zl = s.get("zones", [])
+    if not isinstance(zl, list):
+        _err("scaling.zones must be a list of tables ([[scaling.zones]])")
+    for k, z in enumerate(zl):
+        where = f"scaling.zones[{k}]"
+        t = _keys(z, _ZONE, where)
+        missing = sorted(_ZONE - set(t))
+        if missing:
+            _err(f"{where}: missing {', '.join(missing)}")
+        names = [t["region"], t["near"], t["far"]]
+        if not all(isinstance(v, str) and v.strip() for v in names):
+            _err(f"{where}: region, near and far must be non-empty names")
+        zones.append(ZoneSplit(t["region"], _num(t["divide_km"], f"{where}.divide_km", 0.1, 500.0), t["near"],
+                               t["far"]))
+    regs = [z.region for z in zones]
+    if len(set(regs)) != len(regs):
+        _err("scaling.zones: one split per region")
+    names = [n for z in zones for n in (z.near, z.far)]
+    if len(set(names)) != len(names) or set(names) & set(regs):
+        _err("scaling.zones: zone names must be distinct, and not the name of a region that is split")
+    dv = _keys(s.get("divide", {}), _DIVIDE, "scaling.divide")
+    west = _strs(dv.get("west", list(base.divide_west)), "scaling.divide.west")
+    east = _strs(dv.get("east", list(base.divide_east)), "scaling.divide.east")
+    if not west or not east or set(west) & set(east):
+        _err("scaling.divide: west and east must be non-empty, distinct region lists")
+    zfile = s.get("zones_file", base.zones_file)
+    if not isinstance(zfile, str) or not zfile.endswith(".npz"):
+        _err("scaling.zones_file must be a .npz file name")
     return ScalingConfig(
-        _bool(s.get("apply", base.apply), "scaling.apply"), _bool(s.get("publish", base.publish), "scaling.publish"),
-        sdir, days, keep, _int(s.get("min_gauges", base.min_gauges), "scaling.min_gauges", 1, 1000),
-        _num(s.get("min_usable", base.min_usable), "scaling.min_usable", 0.0, 1.0),
-        _num(s.get("min_gauge_mm", base.min_gauge_mm), "scaling.min_gauge_mm", 0.0, 10_000.0),
-        _num(s.get("min_grid_mm", base.min_grid_mm), "scaling.min_grid_mm", 0.0, 10_000.0), (lo, hi), step,
-        _num(s.get("min_change", base.min_change), "scaling.min_change", 0.0, 1.0),
-        _int(s.get("min_update_hours", base.min_update_hours), "scaling.min_update_hours", 0, 24 * 60),
-        _num(s.get("dedupe_km", base.dedupe_km), "scaling.dedupe_km", 0.0, 50.0),
-        _int(s.get("dedupe_min_wet_hours", base.dedupe_min_wet_hours), "scaling.dedupe_min_wet_hours", 1, 10_000),
-        _num(s.get("dedupe_equal_share", base.dedupe_equal_share), "scaling.dedupe_equal_share", 0.5, 1.0),
-        _num(s.get("dedupe_equal_mm", base.dedupe_equal_mm), "scaling.dedupe_equal_mm", 0.0, 10.0),
-        _num(s.get("colocated_m", base.colocated_m), "scaling.colocated_m", 0.0, 10_000.0),
-        tuple(v for f, v in sources.items() if f in grids))
+        apply=_bool(s.get("apply", base.apply), "scaling.apply"),
+        publish=_bool(s.get("publish", base.publish), "scaling.publish"),
+        dir=sdir, days=days, keep_days=keep,
+        min_gauges=_int(s.get("min_gauges", base.min_gauges), "scaling.min_gauges", 1, 1000),
+        min_usable=_num(s.get("min_usable", base.min_usable), "scaling.min_usable", 0.0, 1.0),
+        min_gauge_mm=_num(s.get("min_gauge_mm", base.min_gauge_mm), "scaling.min_gauge_mm", 0.0, 10_000.0),
+        min_grid_mm=_num(s.get("min_grid_mm", base.min_grid_mm), "scaling.min_grid_mm", 0.0, 10_000.0),
+        clamp=(lo, hi), max_step=step,
+        min_change=_num(s.get("min_change", base.min_change), "scaling.min_change", 0.0, 1.0),
+        min_update_hours=_int(s.get("min_update_hours", base.min_update_hours), "scaling.min_update_hours", 0,
+                              24 * 60),
+        dedupe_km=_num(s.get("dedupe_km", base.dedupe_km), "scaling.dedupe_km", 0.0, 50.0),
+        dedupe_min_wet_hours=_int(s.get("dedupe_min_wet_hours", base.dedupe_min_wet_hours),
+                                  "scaling.dedupe_min_wet_hours", 1, 10_000),
+        dedupe_equal_share=_num(s.get("dedupe_equal_share", base.dedupe_equal_share), "scaling.dedupe_equal_share",
+                                0.5, 1.0),
+        dedupe_equal_mm=_num(s.get("dedupe_equal_mm", base.dedupe_equal_mm), "scaling.dedupe_equal_mm", 0.0, 10.0),
+        colocated_m=_num(s.get("colocated_m", base.colocated_m), "scaling.colocated_m", 0.0, 10_000.0),
+        sources=tuple(v for f, v in sources.items() if f in grids),
+        outage_min_hours=_int(s.get("outage_min_hours", base.outage_min_hours), "scaling.outage_min_hours", 0,
+                              24 * 60),
+        outage_km=_num(s.get("outage_km", base.outage_km), "scaling.outage_km", 0.1, 500.0),
+        outage_min_neighbours=_int(s.get("outage_min_neighbours", base.outage_min_neighbours),
+                                   "scaling.outage_min_neighbours", 1, 100),
+        outage_neighbour_mm=_num(s.get("outage_neighbour_mm", base.outage_neighbour_mm),
+                                 "scaling.outage_neighbour_mm", 0.0, 10_000.0),
+        outage_grid_mm=_num(s.get("outage_grid_mm", base.outage_grid_mm), "scaling.outage_grid_mm", 0.0, 10_000.0),
+        zones=tuple(zones), zones_file=zfile, divide_west=west, divide_east=east)
 
 
 def parse_config(d: dict, root: Path = REPO_ROOT) -> RainConfig:

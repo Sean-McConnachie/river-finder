@@ -464,6 +464,69 @@ def find_copies(g, cols: np.ndarray, sc: ScalingConfig, home: dict[str, str] | N
     return out
 
 
+# --- likely outages: dry at the gauge while its neighbours and the grid are wet (rf-t26.16) ----------------
+def find_outages(g, grid_all: np.ndarray, keep: np.ndarray, sc: ScalingConfig) -> dict:
+    """Hours of ``g`` (:class:`.gauges.GaugeHours`) that read dry because the gauge was probably down.
+
+    A tipping-bucket gauge that stops (a blocked funnel, a dead logger whose site still reports, ECan's
+    event gauges with no row for an hour) reads 0 mm: no record is a dry hour. Over every hour the gauge
+    cache holds, a **spell** is a maximal run of hours that are dry (usable, 0 mm) or not usable at the
+    gauge, with at least ``outage_min_hours`` dry hours. Its **neighbours** are the other gauges within
+    ``outage_km`` (dropped copies left out) with a usable value in at least 80 % of the spell's dry hours;
+    each one's rain over those hours is divided by that share. The spell is a likely outage when at least
+    ``outage_min_neighbours`` neighbours qualify, their median is at least ``outage_neighbour_mm`` and the
+    grid has at least ``outage_grid_mm`` at the gauge's cell over the same hours (both wet: a dry spell
+    beside one wet gauge, or that the model alone calls wet, is not enough). The dry hours of a likely
+    outage are left out of the comparison like missing hours (``mask``); the gauge cache is not changed.
+
+    ``grid_all`` is the grid's mm at each gauge's cell, (hours of ``g``, gauges), NaN = no value.
+    Returns ``mask`` (bool (G, T), True = outage hour), ``spells`` (one dict per likely outage) and ``rule``.
+    """
+    G, T = g.mm.shape
+    mask = np.zeros((G, T), dtype=bool)
+    rule = {"min_dry_hours": sc.outage_min_hours, "radius_km": sc.outage_km,
+            "min_neighbours": sc.outage_min_neighbours, "neighbour_median_mm": sc.outage_neighbour_mm,
+            "grid_mm": sc.outage_grid_mm, "neighbour_min_share": 0.8}
+    out = {"mask": mask, "spells": [], "rule": rule, "spells_checked": 0}
+    if not sc.outage_min_hours or G == 0 or T == 0:
+        return out
+    ok = g.ok
+    mm = np.where(ok, np.nan_to_num(g.mm), 0.0)
+    x, y = np.asarray(g.x, dtype=np.float64), np.asarray(g.y, dtype=np.float64)
+    placed = np.isfinite(x) & np.isfinite(y)
+    d = np.hypot(x[:, None] - x[None, :], y[:, None] - y[None, :]) / 1000.0
+    for i in range(G):
+        if not placed[i] or not keep[i]:
+            continue
+        dry = ok[i] & (mm[i] == 0)
+        run = dry | ~ok[i]
+        edges = np.flatnonzero(np.diff(np.concatenate([[0], run.astype(np.int8), [0]])))
+        nb = np.flatnonzero(placed & keep & (d[i] <= sc.outage_km) & (np.arange(G) != i))
+        for a, b in zip(edges[::2], edges[1::2], strict=True):
+            hrs = np.flatnonzero(dry[a:b]) + a
+            if hrs.size < sc.outage_min_hours:
+                continue
+            out["spells_checked"] += 1
+            share = ok[np.ix_(nb, hrs)].mean(axis=1) if nb.size else np.zeros(0)
+            use = nb[share >= 0.8]
+            tot = mm[np.ix_(use, hrs)].sum(axis=1) / share[share >= 0.8] if use.size else np.zeros(0)
+            grid_mm = float(np.nansum(grid_all[hrs, i]))
+            med = float(np.median(tot)) if tot.size else 0.0
+            if (use.size < sc.outage_min_neighbours or med < sc.outage_neighbour_mm
+                    or grid_mm < sc.outage_grid_mm):
+                continue
+            mask[i, hrs] = True
+            order = np.argsort(d[i, use])
+            out["spells"].append({
+                "id": str(g.id[i]), "council": str(g.council[i]), "from": _hour(g.hour[a] - 1),
+                "to": _hour(g.hour[b - 1]), "dry_hours": int(hrs.size), "grid_mm": round(grid_mm, 1),
+                "neighbours": int(use.size), "neighbour_median_mm": round(med, 1),
+                "neighbour_max_mm": round(float(tot.max()), 1),
+                "nearest": [{"id": str(g.id[use[k]]), "km": round(float(d[i, use[k]]), 1),
+                             "mm": round(float(tot[k]), 1)} for k in order[:3]]})
+    return out
+
+
 # --- factor maths ---------------------------------------------------------------------------------------
 def _r4(v) -> float | None:
     return None if v is None or not np.isfinite(v) else round(float(v), 4)
