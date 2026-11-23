@@ -21,7 +21,9 @@ Per-segment metrics:
 - ``upstream_hard_frac``: share of the catchment on resistant rock (GNS 1:250k).
 - ``bed_rock`` / ``bed_hard``: rock group at the segment midpoint, and whether it is resistant.
 - ``maf_m3s``: estimated mean annual flood = our area x the specific MAF (m3/s/km2) of the
-  nearest NIWA REC1 reach of similar size.
+  nearest NIWA REC1 reach of similar size. Reaches with no such reach get the tile's median
+  specific MAF (``specific_maf_matched`` False); ``maf.py`` can correct that and cap implausible
+  values at scoring time (off by default; ``docs/audits/maf-outliers-2026-11.md``).
 """
 
 from __future__ import annotations
