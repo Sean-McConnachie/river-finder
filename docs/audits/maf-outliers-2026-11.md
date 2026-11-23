@@ -19,6 +19,17 @@ The fix in `src/river_finder/maf.py` refills unmatched reaches from their networ
 specific MAF at the national gauge envelope. It also adds a `maf_flag` column. It is **off by default**
 (`config/maf.toml`, `--maf-correction on|off`), because turning it on changes every score.
 
+**Effect when on:**
+
+- 66,979 reaches change MAF (11 % of the domain); 919 of them are capped.
+- 63 of the 66 rivers in v3's top-100 unlisted runs stay. The two biggest movers among them are the
+  unnamed South Westland valley floors, whose MAF falls from about 9,000 to 3,500 m³/s.
+- At 528 gauges, our MAF is within 1.5× of the gauged value at 75.9 % of gauges, up from 74.8 %.
+- In paired CV, the logistic models gain +0.003 to +0.005 style-matched AUC. The LightGBM recipe of v3
+  is unchanged within noise.
+
+Recommendation: turn refill and cap on at the next national rebuild (see the end of this document).
+
 Analysis outputs, not committed, are in `data/analysis/maf/`: `reaches.pkl`, `rec1_match.pkl`,
 `gauge_check.csv`, `impact.json`, the `v3_runs_*.csv` files and `cv_*.json`.
 
@@ -65,8 +76,8 @@ Analysis outputs, not committed, are in `data/analysis/maf/`: `reaches.pkl`, `re
   The envelope through these is **E(A) = 27.2 · A^−0.25** m³/s/km². With b = 0.25, Whataroa sets c, and
   Cropp and Hokitika at Gorge come next. That gives 22.9 at 2 km², 15.3 at 10 km², 8.6 at 100 km² and
   4.8 at 1,000 km².
-- **H&C is unbiased at the gauges, even the extreme ones.** Its ratio to the gauged MAF has a median of
-  0.97, and 78 % of gauges are within 1.5×. Examples: Cropp 13.55 against 13.65 gauged, Whataroa 5.43
+- **H&C is unbiased at the gauges, even the extreme ones.** At the 588 gauges matched to a REC1 reach,
+  its ratio to the gauged MAF has a median of 1.00, and 76 % of gauges are within 1.5×. Examples: Cropp 13.55 against 13.65 gauged, Whataroa 5.43
   against 5.93, Waiohine at Gorge 5.38 against 4.91. The values in doubt are its extrapolations upstream of
   the gauges.
 
@@ -244,9 +255,17 @@ So inflated MAFs did lift some reaches into the top 1 %, but not many.
 |---|---|---|---|---|---|
 | Kaimai | 6,730 | 710 | 0 | 6 | an unnamed 572 km² reach, 415 → 269 m³/s |
 | Karangahake | 2,917 | 241 | 0 | 45 | an unnamed 70 km² reach, 157 → 128 m³/s |
-| Tutamoe | 7,861 | 470 | 0 | 189 | the 668 km² Mangakahia reach, 2,173 → 606 m³/s |
+| Tutamoe | 7,861 | 470 | 0 | 189 | an unnamed 668 km² reach of the upper Hokianga Harbour, 2,173 → 606 m³/s |
 
-For comparison, Mangakahia at Titoki (798 km²) is gauged at 586 m³/s.
+The Tutamoe case is the tile fill at its plainest:
+
+- The Waima River at 518 km² is matched to REC1, with H&C giving 0.97 m³/s/km² (501 m³/s).
+- Below its outlet (173.58 E), 106 harbour reaches of 400–668 km² have no REC1 match. All of them got the
+  tile median of 3.25, so the 668 km² reach at 173.45 E, −35.41 carried 2,173 m³/s: 4.3× the flood of
+  the river that feeds it.
+- The refill carries the Waima's own value down: 0.97 × (668/518)^−0.25 gives 606 m³/s.
+- There is no gauge on the Waima. The nearest Northland gauges of similar size (Waipapa at Forest
+  Ranger, 122 km²; Mangakahia at Gorge, 246 km²) give 2.1–2.4 m³/s/km².
 
 **At the gauges.** Our MAF against the gauged MAF at 528 gauges:
 
@@ -254,11 +273,21 @@ For comparison, Mangakahia at Titoki (798 km²) is gauged at 586 m³/s.
 |---|---|---|---|---|
 | raw | 0.130 | 74.8 % | 28 | 23 |
 | corrected | 0.126 | 75.9 % | 24 | 23 |
-| H&C on REC1 | 0.124 | 78.4 % | 23 | 22 |
+| H&C on REC1 (the 519 of these with a REC1 match) | 0.124 | 78.4 % | 23 | 22 |
 
-The 11 refilled gauge reaches now carry H&C's value at the gauge. The one exception is Whanganui at
-Headwaters, which goes from 76 to 91 m³/s against 45 gauged. That reach is below the Tongariro Power
-Scheme intakes, so natural flood statistics overstate it either way.
+At the 11 refilled gauge reaches, the refill moves our MAF closer to the gauged value in 8 cases:
+
+- Manawatu at Teachers College: 3,481 → 1,987 (1,591 gauged);
+- Whangaehu at SH3: 1,337 → 586 (522);
+- Moawhango at Waiouru: 253 → 99 (101);
+- Omarama above Tara Hills: 64 → 22 (18.8);
+- Whakatane, Kumeti, Waimakariri and Glenbervie.
+
+It moves away in 3:
+
+- Hamilton Burn, at two gauges: 113 → 98 m³/s against 122 and 137 gauged;
+- Whanganui at Headwaters: 76 → 91 against 45 gauged. That reach is below the Tongariro Power Scheme
+  intakes, so natural flood statistics overstate it either way.
 
 ## The correction (implemented, off by default)
 
@@ -305,8 +334,8 @@ flag from the tiles.
   2,225 more reaches: Gisborne 660, Canterbury 464, Wanganui 402, Hawke's Bay 358. But most of those are
   on ungauged wet ranges, such as the Ruahine (Oroua, Kawhatau, Makaroro, Pohangina) and the Main Divide,
   where the gauges sit on the drier plains. A local envelope there punishes real rainfall gradients. It
-  also misses Karangahake and Waiapu, because nearby small gauges lift the envelope. It would be useful as
-  an audit flag, not a cap.
+  does catch the Waiapu headwaters (47 reaches). It misses the Karangahake streams, because Waiorongomai
+  (4.72 at 7.9 km²) lifts the local envelope above them. It would be useful as an audit flag, not a cap.
 - **A median filter over neighbours.** H&C values are piecewise constant per REC1 reach, so a median
   filter only blurs confluences. The outlier clusters, such as the Taranaki cone, are spatially coherent,
   so a local median keeps them.
