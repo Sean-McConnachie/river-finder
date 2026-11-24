@@ -466,3 +466,9 @@ the v3 and v4 lists. v4 adds, among others, the Rangitata, Waimakariri, Arawata,
 Waiohine and Inangahua. It drops, among others, the Tongariro, Ohinemuri, Moeraki and Mikonui
 (`models/audits/v3_top_runs.csv`, `models/audits/v4_top_runs.csv`).
 
+**Update, same day (rf-aq6.27):** sections placed by river name now keep one downstream path, so
+same-name streams in other valleys no longer count as known runs (13,853 positive reaches in CV
+instead of 14,186). With the cleaner labels the CV numbers rise for every model (gbm_terrain auc
+0.9372 → 0.9441), and v4 on `guides-v1` reads auc 0.9529 (any coordinates) and 0.9752 (sourced);
+v3 reads 0.9538 and 0.9752. The tables above are the numbers before that change.
+
