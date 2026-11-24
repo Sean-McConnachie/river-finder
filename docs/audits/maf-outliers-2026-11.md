@@ -289,7 +289,7 @@ It moves away in 3:
 - Whanganui at Headwaters: 76 → 91 against 45 gauged. That reach is below the Tongariro Power Scheme
   intakes, so natural flood statistics overstate it either way.
 
-## The correction (implemented, off by default)
+## The correction (implemented, on since 2026-11-24)
 
 `src/river_finder/maf.py`, configured in `config/maf.toml` `[correction]`:
 
@@ -412,3 +412,57 @@ does not get worse, and the simpler models get better. Per-river results are in
 5. `uv run river-finder score kaimai karangahake tutamoe` (the reference areas) and `viewer`;
 6. `nz viewer`, `models viewer`, `external attach`, `web data`, `web build`, and
    `rain totals --rebuild-network`. The rain network is read from `segments_table.pkl`.
+
+## Rebuild with the correction on (2026-11-24)
+
+The correction was turned on in `config/maf.toml` and every step after routing was rebuilt in the
+order above (about 62 min; the national viewer took 29 min of it). Routing, tiles and the reach rows
+did not change: the rain network built from the new table is the same as the published one.
+
+**What changed per reach** (1,104,794 national reaches, `maf_flag`):
+
+| flag | reaches |
+|---|---|
+| none | 973,857 |
+| `refill` | 114,685 |
+| `drop` | 14,606 |
+| `cap` | 1,057 |
+| `refill+drop` | 548 |
+| `cap+drop` | 28 |
+| `refill+cap` | 13 |
+
+**Cross-validation** (`models/cv/results.json`, 5 × 5 catchment-grouped folds), before → after:
+
+| model | auc | auc_size | recall_top10 |
+|---|---|---|---|
+| flow (log MAF only) | 0.9050 → 0.9100 | 0.540 → 0.573 | 0.729 → 0.739 |
+| logit_plus | 0.9316 → 0.9348 | 0.740 → 0.748 | 0.799 → 0.809 |
+| gbm_terrain (v3/v4 recipe) | 0.9375 → 0.9372 (sd 0.0017) | 0.789 → 0.783 | 0.808 → 0.810 |
+
+The rebuild agrees with the study above. The logistic models gain because their flood term is less
+noisy. The LightGBM model does not change: with gradient, area and geology it had already learned
+around the bad values.
+
+**v4 against v3** (`models/evaluations.json`, both scored on the corrected table; held-out split
+`guides-v1`, 49 test rivers):
+
+| split | metric | v3 | v4 |
+|---|---|---|---|
+| guides-v1, any coordinates | auc | 0.9506 | 0.9500 |
+| | auc_style_size_matched | 0.854 | 0.852 |
+| | recall_top10 | 0.844 | 0.838 |
+| guides-v1, sourced coordinates | auc | 0.9734 | 0.9737 |
+| | auc_style_size_matched | 0.905 | 0.905 |
+| | recall_top10 | 0.924 | 0.918 |
+| reference (Mangakarengorengo, 5 m) | auc | 0.9772 | 0.9818 |
+
+The two are equal within noise. v4 is the default model because it is the newest card trained on
+all the labels, and its features match the corrected floods that the site now shows. v3 stays in
+the registry unchanged. The flood-only baseline gains 0.005 auc on the held-out rivers
+(0.9167 → 0.9221) and 0.039 auc_size_matched (0.548 → 0.587).
+
+**Audit lists** (`ml audit`, top 1 % of reaches not in the guides): 46 of the 60 rivers are on both
+the v3 and v4 lists. v4 adds, among others, the Rangitata, Waimakariri, Arawata, Matukituki,
+Waiohine and Inangahua. It drops, among others, the Tongariro, Ohinemuri, Moeraki and Mikonui
+(`models/audits/v3_top_runs.csv`, `models/audits/v4_top_runs.csv`).
+
