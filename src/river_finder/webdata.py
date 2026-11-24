@@ -13,7 +13,16 @@ Sections come from ``labels/known_runs.toml`` (local knowledge) and ``labels/gui
 rapid), ``src`` (riverguide | packrafting | other | local),
 ``srcName, desc, putIn, takeOut`` ([lat, lon]), ``putInDesc, takeOutDesc, coords`` (sourced |
 inferred | none), ``gauge, flow, len`` (km), ``time, hazards, deaths, popularity, links``
-([{t, u}]), ``how`` (placement method) and ``m`` (viewer reach indices).
+([{t, u}]), ``how`` (placement method, e.g. "put-in to take-out" or "name (1 of 3 pieces)"),
+``dropped``, ``gap`` and ``m`` (viewer reach indices).
+
+``dropped`` flags a section placed by river name whose name match was not one downstream path: null
+when nothing was dropped, else ``{pieces, branches, km}``: how many other pieces (same-name reaches
+that do not join this one down the river, e.g. a stream with the same name in another valley) and
+other branches (the other fork, where the river's branches share its name) were left out, and their
+length. The section is the one path kept (``labels.one_path``); ``gap`` (viewer reach indices, often
+empty) are the flatter or smaller reaches between its steep pieces along that path: not part of the
+section, but they join its pieces into one line down the river.
 """
 
 from __future__ import annotations
@@ -61,7 +70,16 @@ def _num(v):
     return round(f, 2) if np.isfinite(f) else None
 
 
-def section_record(s: Section, members: list[int], how: str, research: dict | None = None) -> dict:
+def dropped_record(info: dict | None) -> dict | None:
+    """``{pieces, branches, km}`` left out by the name rule (``labels.one_path``), None if nothing was."""
+    if not info or not info.get("dropped_reaches"):
+        return None
+    return {"pieces": max(int(info.get("pieces", 1)) - 1, 0), "branches": max(int(info.get("branches", 1)) - 1, 0),
+            "km": round(float(info.get("dropped_km", 0.0)), 2)}
+
+
+def section_record(s: Section, members: list[int], how: str, research: dict | None = None,
+                   info: dict | None = None, gap: list[int] | None = None) -> dict:
     ex = s.extra or {}
     rec = (research or {}).get(ex.get("id"), {})
     grp = source_group(s)
@@ -81,7 +99,8 @@ def section_record(s: Section, members: list[int], how: str, research: dict | No
         "hazards": list(ex.get("hazards") or []), "deaths": len(ex.get("deaths") or []),
         "popularity": ex.get("popularity") or "", "status": s.status,
         "links": [{"t": x.get("title") or x.get("url"), "u": x["url"]} for x in rec.get("sources", []) if x.get("url")],
-        "how": how, "m": [int(v) for v in members],
+        "how": how, "dropped": dropped_record(info), "gap": [int(v) for v in (gap or [])],
+        "m": [int(v) for v in members],
     }
 
 
@@ -109,10 +128,12 @@ def _records(frame, sections: list[Section], research: dict) -> list[dict]:
     vi = frame["vi"].to_numpy()
     out = []
     for s in sections:
-        rows, how = map_section(frame, s, idx)
+        info: dict = {}
+        rows, how = map_section(frame, s, idx, info)
         members = [int(vi[r]) for r in rows if vi[r] >= 0]
+        gap = [int(vi[r]) for r in info.get("gap_rows", []) if vi[r] >= 0]
         if members:
-            out.append(section_record(s, members, how, research))
+            out.append(section_record(s, members, how, research, info, gap))
     return out
 
 
@@ -138,14 +159,16 @@ def write_sections(data_dir: Path, log=print) -> dict:
         from .models import _Index, map_section
 
         idx = _Index(t)
-        mapped = [(s, *map_section(t, s, idx)) for s in sections]
+        infos: list[dict] = [{} for _ in sections]
+        mapped = [(s, *map_section(t, s, idx, info), info) for s, info in zip(sections, infos, strict=True)]
         reg, vi = t["region"].to_numpy(), t["vi"].to_numpy()
         by_vid: dict[str, list[dict]] = {}
-        for s, rows, how in mapped:
+        for s, rows, how, info in mapped:
             for name in sorted({str(reg[r]) for r in rows}):
                 members = [int(vi[r]) for r in rows if reg[r] == name and vi[r] >= 0]
+                gap = [int(vi[r]) for r in info.get("gap_rows", []) if reg[r] == name and vi[r] >= 0]
                 if members:
-                    by_vid.setdefault(slug(name), []).append(section_record(s, members, how, research))
+                    by_vid.setdefault(slug(name), []).append(section_record(s, members, how, research, info, gap))
         for vid in national:
             recs = by_vid.get(vid, [])
             (data_dir / f"{vid}_sections.json").write_text(json.dumps(recs, ensure_ascii=False, separators=(",", ":")))

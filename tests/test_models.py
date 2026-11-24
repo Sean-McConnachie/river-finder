@@ -73,6 +73,35 @@ def test_map_section_put_in_to_take_out_and_name():
     assert list(rows) == [6, 7, 8, 9] and how == "name"
 
 
+def test_map_section_name_rule_keeps_one_valley():
+    """'Alpha River' in one valley (rows 0-5, row 2 too flat) and 'Alpha Stream' (same name once normalised)
+    in another valley 5 km north (rows 6-8): the name rule keeps one of them."""
+    x0, y0 = 1_850_000.0, 5_800_000.0
+    xs = [x0 + 250 * i for i in range(6)] + [x0 + 250 * i for i in range(3)]
+    ys = [y0] * 6 + [y0 + 5_000] * 3
+    f = pd.DataFrame({"river": ["Alpha River"] * 6 + ["Alpha Stream"] * 3,
+                      "area_km2": [3, 4, 5, 6, 7, 8, 3, 4, 5.0], "length_m": 250.0,
+                      "grad_s": [30, 30, 5, 30, 30, 30, 30, 30, 30.0], "down": [1, 2, 3, 4, 5, -1, 7, 8, -1],
+                      "guide_region": "Waikato"})
+    f = M._finish(f, np.array(xs), np.array(ys))
+    idx = M._Index(f)
+    info = {}
+    rows, how = M.map_section(f, Section("Waikato", "Alpha River", "runnable"), idx, info)
+    assert list(rows) == [0, 1, 3, 4, 5] and how == "name (1 of 2 pieces)"
+    assert info["pieces"] == 2 and info["dropped_reaches"] == 3 and list(info["gap_rows"]) == [2]
+    s = Section("Waikato", "Alpha River", "runnable", take_out=_LL.transform(xs[7], ys[7] + 100))
+    rows, how = M.map_section(f, s, idx)
+    assert list(rows) == [6, 7, 8] and how == "name near the coordinates (path did not join; 1 of 2 pieces)"
+    m = M.map_sections(f, [Section("Waikato", "Alpha River", "runnable")])[0]
+    assert m.method == "name (1 of 2 pieces)" and m.info["pieces"] == 2
+
+    from river_finder.webdata import section_record
+
+    rec = section_record(m.section, [0, 1, 3, 4, 5], m.method, info=m.info, gap=[2])
+    assert rec["dropped"] == {"pieces": 1, "branches": 0, "km": 0.75} and rec["gap"] == [2]
+    assert section_record(m.section, [1], "put-in to take-out")["dropped"] is None
+
+
 def test_split_keeps_rivers_whole():
     f, xs, ys = _frame()
     secs = [Section("Waikato", "Alpha River", "runnable", put_in=_LL.transform(xs[0], ys[0]),

@@ -24,7 +24,7 @@ import base64
 import datetime as dt
 import json
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -32,7 +32,7 @@ import pandas as pd
 from pyproj import Transformer
 from scipy.spatial import cKDTree
 
-from .labels import Section, load_sections, parse_grade
+from .labels import Section, load_sections, one_path, parse_grade, pieces_note, river_outlet
 from .national import FILTER_ORDER, nz_dir
 from .regions import REPO_ROOT, list_regions, load_region
 from .scoring import FEATURES, _standardise, logistic_fit
@@ -165,7 +165,8 @@ class Mapped:
     section: Section
     key: str            # river key: "River | region"
     rows: np.ndarray    # rows of the frame the section covers
-    method: str         # "put-in to take-out", "outlet + length", "name", "name (coordinates did not join)", ...
+    method: str         # "put-in to take-out", "outlet + length", "name", "name (1 of 3 pieces)", ...
+    info: dict = field(default_factory=dict)   # name rule: what ``labels.one_path`` dropped
 
 
 def river_key(s: Section) -> str:
@@ -180,6 +181,7 @@ class _Index:
         self.down = f["down"].to_numpy()
         self.up = f["up"].to_numpy()
         self.rnorm = f["rnorm"].to_numpy()
+        self.xy = np.column_stack([f["x"].to_numpy(), f["y"].to_numpy()])
         codes, uniq = pd.factorize(f["rnorm"])
         order = np.argsort(codes, kind="stable")
         bounds = np.searchsorted(codes[order], np.arange(len(uniq) + 1))
@@ -233,7 +235,11 @@ def _name_rows(f: pd.DataFrame, s: Section, idx: _Index) -> np.ndarray:
     return np.sort(r)
 
 
-def map_section(f: pd.DataFrame, s: Section, idx: _Index) -> tuple[np.ndarray, str]:
+def map_section(f: pd.DataFrame, s: Section, idx: _Index, info: dict | None = None) -> tuple[np.ndarray, str]:
+    """The frame rows a section covers and how they were placed. Put-in and take-out (or outlet and
+    length) follow the network; without a path, the name rule takes the steep reaches with the river's
+    name and keeps one downstream path of them (``labels.one_path``: "name (1 of 3 pieces)"). ``info``,
+    if given, receives what the name rule dropped (pieces, branches, dropped reaches and km)."""
     if s.put_in and s.take_out:
         a, b = idx.nearest(s.put_in, s.river), idx.nearest(s.take_out, s.river)
         length = s.extra.get("length_km") if s.extra else None
@@ -249,7 +255,6 @@ def map_section(f: pd.DataFrame, s: Section, idx: _Index) -> tuple[np.ndarray, s
             if path:
                 return np.array(path, dtype=np.int64), "put-in towards take-out"
     length = s.extra.get("length_km") if s.extra else None
-    start = s.put_in or (s.outlet if s.outlet else None)
     if s.put_in and length:
         a = idx.nearest(s.put_in, s.river)
         if a >= 0:
@@ -271,16 +276,25 @@ def map_section(f: pd.DataFrame, s: Section, idx: _Index) -> tuple[np.ndarray, s
                 cur = idx.up[cur]
             return np.array(out, dtype=np.int64), "outlet + length"
     rows = _name_rows(f, s, idx)
-    if start is not None or s.take_out:
+    pts = [p for p in (s.put_in, s.take_out, s.outlet) if p]
+    xy = np.array([_TO_NZTM.transform(*p) for p in pts]).reshape(-1, 2)
+    how = "name"
+    if pts:
         # coordinates given but the reaches between them did not join up: keep the name rule, but
         # only near the points given
-        pts = [p for p in (s.put_in, s.take_out, s.outlet) if p]
-        xy = np.array([_TO_NZTM.transform(*p) for p in pts])
         d = np.min(np.hypot(f["x"].to_numpy()[rows, None] - xy[None, :, 0],
                             f["y"].to_numpy()[rows, None] - xy[None, :, 1]), axis=1) if len(rows) else []
         rows = rows[np.asarray(d) <= 15_000] if len(rows) else rows
-        return rows, "name near the coordinates (path did not join)"
-    return rows, "name"
+        how = "name near the coordinates (path did not join)"
+    # one downstream path: same-name reaches in other valleys or on another fork are dropped
+    rows, got = one_path(rows, idx.down, f["length_m"].to_numpy(), f["area_km2"].to_numpy(), idx.rnorm,
+                         norm_river(s.river), xy=idx.xy, points=xy, outlet=river_outlet(s))
+    if info is not None:
+        info.update(got)
+    note = pieces_note(got)
+    if note:
+        how = f"{how[:-1]}; {note})" if how.endswith(")") else f"{how} ({note})"
+    return rows, how
 
 
 def map_sections(f: pd.DataFrame, sections: list[Section], group: bool = True) -> list[Mapped]:
@@ -291,8 +305,9 @@ def map_sections(f: pd.DataFrame, sections: list[Section], group: bool = True) -
     idx = _Index(f)
     out = []
     for s in sections:
-        rows, how = map_section(f, s, idx)
-        out.append(Mapped(s, river_key(s), rows, how))
+        info: dict = {}
+        rows, how = map_section(f, s, idx, info)
+        out.append(Mapped(s, river_key(s), rows, how, info))
     if not group or not out:
         return out
     gr = f["guide_region"].to_numpy()

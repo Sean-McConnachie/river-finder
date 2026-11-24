@@ -7,7 +7,9 @@
 # Extent, in order of precedence (all coordinates are [lon, lat] WGS84):
 #   put_in + take_out     -> reaches on the flow path between the two points
 #   outlet + upstream_km  -> main stem upstream of a point for that distance
-#   (neither)             -> every steep reach (>= 10 m/km, >= 2 km2) of the named river; APPROXIMATE
+#   (neither)             -> the steep reaches (>= 10 m/km, >= 2 km2) of the named river, on one downstream
+#                            path: pieces that join down the river are kept together, same-name reaches in
+#                            other valleys or up another fork are dropped (labels.one_path); APPROXIMATE
 # river must match the REC2 name (see the viewer's river tooltips).
 
 [[section]]

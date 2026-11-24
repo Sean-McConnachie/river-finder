@@ -808,7 +808,7 @@ renders.docs = () => {
 
   <div id="doc-labels"><h2>Labels</h2>
   <ul>
-    <li><b>Positive</b>: a reach of ${E ? E.domain_km2 : 2}&nbsp;km² or more on a runnable guide section. Extents in order of precedence: put-in → take-out along the flow path; outlet + length upstream; otherwise every steep reach (≥ 10&nbsp;m/km, ≥ 2&nbsp;km²) of the named river (approximate).</li>
+    <li><b>Positive</b>: a reach of ${E ? E.domain_km2 : 2}&nbsp;km² or more on a runnable guide section. Extents in order of precedence: put-in → take-out along the flow path; outlet + length upstream; otherwise the steep reaches (≥ 10&nbsp;m/km, ≥ 2&nbsp;km²) of the named river on one downstream path, without same-name reaches in other valleys or up another fork (approximate).</li>
     <li><b>Held out</b>: sections flagged <code>held_out</code> (the Mangakarengorengo) are scored as positives but never trained on.</li>
     <li><b>Background</b>: every other domain reach that no section touches. It is <i>unlabelled</i>, not "not runnable": it still holds unknown runs. Models treat it as negative in training (positive-unlabelled learning), and every AUC on this page is a lower bound of the true one.</li>
     <li>Reaches of a known section that are not positives (pools under 1&nbsp;km², parts outside the domain) are left out of both sets.</li>

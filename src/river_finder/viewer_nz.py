@@ -182,7 +182,8 @@ def national_sections(name: str):
             continue
         x0, y0, x1, y1 = ref.bbox_wgs84
         if poly.intersects(Point(*to_nztm.transform((x0 + x1) / 2, (y0 + y1) / 2)).buffer(30_000)):
-            out.append(replace(s, region=name, bbox=ref.bbox_wgs84))
+            # the reference region stays in extra: the name rule looks up the river's mouth by it
+            out.append(replace(s, region=name, bbox=ref.bbox_wgs84, extra={**s.extra, "reference_region": s.region}))
     return out
 
 
