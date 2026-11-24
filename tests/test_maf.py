@@ -116,13 +116,16 @@ def test_apply_is_idempotent_reverts_and_recomputes_power():
     assert np.allclose(f["specific_maf"], raw / area, atol=1e-4)
 
 
-def test_config_file_defaults_off_and_override(tmp_path):
-    cfg = maf.load_config()                             # the committed config/maf.toml
-    assert cfg.apply is False and cfg.refill and cfg.cap and not cfg.monotone
+def test_config_file_and_override(tmp_path):
+    cfg = maf.load_config()                             # the committed config/maf.toml (on since 2026-11-24)
+    assert cfg.apply is True and cfg.refill and cfg.cap and not cfg.monotone
     assert cfg.envelope_c == pytest.approx(27.2) and cfg.envelope_b == pytest.approx(0.25)
+    maf.set_override(False)
+    assert maf.load_config().apply is False
     maf.set_override(True)
     assert maf.load_config().apply is True
     maf.set_override(None)
+    assert MafConfig().apply is False                   # the code default stays off
     p = tmp_path / "maf.toml"
     p.write_text("[correction]\napply = true\nenvelope_c = 20.0\n")
     assert maf.load_config(p) == MafConfig(apply=True, envelope_c=20.0)

@@ -17,7 +17,9 @@ region = "kaimai"
 river = "Wairoa River"
 status = "runnable"
 grade = "5"
-source = "Commercial rafting listings describe the dam-release Wairoa as Grade 5. Extent approximate (whole steep river)."
+put_in = [176.0455, -37.8056]
+take_out = [176.05159, -37.78672]
+source = "Commercial rafting listings describe the dam-release Wairoa as Grade 5. Extent: NZ RiverGuide 'McLaren Falls to Powerstation' (put-in below McLaren Falls; take-out 2.7 km down the river, the guide's length, because the guide's inferred Ruahihi take-out snaps onto the Omanawa). Was the whole steep river by name until rf-aq6.27."
 
 [[section]]
 region = "kaimai"
