@@ -3,7 +3,7 @@
 # --maf-correction on|off on the command line overrides `apply` (score, run, nz, models, ml).
 
 [correction]
-apply = false          # OFF by default: on changes maf_m3s, stream power, reach styles and every score.
+apply = true           # ON since 2026-11-24 (Sean approved the rebuild); off restores raw H&C. On changes maf_m3s, stream power, reach styles and every score.
                        # Needs a rebuild to reach the published scores (see the audit doc).
 refill = true          # reaches with no REC1 match: specific MAF of the nearest matched reaches on the network
                        # (main stem up, downstream), scaled by area^-b, instead of the tile median
