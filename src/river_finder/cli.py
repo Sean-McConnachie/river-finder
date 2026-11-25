@@ -283,7 +283,7 @@ def _rain(args):
         try:
             run_validate(cfg, args.event[0], args.event[1], regions=args.region, catchments=args.catchment,
                          fetch=not args.no_fetch, margin=args.margin, out_dir=args.out, exclude=args.exclude_gauge,
-                         http=http, log=log)
+                         underread=not args.no_underread, http=http, log=log)
         except (FetchError, NotFound) as e:
             log(f"ECMWF unavailable for the event: {e}")
             raise SystemExit(pipeline.EXIT_UNAVAILABLE) from None
@@ -401,7 +401,8 @@ def main(argv: list[str] | None = None) -> None:
                          "the scaling zones of every catchment ([[scaling.zones]]: regions split by distance to the "
                          "main divide) into <data>/rain/scaling_zones.npz (+ .json); scale: "
                          "gauge scale factors per zone (ECMWF at the gauge cells over 30 days into "
-                         "<data>/rain/scaling/, copies of one station counted once, likely outages left out, "
+                         "<data>/rain/scaling/, copies of one station counted once, likely outages and under-read "
+                         "events left out, "
                          "factors_ecmwf.json + history; re-scales the buffers); validate: one past storm, ECMWF raw "
                          "and gauge-scaled against the gauges and over catchments (--event; docs/rainfall-scaling.md) "
                          "into <data>/rain/validation/; totals: "
@@ -442,6 +443,9 @@ def main(argv: list[str] | None = None) -> None:
     pr.add_argument("--exclude-gauge", nargs="+", default=(), metavar="ID",
                     help="validate: gauge ids (council:site) left out of everything, factors included (a "
                          "sensitivity run)")
+    pr.add_argument("--no-underread", action="store_true",
+                    help="validate: leave out only the likely outages, not the under-read events (rf-t26.20; the "
+                         "report gets _no-underread in its name)")
     pr.add_argument("--margin", type=int, default=12,
                     help="validate: ECMWF hours read on each side of the event, for the lags (default 12)")
     pr.add_argument("--council", nargs="+", default=None,

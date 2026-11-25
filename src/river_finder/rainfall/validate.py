@@ -13,8 +13,13 @@ writes ``<rain>/validation/validate_<regions>_<START>_<END>.json`` and ``.md`` (
    Open-Meteo or ~35 MB of GRIB per 96 h, read once). Readers as ``[scaling.ecmwf] readers``:
    Open-Meteo keeps about 8 days of runs, ECMWF's AWS bucket the 0.1° runs since 2026-10-20 06z.
 2. **Gauges** as the scaling cleans them: copies of one station counted once
-   (:func:`.scaling.find_copies`, the kept copy chosen on the event hours), likely outages left out
-   (:func:`.scaling.find_outages` over every cached hour), each gauge in its scaling zone. Per gauge:
+   (:func:`.scaling.find_copies`, the kept copy chosen on the event hours), likely outages and under-read
+   events left out (:func:`.scaling.find_outages`, :func:`.scaling.find_underreads` over every cached hour;
+   ``underread=False``, ``--no-underread``: the outages only, as before rf-t26.20), each gauge in its
+   scaling zone. A gauge that under-read the storm itself (Colliers Ck: 2 mm against 203 mm in its cell on
+   24-27 October) has the storm's hours left out and drops out by ``min_usable``; the rule needs less than
+   ``underread_fraction`` of both its neighbours and ECMWF, so it leaves out broken gauges, not those that
+   ECMWF alone gets wrong. Per gauge:
    the event total over its usable hours and ECMWF at its 0.1° cell over the same hours
    (:func:`.scaling.evaluate_region` on the event hours: at least ``min_usable`` of them). The cell
    values come from the scaling cell store (the numbers the factor was fitted on) where it has them,
@@ -263,9 +268,11 @@ def _window_hours(doc: dict | None, g) -> tuple[int, int]:
     return int(g.hour[-1]) - 719, int(g.hour[-1])
 
 
-def factor_variants(g, keep, outage, gzone, zone_names, doc, stores, sc, event: tuple[int, int]) -> dict:
+def factor_variants(g, keep, outage, gzone, zone_names, doc, stores, sc, event: tuple[int, int],
+                    underread=None) -> dict:
     """Per zone: the factor in use, the window ratio and the ratio without the event (see the module docstring),
-    with the evaluation behind each (``used``: gauges with their sums, for the leave-out variants)."""
+    with the evaluation behind each (``used``: gauges with their sums, for the leave-out variants). ``outage`` and
+    ``underread`` mark the hours the scaling leaves out (:func:`.scaling.evaluate_region`)."""
     from .scaling import evaluate_region
 
     wf, wl = _window_hours(doc, g)
@@ -286,8 +293,8 @@ def factor_variants(g, keep, outage, gzone, zone_names, doc, stores, sc, event: 
             continue
         st = cur.get(z, {})
         f_use = float(st.get("factor", 1.0))
-        ev_w = evaluate_region(rows, g, wcols, gv, keep, sc, outage)
-        ev_l = evaluate_region(rows, g, wcols[~in_event], gv[~in_event], keep, sc, outage)
+        ev_w = evaluate_region(rows, g, wcols, gv, keep, sc, outage, underread)
+        ev_l = evaluate_region(rows, g, wcols[~in_event], gv[~in_event], keep, sc, outage, underread)
         f_w, why_w = _target(ev_w, sc, f_use)
         f_l, why_l = _target(ev_l, sc, f_use)
         out["zones"][z] = {
@@ -458,14 +465,24 @@ def _selected_zones(zm, regions) -> list[int]:
 
 
 def run_validate(cfg: RainConfig, start: str, end: str, regions=("West Coast",), catchments=None,
-                 fetch: bool = True, margin: int = 12, out_dir: Path | None = None, exclude=(), readers=None,
-                 http=None, log=print) -> dict:
+                 fetch: bool = True, margin: int = 12, out_dir: Path | None = None, exclude=(), underread: bool = True,
+                 readers=None, http=None, log=print) -> dict:
     """Validate the gauge-scaled ECMWF against the gauges for the event (START, END]; see the module docstring.
-    ``exclude``: gauge ids left out of everything (factors included), for a sensitivity run. Writes
-    ``validate_<regions>_<START>_<END>[_without-<n>].json`` and ``.md`` into ``out_dir`` (default
+    ``exclude``: gauge ids left out of everything (factors included), for a sensitivity run; ``underread=False``:
+    no under-read rule (rf-t26.20), only the outages. Writes
+    ``validate_<regions>_<START>_<END>[_without-<n>][_no-underread].json`` and ``.md`` into ``out_dir`` (default
     ``<rain>/validation``)."""
     from .gauges import GaugeHours
-    from .scaling import _home_regions, evaluate_region, find_copies, find_outages, load_factors, open_store
+    from .scaling import (
+        _home_regions,
+        describe_underread,
+        evaluate_region,
+        find_copies,
+        find_outages,
+        find_underreads,
+        load_factors,
+        open_store,
+    )
     from .zones import load_zones
 
     t0 = time.monotonic()
@@ -512,24 +529,34 @@ def run_validate(cfg: RainConfig, start: str, end: str, regions=("West Coast",),
     keep &= ~np.isin(ids, exclude)    # counted as a dropped copy: out of the factors and the estimates
     out = find_outages(g, grid_all, keep, sc)
     outage = out["mask"]
+    ur = (find_underreads(g, grid_all, keep, sc, outage) if underread else
+          {"mask": np.zeros_like(outage), "events": [], "rule": None})
+    under = ur["mask"]
     gregion = [g.regions[k] if k >= 0 else "" for k in g.region_of]
     gzone, gdiv = zm.gauge_zones(gregion, g.x, g.y)
-    usable = g.ok & ~outage
+    usable = g.ok & ~outage & ~under
+    row_of = {gid: k for k, gid in enumerate(ids)}
+    ur_in = [x | {"zone": zones[gzone[row_of[x["id"]]]] if gzone[row_of[x["id"]]] >= 0 else None}
+             for x in ur["events"] if under[row_of[x["id"]], cols].any()]
     log(f"gauges {gpath.name} ({g.meta.get('created')}): {g.n} gauges; event {_hour(first - 1)} .. {_hour(last)} "
         f"({T} h); {int((~keep).sum())} copies dropped, {len(out['spells'])} likely outages "
-        f"({int(outage[:, cols].sum())} gauge-hours of the event)")
+        f"({int(outage[:, cols].sum())} gauge-hours of the event), "
+        + (f"{len(ur['events'])} under-read events ({describe_underread(sc)}; {len(ur_in)} in the event, "
+           f"{int(under[:, cols].sum())} gauge-hours)" if underread else "under-read rule off"))
+    for x in ur_in:
+        log(f"  under-read: {x['id']} {x['gauge_mm']:.1f} mm in {x['hours']} h ({x['from']} .. {x['to']}) against a "
+            f"neighbour median of {x['neighbour_median_mm']:.1f} mm and {x['grid_mm']:.1f} mm in ECMWF")
 
     # per-gauge totals over the event, every zone (the catchments use gauges of any zone upstream)
-    evals = {z: evaluate_region(np.flatnonzero(gzone == zi), g, cols, ev_vals, keep, sc, outage)
+    evals = {z: evaluate_region(np.flatnonzero(gzone == zi), g, cols, ev_vals, keep, sc, outage, under)
              for zi, z in enumerate(zones) if (gzone == zi).any()}
-    fv = factor_variants(g, keep, outage, gzone, zones, doc, stores, sc, (first, last))
+    fv = factor_variants(g, keep, outage, gzone, zones, doc, stores, sc, (first, last), under)
     fz = fv["zones"]
     for z, ev in evals.items():   # the event's own ratio: what one factor per zone could do at best
         if z in fz:
             f_ev = float(min(max(ev["ratio"], sc.clamp[0]), sc.clamp[1])) if ev["ratio"] else 1.0
             fz[z]["event"] = {"factor": round(f_ev, 4), "ratio": ev["ratio"], "gauges": ev["gauges"],
                               "gauge_mm": ev["gauge_mm"], "grid_mm": ev["grid_mm"]}
-    row_of = {gid: k for k, gid in enumerate(ids)}
 
     def fac(z, kind):
         return fz[z][kind]["factor"] if z in fz else 1.0
@@ -608,6 +635,7 @@ def run_validate(cfg: RainConfig, start: str, end: str, regions=("West Coast",),
         "event": {"start": _hour(first - 1), "end": _hour(last), "first_hour": _hour(first), "last_hour": _hour(last),
                   "hours": T, "margin_h": margin},
         "regions": list(regions), "zones": [zones[i] for i in sel], "excluded_gauges": exclude,
+        "underread_rule": bool(underread),
         "inputs": {"gauges": {"file": str(gpath.relative_to(cfg.rain_dir)), "created": g.meta.get("created"),
                               "hours": [_hour(g.hour[0]), _hour(g.hour[-1])]},
                    "factors": {"updated": (doc or {}).get("updated"), "window": fv["window"]},
@@ -616,7 +644,8 @@ def run_validate(cfg: RainConfig, start: str, end: str, regions=("West Coast",),
         "ecmwf_check": check,
         "cleaning": {"copies_dropped": sorted(x for grp in cp["groups"] for x in grp["dropped"]),
                      "outages_in_event": [s for s in out["spells"] if outage[row_of[s["id"]], cols].any()],
-                     "rule": {"min_usable": sc.min_usable, "outage": out["rule"]}},
+                     "underreads_in_event": ur_in,
+                     "rule": {"min_usable": sc.min_usable, "outage": out["rule"], "underread": ur["rule"]}},
         "zone_reports": zone_rep, "gauges": [r for r in gauges if r["zone"] in {zones[i] for i in sel}],
         "catchments": catch, "catchment_metrics": cmetrics,
         "method": {"idw": {"power": IDW_POWER, "radius_km": IDW_RADIUS_KM, "min_gauges": IDW_MIN_GAUGES,
@@ -626,7 +655,7 @@ def run_validate(cfg: RainConfig, start: str, end: str, regions=("West Coast",),
     out_dir = Path(out_dir) if out_dir else cfg.rain_dir / "validation"
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = (f"validate_{slug(regions or ['all'])}_{_label(first - 1)}_{_label(last)}"
-            + (f"_without-{len(exclude)}" if exclude else ""))
+            + (f"_without-{len(exclude)}" if exclude else "") + ("" if underread else "_no-underread"))
     (out_dir / f"{stem}.json").write_text(json.dumps(report, indent=1, ensure_ascii=False))
     md = render_markdown(report)
     (out_dir / f"{stem}.md").write_text(md)
@@ -776,6 +805,12 @@ def _metric_rows(metrics: dict, keys) -> list[str]:
     return rows
 
 
+def _marks(x: dict) -> str:
+    """Why a gauge lost hours: " (likely outage 72 h, under-read 40 h)", or ""."""
+    m = [f"{k} {x[f]} h" for k, f in (("likely outage", "outage_hours"), ("under-read", "underread_hours")) if x.get(f)]
+    return f" ({', '.join(m)})" if m else ""
+
+
 def render_markdown(rep: dict) -> str:
     """The report's tables (Markdown)."""
     ev = rep["event"]
@@ -784,6 +819,15 @@ def render_markdown(rep: dict) -> str:
     L += [f"ECMWF at the {ck['cells']} gauge cells: event store / scaling store = {_f(ck['event_over_scaling'], 4)} "
           f"(max difference {_f(ck['max_abs_mm'], 2)} mm in an hour); event store readers "
           f"{ck['event_store_readers']}.", ""]
+    cl = rep.get("cleaning", {})
+    zs = set(rep.get("zones", []))
+    if not rep.get("underread_rule", True):
+        L += ["Under-read rule (rf-t26.20) off: only the likely outages are left out.", ""]
+    elif any(x.get("zone") in zs for x in cl.get("underreads_in_event", [])):
+        L += ["Under-read events (rf-t26.20) in the storm, left out: " + "; ".join(
+            f"{x['id']} {x['gauge_mm']:.1f} mm in {x['hours']} h ({x['from']} .. {x['to']}) against a neighbour "
+            f"median of {x['neighbour_median_mm']:.1f} mm and {x['grid_mm']:.1f} mm in ECMWF"
+            for x in cl["underreads_in_event"] if x.get("zone") in zs) + ".", ""]
     for z, zr in rep["zone_reports"].items():
         L += [f"### {z}", ""]
         s = zr.get("summary")
@@ -810,7 +854,7 @@ def render_markdown(rep: dict) -> str:
             L.append("")
         ex = zr.get("excluded") or {}
         if ex:
-            few = ", ".join(f"{x['id']}" for x in ex.get("few_hours", []))
+            few = ", ".join(f"{x['id']}" + _marks(x) for x in ex.get("few_hours", []))
             L += [f"Left out: {len(ex.get('copy', []))} copies, {len(ex.get('no_cell', []))} without a location, "
                   f"{len(ex.get('few_hours', []))} with < 80 % of the hours usable" + (f" ({few})" if few else "")
                   + ".", ""]

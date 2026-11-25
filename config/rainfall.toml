@@ -176,6 +176,17 @@ outage_km = 25.0
 outage_min_neighbours = 2
 outage_neighbour_mm = 20.0
 outage_grid_mm = 20.0
+# Under-read events (rf-t26.20): a half-dead gauge that still tips now and then is never dry for 24 h (Colliers Ck: 2 mm
+# in the 24-27 October storm against 203 mm in its cell and 150-360 mm at its neighbours). A window of
+# underread_hours[k] hours is a wet event at a gauge when >= outage_min_neighbours gauges within outage_km have a
+# median of >= underread_mm[k] over the gauge's usable hours and ECMWF has >= underread_mm[k] at its cell; when the
+# gauge has less than underread_fraction of both, the event's hours are left out at that gauge (2026-11-22 cache: 4
+# events at 2 gauges, Colliers Ck and Taipo; the next gauge is at 0.28). The thresholds grow with the window: 50 mm over
+# 72 h is a showery spell on the West Coast, where a coastal gauge can read 10 % of the ranges (Ross, 5-8 November)
+underread_hours = [24, 48, 72]        # [] (with underread_mm = []) = off
+underread_mm = [50.0, 75.0, 100.0]    # per window: the neighbours' median and ECMWF must both reach this
+underread_fraction = 0.2              # under-read: below 20 % of the neighbours' median and of ECMWF
+underread_same_side = true            # neighbours on the gauge's side of the main divide only ([scaling.divide])
 zones_file = "scaling_zones.npz"   # under <rain>: catchment -> scaling zone (river-finder rain zones; an input of the
                                    # hourly job, copied by rain inputs)
 

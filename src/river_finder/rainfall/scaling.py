@@ -1,5 +1,5 @@
 """Gauge scale factors per source family and scaling zone (rf-t26.5, zones rf-t26.16), each gauge station
-counted once (rf-t26.13), likely outages left out (rf-t26.16).
+counted once (rf-t26.13), likely outages (rf-t26.16) and under-read events (rf-t26.20) left out.
 
 ``river-finder rain scale [--days 30] [--now YYYYMMDDHH] [--force] [--no-fetch]`` compares a source's
 grid with the rain gauges over a rolling window and keeps one factor per scaling zone (:mod:`.zones`: a
@@ -23,7 +23,13 @@ each gauge goes to the zone of its region, or by its own distance to the divide)
    down reads dry, so a spell of at least ``outage_min_hours`` dry (or unusable) hours is left out of
    the comparison when at least ``outage_min_neighbours`` gauges within ``outage_km`` have a median of
    at least ``outage_neighbour_mm`` over its dry hours and the grid at least ``outage_grid_mm`` at its
-   cell; the spells are reported, the gauge cache is not changed;
+   cell; the spells are reported, the gauge cache is not changed. **Under-read events**
+   (:func:`find_underreads`, rf-t26.20, after the outages): a gauge that still tips now and then is never dry
+   that long, so a window of ``underread_hours[k]`` hours in which at least ``outage_min_neighbours``
+   gauges within ``outage_km`` (with ``underread_same_side``, on the gauge's side of the main divide) have a
+   median of at least ``underread_mm[k]`` and the grid at least as much at its cell is a wet event, and the
+   gauge's hours of the events it under-read (less than ``underread_fraction`` of both) are left out the same
+   way;
 4. **the grid side** (:class:`CellStore`, ``<rain>/scaling/<family>_cells.npz``): the source's hourly
    mm at every gauge cell, kept for ``keep_days`` and filled incrementally. ECMWF
    (:func:`fill_ecmwf`) follows the observed proxy's rule (:func:`.ecmwf.obs_plan`): each hour from the
@@ -50,9 +56,10 @@ each gauge goes to the zone of its region, or by its own distance to the divide)
    record behind it; ``closed``: zones no longer listed (a region that was split) with their last
    factor and versions; ``last_update`` holds the newest evaluation of every zone (gauges used with
    their hours and sums, guard rails), the window, the input files, the copy groups, the likely
-   outages and the gauges' zones. ``factors_<family>.history.jsonl`` is append-only: one line per new
-   version (``seq``, region = the zone, parent, factor, version, previous factor and version, window,
-   every gauge used with its cell, hours and sums, the config), so each factor traces back to its
+   outages, the under-read events and the gauges' zones. ``factors_<family>.history.jsonl`` is
+   append-only: one line per new version (``seq``, region = the zone, parent, factor, version, previous
+   factor and version, window, every gauge used with its cell, hours and sums, the likely outages and
+   under-read events of its gauges, the config), so each factor traces back to its
    gauges and hours; a zone that is no longer listed gets one ``closed`` line. Versions only change
    with the factor; version 0 always means unscaled (factor 1): a zone reset to unity gets version 0,
    the next factor ``max_version + 1``; a new zone starts at version 1, a zone listed again above the
@@ -1051,10 +1058,13 @@ def run_scale(cfg: RainConfig, family: str = "ecmwf", days: int | None = None, n
     ur = find_underreads(g, grid_all, keep, sc, outage)
     under = ur["mask"]
     u_win = {c: int(under[councils_of == c][:, cols].sum()) for c in sorted(set(councils_of.tolist()))}
-    log(f"under-read events: {len(ur['events'])} events at {len({x['id'] for x in ur['events']})} gauges "
-        f"({ur['wet_events']} wet events at {ur['gauges_checked']} gauges checked: < {sc.underread_fraction:.0%} of "
-        f"the neighbours' median and of ECMWF in {describe_underread(sc)}); {int(under[:, cols].sum())} "
-        f"gauge-hours of the window left out (by council {u_win})")
+    if sc.underread_hours:
+        log(f"under-read events: {len(ur['events'])} events at {len({x['id'] for x in ur['events']})} gauges "
+            f"({ur['wet_events']} wet events at {ur['gauges_checked']} gauges checked: < {sc.underread_fraction:.0%} "
+            f"of the neighbours' median and of ECMWF in {describe_underread(sc)}); {int(under[:, cols].sum())} "
+            f"gauge-hours of the window left out (by council {u_win})")
+    else:
+        log("under-read events: off ([scaling] underread_hours = [])")
     for x in ur["events"]:
         log(f"  {x['id']}: {x['gauge_mm']:.1f} mm in {x['hours']} h, {x['from']} .. {x['to']}; {x['neighbours']} "
             f"neighbours, median {x['neighbour_median_mm']:.1f} mm; ECMWF {x['grid_mm']:.1f} mm (windows "
