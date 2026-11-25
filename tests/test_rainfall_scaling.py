@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import gzip
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import numpy as np
@@ -557,6 +558,121 @@ def test_find_outages_needs_wet_neighbours_and_a_wet_grid():
     assert not S.find_outages(g, grid, keep, SC)["spells"]
     off = _cfg("/nonexistent", outage_min_hours=0).scaling
     assert not S.find_outages(g, grid, np.ones(g.n, bool), off)["mask"].any()
+
+
+# --- under-read events (rf-t26.20) ----------------------------------------------------------------------
+UR_EVENT = (150, 174)    # hours (columns) of a 24-h storm: 5 mm/h in the grid, 120 mm
+
+
+def _storm(h: int) -> float:
+    i = h - (NOW_H - 300 + 1)                       # column of hour h in a 300-hour cache
+    return 5.0 if UR_EVENT[0] <= i < UR_EVENT[1] else (0.5 if 20 <= i < 30 else 0.0)
+
+
+def _underread_case():
+    """West of the divide: a half-dead gauge (it tips 0.5 mm 5 times in the storm, so it is never dry for 24 h while
+    the others are wet), one that is fine (0.8 x) and three wet neighbours; east of it, 10-20 km away, a rain-shadow
+    cluster that reads 0.1 x while ECMWF spreads 0.8 x the storm onto its cells."""
+    spec = [("wcrc:Half", "West Coast", 0, 1.505e6, 5.305e6, 1.0), ("wcrc:Fine", "West Coast", 0, 1.495e6, 5.30e6, 0.8),
+            ("wcrc:W1", "West Coast", 0, 1.50e6, 5.30e6, 1.0), ("wcrc:W2", "West Coast", 1, 1.51e6, 5.30e6, 1.2),
+            ("wcrc:W3", "West Coast", 1, 1.50e6, 5.31e6, 1.1),
+            ("ecan:Lee", "Canterbury", 2, 1.52e6, 5.30e6, 0.1), ("ecan:Lee2", "Canterbury", 2, 1.53e6, 5.30e6, 0.12),
+            ("ecan:Lee3", "Canterbury", 2, 1.525e6, 5.31e6, 0.1)]
+    g = _gauges(spec, hours=300, rain=_storm)
+    a, b = UR_EVENT
+    g.mm[0, a:b] = 0.0
+    g.mm[0, [a, a + 6, a + 12, a + 18, b - 1]] = 0.5
+    grid = np.array([[_storm(int(h)) for h in g.hour]], np.float32).T * np.where(np.arange(g.n) >= 5, 0.8, 1.0)
+    return g, grid.astype(np.float32)
+
+
+def test_find_underreads_catches_a_half_dead_gauge_not_the_lee_side_or_a_fine_one():
+    g, grid = _underread_case()
+    keep = np.ones(g.n, bool)
+    assert not S.find_outages(g, grid, keep, SC)["spells"]           # never dry for 24 h: the dry-spell rule misses it
+    u = S.find_underreads(g, grid, keep, SC, S.find_outages(g, grid, keep, SC)["mask"])
+    assert [e["id"] for e in u["events"]] == ["wcrc:Half"]
+    e = u["events"][0]
+    a, b = UR_EVENT
+    assert e["hours"] == b - a and e["gauge_mm"] == 2.5 and e["grid_mm"] == 120.0     # its wet hours only
+    assert e["neighbours"] == 4 and e["neighbour_median_mm"] == pytest.approx(126.0) and e["of_grid"] < 0.025
+    assert e["windows_h"] == [24, 48, 72] and e["nearest"][0]["id"] in ("wcrc:W1", "wcrc:W3")
+    assert u["mask"][0, a:b].all() and u["mask"].sum() == b - a                       # only its storm hours
+    assert u["rule"]["same_side"] and u["rule"]["windows"][0] == {"hours": 24, "mm": 50.0}
+    # its storm hours are left out like missing hours: the gauge keeps its ratio (1.0) outside the storm
+    cols = np.arange(g.hour.size)
+    ev = S.evaluate_region(np.arange(5), g, cols, grid, keep, SC, None, u["mask"])
+    half = next(x for x in ev["used"] if x["id"] == "wcrc:Half")
+    assert half["underread_hours"] == b - a and half["ratio"] == pytest.approx(1.0)
+    ev0 = S.evaluate_region(np.arange(5), g, cols, grid, keep, SC)
+    assert next(x for x in ev0["used"] if x["id"] == "wcrc:Half")["ratio"] < 0.2
+    # across the main divide: the lee-side gauges read 12 % of ECMWF and 10 % of the wet gauges 10-20 km west. With
+    # neighbours on their own side only (the default) that is no wet event; counting the west side, it is one
+    both = replace(SC, underread_same_side=False)
+    lee = S.find_underreads(g, grid, keep, both)
+    assert {x["id"] for x in lee["events"]} == {"wcrc:Half", "ecan:Lee"}
+    # ... unless ECMWF is dry there too (both must be wet)
+    dry = grid.copy()
+    dry[:, 5:] *= 0.1
+    assert {x["id"] for x in S.find_underreads(g, dry, keep, both)["events"]} == {"wcrc:Half"}
+    # a dropped copy is no neighbour; the rule can be switched off
+    assert not S.find_underreads(g, grid, np.array([True, True, False, False, False, True, True, True]), SC)["events"]
+    off = _cfg("/nonexistent", underread_hours=[], underread_mm=[]).scaling
+    assert not S.find_underreads(g, grid, keep, off)["mask"].any()
+    # a higher threshold makes the storm too small to judge
+    assert not S.find_underreads(g, grid, keep, replace(SC, underread_mm=(150.0, 200.0, 250.0)))["events"]
+
+
+def test_underread_config_is_checked(tmp_path):
+    sc = _cfg(tmp_path).scaling
+    assert (sc.underread_hours, sc.underread_mm, sc.underread_fraction) == ((24, 48, 72), (50.0, 75.0, 100.0), 0.2)
+    sc = _cfg(tmp_path, underread_hours=[12, 36], underread_mm=[30, 60.5], underread_same_side=False).scaling
+    assert sc.underread_hours == (12, 36) and sc.underread_mm == (30.0, 60.5) and not sc.underread_same_side
+    with pytest.raises(ValueError, match="same length"):
+        _cfg(tmp_path, underread_hours=[24, 48], underread_mm=[50])
+    with pytest.raises(ValueError, match="shortest first"):
+        _cfg(tmp_path, underread_hours=[48, 24], underread_mm=[50, 75])
+    with pytest.raises(ValueError, match="underread_fraction"):
+        _cfg(tmp_path, underread_fraction=1.5)
+    assert S.describe_underread(sc) == "12 h >= 30 mm, 36 h >= 60.5 mm"
+    assert S.describe_underread(replace(sc, underread_hours=(), underread_mm=())) == "off"
+
+
+def test_run_scale_leaves_out_underread_events_and_records_them(tmp_path):
+    storm = (NOW_H - 300, NOW_H - 277)
+
+    def rain(h):
+        return 6.0 if storm[0] <= h <= storm[1] else _wet(h) * 0.05      # drizzle (< 1 mm/h) around the storm
+
+    def run(cfg):
+        _data(cfg.rain_dir.parent, rain=rain)
+        p = cfg.gauges_dir / "gauges_hourly.npz"
+        g = GaugeHours.load(p)
+        d = int(np.flatnonzero(np.asarray(g.id) == "wcrc:D")[0])
+        c = np.flatnonzero((g.hour >= storm[0]) & (g.hour <= storm[1]))
+        g.mm[d, c] = np.where(np.arange(c.size) % 6 == 0, 0.5, 0.0)     # wcrc:D tips now and then in the storm
+        g.save(p)
+        now = NOW
+        rd = [FakeReader("ecmwf-s3", floor_run(now - timedelta(days=60)), now,
+                         base=lambda run, lead: rain(hour_index(run) + lead))]
+        return S.run_scale(cfg, now=now, readers=rd, log=lambda m: None)
+
+    doc = run(_cfg(tmp_path / "on"))
+    u = doc["last_update"]["underreads"]
+    assert [x["id"] for x in u["events"]] == ["wcrc:D"] and u["window_hours"] == 24      # the storm's hours
+    assert u["window_hours_by_council"]["wcrc"] == 24 and u["rule"]["fraction"] == 0.2
+    ev = doc["last_update"]["regions"]["West Coast"]
+    used = {x["id"]: x for x in ev["used"]}
+    assert used["wcrc:D"]["underread_hours"] == 24 and used["wcrc:D"]["ratio"] == pytest.approx(1.6, abs=1e-3)
+    assert ev["ratio"] == pytest.approx(1.6, abs=1e-3)
+    rec = next(h for h in S.load_history(_cfg(tmp_path / "on"), "ecmwf") if h["region"] == "West Coast")
+    assert [x["id"] for x in rec["underreads"]] == ["wcrc:D"] and rec["config"]["underread_hours"] == [24, 48, 72]
+    lines = S.status_lines(_cfg(tmp_path / "on"))
+    assert any("under-read events: 1 at 1 gauges, 24 gauge-hours" in x for x in lines)
+    # without the rule, the storm that wcrc:D missed pulls the West Coast ratio down
+    off = run(_cfg(tmp_path / "off", underread_hours=[], underread_mm=[]))
+    assert not off["last_update"]["underreads"]["events"]
+    assert off["last_update"]["regions"]["West Coast"]["ratio"] < 1.55
 
 
 # --- scaling zones (rf-t26.16) -----------------------------------------------------------------------

@@ -548,8 +548,8 @@ def find_outages(g, grid_all: np.ndarray, keep: np.ndarray, sc: ScalingConfig) -
 
 
 # --- under-read events: far below the neighbours and the grid in a wet event (rf-t26.20) ------------------
-UNDERREAD_DRY_MM = 0.1   # an event's leading and trailing hours with less than this at the cell and at the
-                         # neighbours' median are dry: they stay in the comparison
+UNDERREAD_WET_MM = 1.0   # mm/h: an event runs from its first to its last hour with at least this at the gauge's
+                         # cell or at the neighbours' median; the drizzle around a storm stays in the comparison
 
 
 def _sides(g, sc: ScalingConfig) -> np.ndarray:
@@ -595,10 +595,10 @@ def find_underreads(g, grid_all: np.ndarray, keep: np.ndarray, sc: ScalingConfig
     80 % of those hours, each one's rain divided by that share. The window is a **wet event** when at least
     ``outage_min_neighbours`` neighbours qualify and both their median and the grid at the gauge's cell reach
     ``underread_mm[k]``; the gauge **under-read** it when its own rain is below ``underread_fraction`` of both.
-    The under-read windows of a gauge are merged into **events**, without their dry ends (hours with less than
-    :data:`UNDERREAD_DRY_MM` at the cell and at the neighbours' median), and the hours of an event that are
-    usable at the gauge are left out of the comparison like missing hours (``mask``); the gauge cache is not
-    changed.
+    The under-read windows of a gauge are merged into **events**, each from its first to its last hour with at
+    least :data:`UNDERREAD_WET_MM` at the cell or at the neighbours' median (a 72-h window holds a day of drizzle
+    either side of a storm: those hours are no evidence and stay in), and the hours of an event that are usable at
+    the gauge are left out of the comparison like missing hours (``mask``); the gauge cache is not changed.
 
     ``grid_all`` is the grid's mm at each gauge's cell, (hours of ``g``, gauges), NaN = no value. Returns ``mask``
     (bool (G, T), True = hour of an under-read event), ``events`` (one dict per event: the gauge, its hours, its
@@ -609,7 +609,7 @@ def find_underreads(g, grid_all: np.ndarray, keep: np.ndarray, sc: ScalingConfig
     wins = tuple(zip(sc.underread_hours, sc.underread_mm, strict=True))   # (hours, mm) per window length
     rule = {"windows": [{"hours": int(w), "mm": float(m)} for w, m in wins], "fraction": sc.underread_fraction,
             "radius_km": sc.outage_km, "min_neighbours": sc.outage_min_neighbours,
-            "same_side": sc.underread_same_side, "neighbour_min_share": 0.8, "dry_end_mm": UNDERREAD_DRY_MM,
+            "same_side": sc.underread_same_side, "neighbour_min_share": 0.8, "wet_hour_mm": UNDERREAD_WET_MM,
             "after_outages": outage is not None}
     out = {"mask": mask, "events": [], "rule": rule, "gauges_checked": 0, "wet_events": 0}
     wins = tuple((w, m) for w, m in wins if w <= T)
@@ -661,14 +661,14 @@ def find_underreads(g, grid_all: np.ndarray, keep: np.ndarray, sc: ScalingConfig
         hit_h = np.cumsum(hit_d[:-1]) > 0
         if not hit_h.any():
             continue
-        # the neighbours' hourly median (hours with enough usable neighbours) for the dry ends of an event
+        # the neighbours' hourly median (hours with enough usable neighbours): an event runs over its wet hours
         ok_nb = use[nb]
         hourly = np.where(ok_nb, mm[nb], np.nan)
         enough_h = ok_nb.sum(axis=0) >= sc.outage_min_neighbours
         nb_med_h = np.zeros(T)
         if enough_h.any():
             nb_med_h[enough_h] = np.nanmedian(hourly[:, enough_h], axis=0)
-        wet_hour = (grid[i] >= UNDERREAD_DRY_MM) | (nb_med_h >= UNDERREAD_DRY_MM)
+        wet_hour = (grid[i] >= UNDERREAD_WET_MM) | (nb_med_h >= UNDERREAD_WET_MM)
         edges = np.flatnonzero(np.diff(np.concatenate([[0], hit_h.astype(np.int8), [0]])))
         for a, b in zip(edges[::2], edges[1::2], strict=True):
             wh = np.flatnonzero(wet_hour[a:b])

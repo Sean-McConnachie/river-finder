@@ -98,6 +98,15 @@ def _label(h: int) -> str:
     return hour_time(int(h)).strftime("%Y%m%d%H")
 
 
+def _overlaps(x: dict, first: int, last: int) -> bool:
+    """Whether a spell or event of :mod:`.scaling` (``from``, ``to``: "YYYY-MM-DD HH:00Z", from = the hour before
+    its first) holds any of the hours ending ``first .. last``."""
+    def h(v: str) -> int:
+        return hour_index(datetime.strptime(v, "%Y-%m-%d %H:%MZ").replace(tzinfo=UTC))
+
+    return h(x["from"]) + 1 <= last and h(x["to"]) >= first
+
+
 def _r(v, p: int = 3):
     return None if v is None or not np.isfinite(v) else round(float(v), p)
 
@@ -537,7 +546,7 @@ def run_validate(cfg: RainConfig, start: str, end: str, regions=("West Coast",),
     usable = g.ok & ~outage & ~under
     row_of = {gid: k for k, gid in enumerate(ids)}
     ur_in = [x | {"zone": zones[gzone[row_of[x["id"]]]] if gzone[row_of[x["id"]]] >= 0 else None}
-             for x in ur["events"] if under[row_of[x["id"]], cols].any()]
+             for x in ur["events"] if _overlaps(x, first, last)]
     log(f"gauges {gpath.name} ({g.meta.get('created')}): {g.n} gauges; event {_hour(first - 1)} .. {_hour(last)} "
         f"({T} h); {int((~keep).sum())} copies dropped, {len(out['spells'])} likely outages "
         f"({int(outage[:, cols].sum())} gauge-hours of the event), "
@@ -643,7 +652,7 @@ def run_validate(cfg: RainConfig, start: str, end: str, regions=("West Coast",),
                    "scaling_store": sc_store.summary() if sc_store.n_hours else None},
         "ecmwf_check": check,
         "cleaning": {"copies_dropped": sorted(x for grp in cp["groups"] for x in grp["dropped"]),
-                     "outages_in_event": [s for s in out["spells"] if outage[row_of[s["id"]], cols].any()],
+                     "outages_in_event": [s for s in out["spells"] if _overlaps(s, first, last)],
                      "underreads_in_event": ur_in,
                      "rule": {"min_usable": sc.min_usable, "outage": out["rule"], "underread": ur["rule"]}},
         "zone_reports": zone_rep, "gauges": [r for r in gauges if r["zone"] in {zones[i] for i in sel}],

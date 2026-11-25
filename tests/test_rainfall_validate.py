@@ -260,6 +260,35 @@ def test_run_validate_factors_gauges_catchments_and_report(tmp_path):
                        log=lambda m: None)
 
 
+def test_run_validate_leaves_out_a_gauge_that_under_read_the_storm(tmp_path):
+    cfg, _ = _data(tmp_path)
+    p = cfg.gauges_dir / "gauges_hourly.npz"
+    g = GaugeHours.load(p)
+    ev = np.flatnonzero((g.hour >= EV_FIRST) & (g.hour <= EV_LAST))
+    g.mm[4, ev] = 0.0
+    g.mm[4, ev[::6]] = 0.5               # wcrc:G5 tips now and then: 2 mm of a ~430 mm storm, never dry for 24 h
+    g.save(p)
+    kw = dict(regions=["West Coast"], catchments=["test"], fetch=False, margin=MARGIN, log=lambda m: None)
+    rep = V.run_validate(cfg, _label(EV_FIRST - 1), _label(EV_LAST), **kw)
+    assert len(rep["gauges"]) == 4 and "wcrc:G5" not in {r["id"] for r in rep["gauges"]} and rep["underread_rule"]
+    cl = rep["cleaning"]
+    assert [x["id"] for x in cl["underreads_in_event"]] == ["wcrc:G5"] and cl["underreads_in_event"][0]["zone"] == \
+        "West Coast"
+    assert cl["rule"]["underread"]["fraction"] == 0.2 and not cl["outages_in_event"]
+    few = rep["zone_reports"]["West Coast"]["excluded"]["few_hours"]
+    assert [x["id"] for x in few] == ["wcrc:G5"] and few[0]["underread_hours"] >= 24
+    md = (cfg.rain_dir / "validation" / f"validate_west-coast_{_label(EV_FIRST - 1)}_{_label(EV_LAST)}.md").read_text()
+    assert "Under-read events (rf-t26.20) in the storm, left out: wcrc:G5" in md and "wcrc:G5 (under-read" in md
+    f = rep["zone_reports"]["West Coast"]["factors"]
+    assert f["event"]["factor"] == pytest.approx(IN_EVENT) and f["leo"]["factor"] == pytest.approx(OUTSIDE)
+    # without the rule (as before rf-t26.20) the dead gauge stays and drags the storm's ratio down
+    rep0 = V.run_validate(cfg, _label(EV_FIRST - 1), _label(EV_LAST), underread=False, **kw)
+    assert "wcrc:G5" in {r["id"] for r in rep0["gauges"]} and not rep0["cleaning"]["underreads_in_event"]
+    assert rep0["zone_reports"]["West Coast"]["factors"]["event"]["factor"] == pytest.approx(0.8 * IN_EVENT, abs=0.01)
+    stem = f"validate_west-coast_{_label(EV_FIRST - 1)}_{_label(EV_LAST)}_no-underread"
+    assert "Under-read rule (rf-t26.20) off" in (cfg.rain_dir / "validation" / f"{stem}.md").read_text()
+
+
 def test_run_validate_refuses_events_outside_the_cache_and_a_missing_store(tmp_path):
     cfg, _ = _data(tmp_path)
     with pytest.raises(SystemExit, match="not inside"):
