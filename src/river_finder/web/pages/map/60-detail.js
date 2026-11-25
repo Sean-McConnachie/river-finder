@@ -194,7 +194,8 @@
     if (sec?.popularity) pills.append(el("span", { class: "rf-pill", text: sec.popularity }));
     if (sec?.time) pills.append(el("span", { class: "rf-pill", text: sec.time }));
     const desc = sec?.desc ? [el("p", { class: "det-desc", text: sec.desc }), el("p", { class: "rf-note", text: SRC_NOTE[sec.src] || "" })]
-      : [el("p", { class: "det-desc", text: f.kind === "section" ? "No description recorded." : onSection ? "Part of this stretch is a section in the guides (see above); open it from the map for its description." : "Not in the guides." })];
+      : [el("p", { class: "det-desc", text: f.kind === "section" ? "No description recorded." : onSection ? "Part of this stretch is a section in the guides (see above); open it from the map for its description."
+        : f.kind === "run" && f.status === "listed" ? "The river is in the guides, but no guide section covers this stretch." : "Not in the guides." })];
     const gen = el("p", { class: "rf-note", text: many
       ? `${st.len.toFixed(1)} km mapped in ${st.n} separate pieces, at an average ${fmt.grad(st.grad)} m/km. The largest drains ${fmt.km2(st.aBot)} km², with a mean annual flood of ${fmt.flow(st.maf)} m³/s at its bottom.`
       : `${st.len.toFixed(1)} km${st.simple ? "" : " with side branches"} at an average ${fmt.grad(st.grad)} m/km, ${st.simple ? `dropping ${fmt.int(st.drop)} m` : "the main stem dropping"} from ${fmt.int(st.zTop)} m to ${fmt.int(st.zBot)} m. Catchment ${fmt.km2(st.aTop)} → ${fmt.km2(st.aBot)} km²; mean annual flood ${fmt.flow(st.maf)} m³/s at the bottom.${f.kind === "reach" ? ` The profile covers ${f.name === "Unnamed stream" ? "the main stem around the reach" : `the ${f.name} channel`}.` : ""}` });
