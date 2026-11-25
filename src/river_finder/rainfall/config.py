@@ -30,7 +30,8 @@ _COUNCIL = {"name", "kind", "enabled", "base_url", "hts", "measurements", "timez
 _SCALING = {"apply", "publish", "dir", "days", "keep_days", "min_gauges", "min_usable", "min_gauge_mm", "min_grid_mm",
             "clamp", "max_step", "min_change", "min_update_hours", "dedupe_km", "dedupe_min_wet_hours",
             "dedupe_equal_share", "dedupe_equal_mm", "colocated_m", "outage_min_hours", "outage_km",
-            "outage_min_neighbours", "outage_neighbour_mm", "outage_grid_mm", "zones", "zones_file", "divide"}
+            "outage_min_neighbours", "outage_neighbour_mm", "outage_grid_mm", "underread_hours", "underread_mm",
+            "underread_fraction", "underread_same_side", "zones", "zones_file", "divide"}
 _SCALING_SOURCE = {"products", "readers"}
 _ZONE = {"region", "divide_km", "near", "far"}
 _DIVIDE = {"west", "east"}
@@ -161,6 +162,14 @@ class ScalingConfig:
     outage_min_neighbours: int = 2
     outage_neighbour_mm: float = 20.0
     outage_grid_mm: float = 20.0
+    # under-read events (rf-t26.20, :func:`.scaling.find_underreads`): a window of underread_hours[k] hours in which
+    # >= outage_min_neighbours gauges within outage_km (with underread_same_side: on the gauge's side of the main
+    # divide) have a median >= underread_mm[k] and the grid >= underread_mm[k] at its cell is a wet event; a gauge
+    # with less than underread_fraction of both is left out for the event's hours (() = off)
+    underread_hours: tuple[int, ...] = (24, 48, 72)
+    underread_mm: tuple[float, ...] = (50.0, 75.0, 100.0)
+    underread_fraction: float = 0.2
+    underread_same_side: bool = True
     # scaling zones (rf-t26.16, :mod:`.zones`): regions split by distance to the main divide; none = one zone
     # per network region (rf-t26.5)
     zones: tuple[ZoneSplit, ...] = ()
@@ -471,6 +480,14 @@ def _scaling(d, grids: dict) -> ScalingConfig:
     east = _strs(dv.get("east", list(base.divide_east)), "scaling.divide.east")
     if not west or not east or set(west) & set(east):
         _err("scaling.divide: west and east must be non-empty, distinct region lists")
+    ur_hours = s.get("underread_hours", list(base.underread_hours))
+    ur_mm = s.get("underread_mm", list(base.underread_mm))
+    if not isinstance(ur_hours, list) or not isinstance(ur_mm, list) or len(ur_hours) != len(ur_mm):
+        _err("scaling.underread_hours and scaling.underread_mm must be lists of the same length ([] = off)")
+    ur_hours = tuple(_int(h, "scaling.underread_hours", 1, 24 * 30) for h in ur_hours)
+    ur_mm = tuple(_num(m, "scaling.underread_mm", 0.1, 10_000.0) for m in ur_mm)
+    if list(ur_hours) != sorted(set(ur_hours)):
+        _err(f"scaling.underread_hours {list(ur_hours)}: expected distinct window lengths, shortest first")
     zfile = s.get("zones_file", base.zones_file)
     if not isinstance(zfile, str) or not zfile.endswith(".npz"):
         _err("scaling.zones_file must be a .npz file name")
@@ -502,6 +519,11 @@ def _scaling(d, grids: dict) -> ScalingConfig:
         outage_neighbour_mm=_num(s.get("outage_neighbour_mm", base.outage_neighbour_mm),
                                  "scaling.outage_neighbour_mm", 0.0, 10_000.0),
         outage_grid_mm=_num(s.get("outage_grid_mm", base.outage_grid_mm), "scaling.outage_grid_mm", 0.0, 10_000.0),
+        underread_hours=ur_hours, underread_mm=ur_mm,
+        underread_fraction=_num(s.get("underread_fraction", base.underread_fraction), "scaling.underread_fraction",
+                                0.0, 1.0),
+        underread_same_side=_bool(s.get("underread_same_side", base.underread_same_side),
+                                  "scaling.underread_same_side"),
         zones=tuple(zones), zones_file=zfile, divide_west=west, divide_east=east)
 
 

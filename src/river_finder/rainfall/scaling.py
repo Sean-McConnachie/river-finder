@@ -540,18 +540,172 @@ def find_outages(g, grid_all: np.ndarray, keep: np.ndarray, sc: ScalingConfig) -
     return out
 
 
+# --- under-read events: far below the neighbours and the grid in a wet event (rf-t26.20) ------------------
+UNDERREAD_DRY_MM = 0.1   # an event's leading and trailing hours with less than this at the cell and at the
+                         # neighbours' median are dry: they stay in the comparison
+
+
+def _sides(g, sc: ScalingConfig) -> np.ndarray:
+    """Side of the main divide of each gauge of ``g``: 1 west, 2 east ([scaling.divide]), 0 neither."""
+    west, east = set(sc.divide_west), set(sc.divide_east)
+    reg = [g.regions[k] if k >= 0 else "" for k in np.asarray(g.region_of)]
+    return np.array([1 if r in west else 2 if r in east else 0 for r in reg], dtype=np.int8)
+
+
+def _window_sums(c: np.ndarray, w: int) -> np.ndarray:
+    """Sums over every window of ``w`` hours from cumulative sums ``c`` (..., T + 1): window k = hours k .. k+w-1."""
+    return c[..., w:] - c[..., :-w]
+
+
+def _cum(a: np.ndarray) -> np.ndarray:
+    a = np.asarray(a, dtype=np.float64)
+    return np.concatenate([np.zeros(a.shape[:-1] + (1,)), np.cumsum(a, axis=-1)], axis=-1)
+
+
+def _qualified(mm_nb: np.ndarray, ok_nb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Neighbours with a usable value in >= 80 % of the hours (columns): their totals divided by that share."""
+    share = ok_nb.mean(axis=1) if ok_nb.shape[1] else np.zeros(ok_nb.shape[0])
+    q = share >= 0.8
+    return q, mm_nb[q].sum(axis=1) / share[q]
+
+
+def describe_underread(sc: ScalingConfig) -> str:
+    """The wet-event windows of the under-read rule, for log lines: "24 h >= 50 mm, ..." (or "off")."""
+    return ", ".join(f"{w} h >= {m:g} mm" for w, m in zip(sc.underread_hours, sc.underread_mm, strict=True)) or "off"
+
+
+def find_underreads(g, grid_all: np.ndarray, keep: np.ndarray, sc: ScalingConfig,
+                    outage: np.ndarray | None = None) -> dict:
+    """Wet events that a gauge of ``g`` (:class:`.gauges.GaugeHours`) badly under-read: probably half dead.
+
+    :func:`find_outages` needs ``outage_min_hours`` dry hours in a row; a gauge that still tips now and then
+    (a partly blocked funnel, a failing logger) is never dry that long: Colliers Ck recorded 2 mm in the 24-27
+    October storm against 203 mm in its cell and 150-360 mm at its neighbours. Over every hour the gauge cache
+    holds, for each window length ``underread_hours[k]`` and every window of that many hours, counted over the
+    hours usable at the gauge (``outage``, the likely outages, left out at the gauge and its neighbours): its
+    **neighbours** are the other gauges within ``outage_km`` (dropped copies left out; with
+    ``underread_same_side``, none across the main divide of ``[scaling.divide]``) with a usable value in at least
+    80 % of those hours, each one's rain divided by that share. The window is a **wet event** when at least
+    ``outage_min_neighbours`` neighbours qualify and both their median and the grid at the gauge's cell reach
+    ``underread_mm[k]``; the gauge **under-read** it when its own rain is below ``underread_fraction`` of both.
+    The under-read windows of a gauge are merged into **events**, without their dry ends (hours with less than
+    :data:`UNDERREAD_DRY_MM` at the cell and at the neighbours' median), and the hours of an event that are
+    usable at the gauge are left out of the comparison like missing hours (``mask``); the gauge cache is not
+    changed.
+
+    ``grid_all`` is the grid's mm at each gauge's cell, (hours of ``g``, gauges), NaN = no value. Returns ``mask``
+    (bool (G, T), True = hour of an under-read event), ``events`` (one dict per event: the gauge, its hours, its
+    rain against the neighbours' median and the grid, the window lengths that flagged it), ``rule``,
+    ``gauges_checked`` and ``wet_events`` (wet events checked, merged per gauge as the events are)."""
+    G, T = g.mm.shape
+    mask = np.zeros((G, T), dtype=bool)
+    wins = tuple(zip(sc.underread_hours, sc.underread_mm, strict=True))   # (hours, mm) per window length
+    rule = {"windows": [{"hours": int(w), "mm": float(m)} for w, m in wins], "fraction": sc.underread_fraction,
+            "radius_km": sc.outage_km, "min_neighbours": sc.outage_min_neighbours,
+            "same_side": sc.underread_same_side, "neighbour_min_share": 0.8, "dry_end_mm": UNDERREAD_DRY_MM,
+            "after_outages": outage is not None}
+    out = {"mask": mask, "events": [], "rule": rule, "gauges_checked": 0, "wet_events": 0}
+    wins = tuple((w, m) for w, m in wins if w <= T)
+    if not wins or G == 0:
+        return out
+    use = g.ok if outage is None else g.ok & ~outage
+    mm = np.where(use, np.nan_to_num(g.mm), 0.0).astype(np.float64)
+    grid = np.nan_to_num(np.asarray(grid_all, dtype=np.float64).T)     # (G, T), no value = 0
+    x, y = np.asarray(g.x, dtype=np.float64), np.asarray(g.y, dtype=np.float64)
+    placed = np.isfinite(x) & np.isfinite(y)
+    d = np.hypot(x[:, None] - x[None, :], y[:, None] - y[None, :]) / 1000.0
+    side = _sides(g, sc)
+    cell = np.asarray(g.cell)
+    frac = sc.underread_fraction
+    for i in range(G):
+        if not placed[i] or not keep[i] or cell[i] < 0:
+            continue
+        cand = placed & keep & (d[i] <= sc.outage_km) & (np.arange(G) != i)
+        if sc.underread_same_side and side[i]:
+            cand &= (side == side[i]) | (side == 0)
+        nb = np.flatnonzero(cand)
+        if nb.size < sc.outage_min_neighbours:
+            continue
+        out["gauges_checked"] += 1
+        ui = use[i].astype(np.float64)
+        c_n, c_g, c_e = _cum(ui), _cum(mm[i]), _cum(grid[i] * ui)
+        c_vn, c_vm = _cum(use[nb] * ui), _cum(mm[nb] * ui)       # neighbours over the gauge's usable hours
+        wet_d = np.zeros(T + 1)
+        hit_d = np.zeros(T + 1)
+        by_win = []
+        for w, need in wins:
+            n, gs, es = _window_sums(c_n, w), _window_sums(c_g, w), _window_sums(c_e, w)
+            share = np.where(n > 0, _window_sums(c_vn, w) / np.maximum(n, 1.0), 0.0)
+            q = share >= 0.8
+            tot = np.where(q, _window_sums(c_vm, w) / np.where(q, share, 1.0), np.nan)
+            cnt = q.sum(axis=0)
+            med = np.full(n.size, -np.inf)
+            enough = cnt >= sc.outage_min_neighbours
+            if enough.any():
+                med[enough] = np.nanmedian(tot[:, enough], axis=0)
+            wet = (n > 0) & enough & (med >= need) & (es >= need)
+            hit = wet & (gs < frac * med) & (gs < frac * es)
+            for k, arr in ((np.flatnonzero(wet), wet_d), (np.flatnonzero(hit), hit_d)):
+                np.add.at(arr, k, 1.0)
+                np.add.at(arr, k + w, -1.0)
+            by_win.append((w, hit))
+        wet_h = np.cumsum(wet_d[:-1]) > 0
+        out["wet_events"] += int(np.count_nonzero(np.diff(np.concatenate([[0], wet_h.astype(np.int8)])) == 1))
+        hit_h = np.cumsum(hit_d[:-1]) > 0
+        if not hit_h.any():
+            continue
+        # the neighbours' hourly median (hours with enough usable neighbours) for the dry ends of an event
+        ok_nb = use[nb]
+        hourly = np.where(ok_nb, mm[nb], np.nan)
+        enough_h = ok_nb.sum(axis=0) >= sc.outage_min_neighbours
+        nb_med_h = np.zeros(T)
+        if enough_h.any():
+            nb_med_h[enough_h] = np.nanmedian(hourly[:, enough_h], axis=0)
+        wet_hour = (grid[i] >= UNDERREAD_DRY_MM) | (nb_med_h >= UNDERREAD_DRY_MM)
+        edges = np.flatnonzero(np.diff(np.concatenate([[0], hit_h.astype(np.int8), [0]])))
+        for a, b in zip(edges[::2], edges[1::2], strict=True):
+            wh = np.flatnonzero(wet_hour[a:b])
+            if not wh.size:
+                continue
+            a, b = a + int(wh[0]), a + int(wh[-1]) + 1
+            hrs = np.arange(a, b)[use[i, a:b]]
+            if not hrs.size:
+                continue
+            mask[i, hrs] = True
+            q, tot = _qualified(mm[np.ix_(nb, hrs)], ok_nb[:, hrs])
+            use_nb = nb[q]
+            med = float(np.median(tot)) if tot.size else 0.0
+            gm, em = float(mm[i, hrs].sum()), float(grid[i, hrs].sum())
+            order = np.argsort(d[i, use_nb])
+            flagged = [int(w) for w, hit in by_win if hit[max(0, a - w + 1):b].any()]   # windows overlapping it
+            out["events"].append({
+                "id": str(g.id[i]), "council": str(g.council[i]), "from": _hour(g.hour[a] - 1),
+                "to": _hour(g.hour[b - 1]),
+                "hours": int(hrs.size), "gauge_mm": round(gm, 1), "grid_mm": round(em, 1),
+                "neighbours": int(use_nb.size), "neighbour_median_mm": round(med, 1),
+                "neighbour_max_mm": round(float(tot.max()), 1) if tot.size else None,
+                "of_neighbours": _r4(gm / med) if med > 0 else None, "of_grid": _r4(gm / em) if em > 0 else None,
+                "windows_h": flagged,
+                "nearest": [{"id": str(g.id[use_nb[k]]), "km": round(float(d[i, use_nb[k]]), 1),
+                             "mm": round(float(tot[k]), 1)} for k in order[:3]]})
+    return out
+
+
 # --- factor maths ---------------------------------------------------------------------------------------
 def _r4(v) -> float | None:
     return None if v is None or not np.isfinite(v) else round(float(v), 4)
 
 
 def evaluate_region(rows: np.ndarray, g, cols: np.ndarray, grid_vals: np.ndarray, keep: np.ndarray,
-                    sc: ScalingConfig, outage: np.ndarray | None = None) -> dict:
+                    sc: ScalingConfig, outage: np.ndarray | None = None, underread: np.ndarray | None = None) -> dict:
     """The comparison for one zone: gauges ``rows`` of ``g``; ``grid_vals`` (hours, gauges) is the grid's
     mm at each gauge's cell over the window hours (NaN = no value); ``outage`` (gauges, hours of ``g``) marks
-    the hours of likely outages (:func:`find_outages`), left out like missing hours."""
+    the hours of likely outages (:func:`find_outages`) and ``underread`` those of under-read events
+    (:func:`find_underreads`), both left out like missing hours."""
     H = cols.size
     usable = g.ok if outage is None else g.ok & ~outage
+    if underread is not None:
+        usable = usable & ~underread
     used, excluded = [], {"copy": [], "no_cell": [], "few_hours": []}
     gsum = esum = 0.0
     hours = 0
@@ -569,15 +723,16 @@ def evaluate_region(rows: np.ndarray, g, cols: np.ndarray, grid_vals: np.ndarray
         n = int(ok.sum())
         share = n / H if H else 0.0
         n_out = int(outage[r, cols].sum()) if outage is not None else 0
+        n_under = int(underread[r, cols].sum()) if underread is not None else 0
+        marks = ({"outage_hours": n_out} if n_out else {}) | ({"underread_hours": n_under} if n_under else {})
         if share < sc.min_usable:
-            excluded["few_hours"].append({"id": gid, "usable": round(share, 3)}
-                                         | ({"outage_hours": n_out} if n_out else {}))
+            excluded["few_hours"].append({"id": gid, "usable": round(share, 3)} | marks)
             continue
         gm = float(np.nan_to_num(g.mm[r, cols])[ok].sum())
         em = float(e[ok].sum())
         used.append({"id": gid, "council": str(g.council[r]), "cell": int(g.cell[r]), "hours": n,
                      "usable": round(share, 3), "gauge_mm": round(gm, 2), "grid_mm": round(em, 2),
-                     "ratio": _r4(gm / em) if em > 0 else None} | ({"outage_hours": n_out} if n_out else {}))
+                     "ratio": _r4(gm / em) if em > 0 else None} | marks)
         gsum += gm
         esum += em
         hours += n
@@ -791,8 +946,9 @@ def _close_zones(prev: dict, closed: dict, zm, family: str, products, seq: int, 
 
 def run_scale(cfg: RainConfig, family: str = "ecmwf", days: int | None = None, now: datetime | None = None,
               force: bool = False, fetch: bool = True, readers=None, http=None, log=print) -> dict:
-    """Update the cell store, find copies of one station and likely outages, compute and store the factors of
-    ``family`` per scaling zone, re-scale the saved buffers (``[scaling] apply``). See the module docstring."""
+    """Update the cell store, find copies of one station, likely outages and under-read events, compute and store
+    the factors of ``family`` per scaling zone, re-scale the saved buffers (``[scaling] apply``). See the module
+    docstring."""
     from .gauges import GaugeHours
     from .zones import load_zones
 
@@ -891,6 +1047,18 @@ def run_scale(cfg: RainConfig, family: str = "ecmwf", days: int | None = None, n
     for x in out["spells"]:
         log(f"  {x['id']}: dry {x['dry_hours']} h, {x['from']} .. {x['to']}; {x['neighbours']} neighbours, median "
             f"{x['neighbour_median_mm']:.1f} mm; ECMWF {x['grid_mm']:.1f} mm")
+    # under-read events: far below the neighbours and the grid in a wet event (after the outages)
+    ur = find_underreads(g, grid_all, keep, sc, outage)
+    under = ur["mask"]
+    u_win = {c: int(under[councils_of == c][:, cols].sum()) for c in sorted(set(councils_of.tolist()))}
+    log(f"under-read events: {len(ur['events'])} events at {len({x['id'] for x in ur['events']})} gauges "
+        f"({ur['wet_events']} wet events at {ur['gauges_checked']} gauges checked: < {sc.underread_fraction:.0%} of "
+        f"the neighbours' median and of ECMWF in {describe_underread(sc)}); {int(under[:, cols].sum())} "
+        f"gauge-hours of the window left out (by council {u_win})")
+    for x in ur["events"]:
+        log(f"  {x['id']}: {x['gauge_mm']:.1f} mm in {x['hours']} h, {x['from']} .. {x['to']}; {x['neighbours']} "
+            f"neighbours, median {x['neighbour_median_mm']:.1f} mm; ECMWF {x['grid_mm']:.1f} mm (windows "
+            f"{', '.join(f'{w} h' for w in x['windows_h'])})")
 
     # evaluate and decide
     grid_vals = store.values(np.maximum(g.cell, 0), first, end)   # (hours, gauges): each gauge's cell
@@ -906,8 +1074,10 @@ def run_scale(cfg: RainConfig, family: str = "ecmwf", days: int | None = None, n
                                             "clamp", "max_step", "min_change", "min_update_hours", "dedupe_km",
                                             "dedupe_min_wet_hours", "dedupe_equal_share", "dedupe_equal_mm",
                                             "outage_min_hours", "outage_km", "outage_min_neighbours",
-                                            "outage_neighbour_mm", "outage_grid_mm")}
+                                            "outage_neighbour_mm", "outage_grid_mm", "underread_hours",
+                                            "underread_mm", "underread_fraction", "underread_same_side")}
     cfg_snap["clamp"] = list(sc.clamp)
+    cfg_snap["underread_hours"], cfg_snap["underread_mm"] = list(sc.underread_hours), list(sc.underread_mm)
     cfg_snap["zones"] = zm.rule()
     inputs = {"gauges": {"file": str(gpath.relative_to(cfg.rain_dir)), "created": g.meta.get("created"),
                          "hours": [_hour(g.hour[0]), _hour(g.hour[-1])]},
@@ -921,7 +1091,7 @@ def run_scale(cfg: RainConfig, family: str = "ecmwf", days: int | None = None, n
     states, evals = {}, {}
     for zi, r in enumerate(zones):
         rows = np.flatnonzero(gzone == zi)
-        ev = evaluate_region(rows, g, cols, grid_vals, keep, sc, outage)
+        ev = evaluate_region(rows, g, cols, grid_vals, keep, sc, outage, under)
         ev["parent"] = zm.parent[zi]
         p = prev.get(r)
         if p is None:  # a new zone, or one listed again: its versions continue above any it had
@@ -941,6 +1111,7 @@ def run_scale(cfg: RainConfig, family: str = "ecmwf", days: int | None = None, n
                    "evaluation": {k: v for k, v in ev.items() if k != "decision"}, "guards": dec["guards"],
                    "copies_dropped": [x for grp in cp["groups"] for x in grp["dropped"] if grp.get("zone") == r],
                    "outages": [x for x in out["spells"] if x["id"] in members],
+                   "underreads": [x for x in ur["events"] if x["id"] in members],
                    "config": cfg_snap, "inputs": inputs}
             records.append(rec)
             st.update(set=created, record=seq)
@@ -973,6 +1144,10 @@ def run_scale(cfg: RainConfig, family: str = "ecmwf", days: int | None = None, n
                            "outages": {"rule": out["rule"], "spells_checked": out["spells_checked"],
                                        "spells": out["spells"], "window_hours": int(outage[:, cols].sum()),
                                        "window_hours_by_council": n_win},
+                           "underreads": {"rule": ur["rule"], "gauges_checked": ur["gauges_checked"],
+                                          "wet_events": ur["wet_events"], "events": ur["events"],
+                                          "window_hours": int(under[:, cols].sum()),
+                                          "window_hours_by_council": u_win},
                            "gauge_zones": gauge_zones, "regions": evals,
                            "new_records": [rec["seq"] for rec in records]}}
     _write_json(cfg.factors_path(family), doc)
@@ -1036,6 +1211,10 @@ def status_lines(cfg: RainConfig) -> list[str]:
         if o and o.get("spells"):
             out.append(f"  {src.family} likely outages: {len(o['spells'])} dry spells, {o['window_hours']} gauge-hours "
                        f"of the window left out")
+        u = d["last_update"].get("underreads")
+        if u and u.get("events"):
+            out.append(f"  {src.family} under-read events: {len(u['events'])} at {len({x['id'] for x in u['events']})} "
+                       f"gauges, {u['window_hours']} gauge-hours of the window left out")
         cp = cfg.cells_path(src.family)
         if cp.exists():
             s = CellStore.load(cp).summary()
