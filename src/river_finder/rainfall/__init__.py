@@ -106,10 +106,13 @@ Every hour (children 2 and 3 provide the sources)::
   writes ``<rain>/scaling_zones.npz``; a buffer's ``regions`` are the zone names and ``region_of`` the
   zone of each catchment (``load_zones(cfg)``, ``HourlyBuffer.for_weights(w, kind, zones)``). ``rain
   scale`` leaves likely outages out (``scaling.find_outages``).
+- rf-t26.20 (under-read events, done): ``scaling.find_underreads`` marks the hours of wet events in which a
+  gauge had less than ``underread_fraction`` of both its neighbours' median and the grid (a half-dead gauge
+  that still tips); ``rain scale`` and ``rain validate`` leave them out like the outages.
 - rf-t26.7 (storm validation, done): ``run_validate(cfg, start, end, regions, catchments)`` reuses the
-  scaling's gauge cleaning (``find_copies``, ``find_outages``, ``evaluate_region``), reads the event's
-  ECMWF on every cell into ``<rain>/validation/`` (``fill_ecmwf``) and the upstream cells of each outlet
-  from the weights and ``network.npz``.
+  scaling's gauge cleaning (``find_copies``, ``find_outages``, ``find_underreads``, ``evaluate_region``),
+  reads the event's ECMWF on every cell into ``<rain>/validation/`` (``fill_ecmwf``) and the upstream
+  cells of each outlet from the weights and ``network.npz``.
 - rf-t26.6 (upstream, done): ``compute_totals(net, {"observed": obs, "forecast": fc}, windows)``
   sums ``WindowTotal.m3(area_m2)`` down ``net.down`` in topological order; upstream mm = upstream m³ /
   upstream pixel area. Tile-edge outlets (rf-t26.11) end their totals and are flagged.

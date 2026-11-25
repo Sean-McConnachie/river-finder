@@ -1,4 +1,4 @@
-# Rain gauge scaling (rf-t26.5, rf-t26.13, rf-t26.16, rf-t26.7)
+# Rain gauge scaling (rf-t26.5, rf-t26.13, rf-t26.16, rf-t26.7, rf-t26.20)
 
 The ECMWF rain the site shows (the observed proxy and the next-24-h forecast, `docs/live-rain.md`)
 comes from a 9 km model. Over steep terrain it misses part of the orographic rain, and elsewhere it can
@@ -8,7 +8,8 @@ cells. Local totals are scaled by it. The published files are not scaled yet (se
 
 A scaling zone is a network region, or part of one: Canterbury is split at 15 km from the main
 divide into **Canterbury divide** and **Canterbury east** (rf-t26.16, "Zones" below). Gauges that are
-probably down (dry while their neighbours and ECMWF are wet) are left out ("Likely outages").
+probably down (dry while their neighbours and ECMWF are wet) are left out ("Likely outages"), and so are
+the hours of a wet event that a gauge badly under-read ("Under-read events").
 
 **Validated on two West Coast storms** (rf-t26.7, `docs/rainfall-validation-westcoast-2026-11.md`):
 raw ECMWF had 94-95 % of the gauge rain. The West Coast factor in use (0.906, version 1) made both storms
@@ -25,12 +26,13 @@ Code: `src/river_finder/rainfall/scaling.py` (its docstring is the reference) an
 ```bash
 uv run river-finder rain gauges          # gauge hours (incremental, ~6 min)
 uv run river-finder rain zones           # catchment -> scaling zone (after a national rebuild or a zone change)
-uv run river-finder rain scale           # cell store, copies, outages, factors; re-scales the saved buffers
+uv run river-finder rain scale           # cell store, copies, outages, under-read events, factors; re-scales the buffers
 uv run river-finder rain ecmwf           # new buffers, scaled with the current factors
 uv run river-finder rain totals          # local upstream totals (scaled)
 uv run river-finder rain status          # includes the factors and the cell store
 uv run river-finder rain scale --days 30 --now 2026112203 --force --no-fetch   # options
 uv run river-finder rain validate --event 2026111412 2026111712 --region "West Coast"   # one past storm (rf-t26.7)
+uv run river-finder rain validate --event 2026102412 2026102712 --no-underread         # the same without rf-t26.20
 ```
 
 ## Method
@@ -38,7 +40,8 @@ uv run river-finder rain validate --event 2026111412 2026111712 --region "West C
 1. **Window.** The 30 x 24 whole UTC hours (hour ending) up to "now", or up to the newest gauge hour
    when the gauge cache is older (`[scaling] days`).
 2. **Gauge side.** `gauges_hourly.npz`. A gauge hour counts when its state is good or raw
-   (`state <= 1`: suspect and missing hours are left out), and is not in a likely outage (step 4).
+   (`state <= 1`: suspect and missing hours are left out), and is not in a likely outage or an
+   under-read event (step 4).
 3. **Copies of one station (rf-t26.13).** Some stations are in the files of two councils. Gauges
    within 3 km of each other (`dedupe_km`) are compared over every hour the gauge cache holds. If at
    least 10 of their common usable hours have rain at either gauge (`dedupe_min_wet_hours`), and at
@@ -53,6 +56,9 @@ uv run river-finder rain validate --event 2026111412 2026111712 --region "West C
 4. **Likely outages (rf-t26.16).** A gauge that is down reads dry. A spell of at least 24 dry (or
    unusable) hours is left out when at least 2 other gauges within 25 km have a median of at least
    20 mm over its dry hours and ECMWF has at least 20 mm in its cell ("Likely outages" below).
+   **Under-read events (rf-t26.20).** A gauge that recorded less than 20 % of both its neighbours'
+   median and ECMWF in a wet event (50 mm in 24 h, 75 mm in 48 h or 100 mm in 72 h at both) has the
+   event's hours left out ("Under-read events" below).
 5. **Zones (rf-t26.16).** Each gauge is placed in the zone of its network region, or, in a split
    region, in the near or far zone by its distance to the main divide ("Zones" below).
 6. **Grid side.** `<rain>/scaling/ecmwf_cells.npz` holds ECMWF's hourly mm at every gauge cell (189
@@ -244,6 +250,115 @@ mm), Staveley Camp (83 h, 10 mm, 35 mm). To be checked with the councils: Kokata
 recorded nothing from the start of the cache (17 October) to 13 November, and Colliers Creek nothing
 since 28 October, while WCRC's unplaced "Hokitika Rv @ Colliers Ck 2" recorded 1322 mm in 30 days.
 
+## Under-read events (rf-t26.20)
+
+The dry-spell rule needs 24 dry hours in a row. A gauge that still tips now and then (a partly blocked
+funnel, a failing logger) is never dry that long. Colliers Creek recorded 2 mm in the 24-27 October
+storm against 203 mm in its cell and 150-360 mm at its neighbours, and rf-t26.7 left it out by hand.
+
+The rule (`scaling.find_underreads`, over every hour the gauge cache holds, after the likely outages):
+
+- For each window length in `underread_hours` (24, 48, 72 h) and every window of that length, the
+  gauge's hours are the usable ones (likely outages left out). Its **neighbours** are the other gauges
+  within `outage_km` (25 km; dropped copies left out) with a value in at least 80 % of those hours
+  (each total divided by that share), and with `underread_same_side`, only gauges on the gauge's side
+  of the main divide (`[scaling.divide]`).
+- The window is a **wet event** when at least `outage_min_neighbours` (2) neighbours qualify, and both
+  their median and ECMWF at the gauge's cell reach `underread_mm` for that length: 50 mm in 24 h, 75
+  mm in 48 h, 100 mm in 72 h.
+- The gauge **under-read** the event when its own total is below `underread_fraction` (20 %) of the
+  neighbours' median **and** of ECMWF. Both must disagree with it. A gauge that only ECMWF gets wrong,
+  or that is dry next to one wet gauge, is not marked.
+- The under-read windows of a gauge are merged into **events**. Each event runs from its first to its
+  last hour with at least 1 mm at the cell or at the neighbours' median (a 72-h window holds a day of
+  drizzle either side of a storm: those hours are no evidence, and they stay in). The event's usable
+  hours are left out like missing hours, so a gauge that loses more than 20 % of the window drops out
+  by `min_usable`. The gauge cache is not changed.
+
+`last_update.underreads` lists every event with its hours, the gauge, neighbour and ECMWF totals, the
+3 nearest neighbours and the window lengths that flagged it. The history record of a zone lists the
+events of its gauges (`underreads`), and the used gauges carry `underread_hours`. `rain scale`
+prints one line per event, as for the dry spells, and `rain status` gives the count. Off:
+`underread_hours = []` and `underread_mm = []`.
+
+On the cache of 2026-11-22 (106 wet events at 206 gauges checked): **4 events at 2 gauges**, 154
+gauge-hours of the window.
+
+| gauge | event (UTC) | hours | gauge | neighbours: median (n; nearest) | ECMWF in the cell | of median / of ECMWF |
+|---|---|---|---|---|---|---|
+| wcrc:Hokitika Rv @ Colliers Ck | 25 Oct 09Z .. 29 Oct 03Z | 74 | 2.5 mm | 211 mm (8; Hokitika Gorge 4.3 km, 154 mm) | 201 mm | 0.012 / 0.013 |
+| wcrc:Taipo Rv @ SHB | 25 Oct 03Z .. 26 Oct 08Z | 29 | 22 mm | 128 mm (7; Tuke Hut 46 m, 148 mm) | 114 mm | 0.17 / 0.19 |
+| wcrc:Taipo Rv @ SHB | 1 Nov 03Z .. 2 Nov 00Z | 21 | 19 mm | 112 mm (6; Tuke Hut, 130 mm) | 114 mm | 0.17 / 0.17 |
+| wcrc:Taipo Rv @ SHB | 4 Nov 03Z .. 5 Nov 09Z | 30 | 15 mm | 104 mm (6; Tuke Hut, 101 mm) | 69 mm | 0.14 / 0.22 |
+
+- **Colliers Creek** is caught with a wide margin: it had 1 % of both. Its 0.5 mm tips are the only
+  record in 30 days (11 tips, uncorrelated with anything), so the dry-spell rule already left out its
+  hours from 28 October, and it was out of the factor before this rule.
+- **Taipo at SHB** is not clearly a good gauge. WCRC's site list puts it 46 m from Tuke Hut, but it
+  reads a third as much over 30 days (604 against 1807 mm, "Duplicates" below). It records 1-mm tips
+  (the other WCRC gauges 0.5 mm), and in these three events it had 15 % of Tuke Hut's rain against
+  about 38 % otherwise. In the 30 hours from 4 November 03Z it recorded 15 mm while the three gauges
+  within 6 km recorded 100-118 mm. In the 30 hours before, it recorded nothing while they recorded
+  35-67 mm, and the dry-spell rule had already left those hours out. So either its catch or its
+  location is wrong, and either way its comparison with its cell is unreliable in these events.
+  Without them, it stays in the factor (85 % of the window usable), and its ratio goes from 0.51 to
+  0.62. To be checked with WCRC.
+- **No other gauge is close.** The next is Haast at Moa Ck at 0.28 / 0.26 (a 24-h window on 1
+  November). Outside the West Coast, the lowest is Erewhon (Canterbury east) at 0.47 / 0.42. No
+  Canterbury divide or Tasman gauge comes within 0.5.
+
+**False positives.** Two patterns give a working gauge a small share of its neighbours' rain. The
+thresholds and the fraction were chosen against them:
+
+- *Coast against ranges* (the West Coast). Ross Township is on the coastal plain. Its neighbours within
+  25 km are 17-22 km inland in the ranges. On 5-8 November, showers fell on the ranges (neighbours'
+  median 62 mm), Ross recorded 10 mm, and ECMWF spread 60 mm onto its cell. With 50 mm for every window
+  length, the 48- and 72-h windows mark it (0.16 / 0.17). Thresholds that grow with the window length
+  (75 mm in 48 h, 100 mm in 72 h) leave it out: 50 mm in 72 h is a showery spell on the West Coast,
+  not a storm.
+- *Lee of the divide* (Canterbury east). Near the divide, east-side gauges see a fraction of the rain
+  10-20 km west. ECMWF spreads it east (Canterbury east: 0.51 x over 30 days), so the ECMWF condition
+  alone does not protect them. `underread_same_side` keeps West Coast and Tasman gauges out of a
+  Canterbury or Otago gauge's neighbours. On this cache, it changes nothing (the same 4 events; 112 wet
+  events checked without it): at these thresholds no east-side gauge comes near 0.2. With 20-40 mm
+  thresholds and 25 %, 16 events at 9 gauges are marked, among them Grasmere (Canterbury east, 17.5 km
+  from the divide: 4.5 mm against 21 mm), whose wet neighbours are Canterbury divide gauges on its
+  own side. Neighbours from the gauge's own scaling zone would remove that case. This is the next
+  guard if it appears at the current thresholds.
+
+| variant (cache of 2026-11-22) | events marked |
+|---|---|
+| default: 50 / 75 / 100 mm in 24 / 48 / 72 h, 20 % | Colliers Ck (1), Taipo (3) |
+| `underread_fraction = 0.1` | Colliers Ck only: the same as the hand exclusion |
+| `underread_fraction = 0.3` | + Haast at Moa Ck (1) |
+| 50 mm for every window | + Ross Township (5-8 November) |
+| 30 / 45 / 60 mm | + Ross, Ahaura Gorge WCRC, Hokitika Gorge WCRC (6 November: 5 mm against 33 / 54) |
+| 20 / 30 / 40 mm, 25 % | 16 events at 9 gauges: + Grasmere, Ivory at Ripplerock, Matiri at Lake Outlet, ... |
+| `underread_same_side = false` | the default's 4 events |
+
+**Factors, with and without** (dry runs of `rain scale --no-fetch` on copies of the inputs, the cache
+and factor file of 2026-11-22, in `data/analysis/rain-outage/`):
+
+| zone | without the rule | with it (default) | with `underread_fraction = 0.1` |
+|---|---|---|---|
+| West Coast | 1.007 (41 gauges) | **1.017** (41; Taipo 80 h fewer) | 1.007 |
+| Canterbury divide | 1.195 | 1.195 | 1.195 |
+| Canterbury east | 0.508 (0.640 after the max step) | the same | the same |
+| Tasman | 1.037 | 1.037 | 1.037 |
+| Marlborough, Otago | < 3 gauges: 1 | 1 | 1 |
+
+Colliers Creek was already out of the window by the dry-spell rule, so the rule changes only the West
+Coast, and only through Taipo's 80 hours.
+
+**Storm validation.** `rain validate` applies the rule (step 2 of its docstring), so the October storm
+no longer needs `--exclude-gauge "wcrc:Hokitika Rv @ Colliers Ck"`. It leaves out Colliers Creek (51
+of the 72 storm hours under-read) and Taipo (29 of 72): 41 gauges instead of the 42 of the hand
+exclusion. Raw
+ECMWF has 0.93 of the gauge rain (RMSE 41 mm, RMS log 0.435), against 0.95 (44 mm, 0.445) with 42
+gauges. `--no-underread` switches the rule off: with `--exclude-gauge` of Colliers Creek it gives the
+42-gauge numbers again, and without it 43 gauges (RMS log 0.83). The November storm has no under-read
+event: the same 43 gauges.
+
 ## Versions, storage and traceability
 
 - `<rain>/scaling/factors_ecmwf.json`: under `regions`, per **zone** the current `factor`, `version`,
@@ -253,12 +368,12 @@ since 28 October, while WCRC's unplaced "Hokitika Rv @ Colliers Ck 2" recorded 1
   rule and each zone's region. `last_update` holds the newest evaluation of every zone: the gauges
   used with their cell, hours, gauge and ECMWF sums and ratio, the gauges left out and why, the sums
   per council, the checks, the guard rails that acted, the window, the config, the input files (gauge
-  file time, cell store span and readers, zone file), the copy groups, the likely outages and the
-  zone of each gauge in a split region (`gauge_zones`).
+  file time, cell store span and readers, zone file), the copy groups, the likely outages, the
+  under-read events (`underreads`) and the zone of each gauge in a split region (`gauge_zones`).
 - `<rain>/scaling/factors_ecmwf.history.jsonl`: append-only, one line per new version: `seq`, `region`
   (the zone), `parent`, factor, version, the previous factor and version, status, reason, window
   (first and last hour), the full evaluation (every gauge id with its cell, hours and sums), the
-  copies dropped and the likely outages in the zone, the config and the inputs. So any factor traces
+  copies dropped, the likely outages and the under-read events in the zone, the config and the inputs. So any factor traces
   back to its gauges and hours. A closed zone gets one line with `status: closed`, factor 1, version
   0, the previous factor and version, `replaced_by` and the reason.
 - Versions change only with the factor. Version 0 always means unscaled (factor 1). A zone reset to
@@ -426,6 +541,10 @@ is `docs/rainfall-validation-westcoast-2026-11.md`, and the tests are in
 | 14-17 Nov (mean 147 mm, max 453.5) | 43 | 0.94, RMSE 58 mm | 0.85, 63 mm | 0.94 (0.996), 58 mm | 1.00 (1.062), 56 mm | 0.97 / 0.88 |
 | 24-27 Oct (mean 108 mm, max 362.5) | 42 (without Colliers Ck) | 0.95, RMSE 44 mm | 0.86, 47 mm | 0.95 (0.998), 44 mm | 1.00 (1.049), 43 mm | 1.03 / 0.93 |
 
+With the under-read rule (rf-t26.20), the October storm leaves out Colliers Ck by itself, and Taipo too
+(29 of its 72 storm hours under-read): 41 gauges, raw 0.93 (RMSE 41 mm). `--no-underread` with
+`--exclude-gauge "wcrc:Hokitika Rv @ Colliers Ck"` gives the row above ("Under-read events").
+
 Timing: the zone's hourly r at lag 0 was 0.98 and 0.95, and the best lag 0 h in both storms. ECMWF's
 rain centroid was 1-2 h early, and its peak hour was 18-27 % lower.
 
@@ -473,10 +592,14 @@ about 30 days of daily updates, the window is all Open-Meteo.
 ## Not done here
 
 - A Tasman zone for the inland basins (0.73 x vs 1.12 x, "Zones"): to be checked with a second window.
-- The outage rule marks hours left out of the comparison only (`scaling.find_outages` gives the mask;
-  `rain validate` applies it too). It does not catch a half-dead gauge that still tips now and then:
-  Colliers Creek recorded 2 mm in the October storm against 203 mm in its cell and 150-360 mm at its
-  neighbours. A rule on event totals against the neighbours would catch it.
+- The outage and under-read rules mark hours left out of the comparison only (`scaling.find_outages`
+  and `scaling.find_underreads` give the masks; `rain validate` applies them too). The gauge cache keeps
+  every value. A gauge whose catch is only partly low (30-50 % of its neighbours, e.g. a funnel half
+  blocked) is not marked: that is within the spread of working gauges.
+- Under-read events: a dead gauge is still a neighbour of the others. Its total lowers their median,
+  which makes their own events less likely to be marked, so the effect is conservative. Taipo at SHB
+  (location or catch) is to be checked with WCRC. If the lee-of-the-divide case appears at the current
+  thresholds, the next guard is neighbours from the gauge's own scaling zone.
 - The West Coast: a zone factor does not fix its catchment totals (rf-t26.7). A finer unit is a
   candidate: by latitude or by orographic band (30 days: the central band 1.08, the north 0.94, the south
   0.91). Check it on a second window before adding it, as for Tasman.

@@ -59,7 +59,10 @@ What follows from this:
    while its cell had 203 mm and its neighbours 150-360 mm. The gauge was not dry for 24 hours, so the
    rule did not mark it. A rule that compares event totals with the neighbours would catch this kind of
    failure (proposed follow-up). Tasman's HY Matiri at Lake Outlet (2 mm against 32 mm in its cell) is
-   another candidate.
+   another candidate. *Update 2026-11-25 (rf-t26.20):* the under-read rule (`docs/rainfall-scaling.md`,
+   "Under-read events") now marks Colliers Creek in this storm (1 % of its neighbours' median and of
+   ECMWF), and `rain validate` applies it: "Second storm" below. Matiri's storm (24-31 mm) is below the
+   rule's 50-mm threshold.
 
 ![Hourly rain at the West Coast gauges and ECMWF; per-gauge totals](img/rainfall-validation-westcoast-2026-11.svg)
 
@@ -98,6 +101,7 @@ gauges. This is the pattern that the Canterbury split found on the other side of
 uv run river-finder rain validate --event 2026111412 2026111712 --region "West Coast"   # ~30 s once the event store exists
 uv run river-finder rain validate --event 2026102412 2026102712                         # the October check
 uv run river-finder rain validate --event ... --exclude-gauge "wcrc:Taipo Rv @ SHB"      # sensitivity
+uv run river-finder rain validate --event ... --no-underread     # without the under-read rule (rf-t26.20)
 ```
 
 The step writes `<rain>/validation/validate_<regions>_<START>_<END>.json` (everything) and `.md` (the
@@ -105,7 +109,7 @@ tables below). Details are in the module docstring.
 
 - **Gauges** are the scaling's: hours with state good or raw, copies of one station counted once (3 West
   Coast copies dropped), likely outages left out (Colliers Creek, out for the whole storm), at least 80 %
-  of the event hours usable. That gives 43 of the 57 West Coast gauges: 8 have no location, and 3 have no
+  of the event hours usable. Since rf-t26.20, under-read events are left out too (none in this storm). That gives 43 of the 57 West Coast gauges: 8 have no location, and 3 have no
   usable hours (Colliers Ck, Waipuna, Roaring Billy WCRC). The outages of Kokatahi and Smyth Hut ended on
   13 November, so both gauges are in this storm.
 - **ECMWF** is the observed proxy: each hour comes from the newest run that has it, at leads 1-6. At the
@@ -318,6 +322,24 @@ because Open-Meteo has none of these runs any more. Kokatahi and Smyth Hut were 
 Colliers Ck recorded 2.0 mm against 202.7 mm in its cell. The outage rule did not mark Colliers Ck,
 because it was not dry for 24 h. That one gauge takes the RMS log from 0.45 to 0.83, so the numbers below
 leave it out (`--exclude-gauge "wcrc:Hokitika Rv @ Colliers Ck"`).
+
+*Update 2026-11-25 (rf-t26.20):* the under-read rule leaves Colliers Ck out by itself (51 of the 72
+storm hours marked: 2.5 mm against a neighbour median of 211 mm and 201 mm in ECMWF), so the hand
+exclusion is no longer needed. It also marks 29 of Taipo's 72 storm hours (22 mm against 128 mm and 114
+mm: see "Under-read events" in `docs/rainfall-scaling.md` for why Taipo is doubtful), so Taipo drops
+out of this storm as well. The table below (42 gauges) is `--no-underread --exclude-gauge
+"wcrc:Hokitika Rv @ Colliers Ck"`, and `underread_fraction = 0.1` gives the same 42 gauges. The default
+(41 gauges, factors of the same window recomputed with the rule):
+
+| 41 gauges | factor | ECMWF / gauge | bias (mm) | RMSE (mm) | RMS log |
+|---|---|---|---|---|---|
+| raw | 1 | 0.927 | -7.9 | 40.6 | 0.435 |
+| x the factor in use | 0.906 | 0.840 | -17.4 | 45.7 | 0.433 |
+| x the 30-day ratio without the storm | 1.005 | 0.933 | -7.3 | 40.3 | 0.436 |
+| x the storm's own ratio | 1.078 | 1.000 | 0.0 | 38.5 | 0.451 |
+
+The conclusions do not change: raw ECMWF is within 5-7 % of the gauge rain, the factor in use makes it
+worse, and the 30-day ratio gives about the same result as raw.
 
 | 42 gauges | factor | ECMWF / gauge | bias (mm) | RMSE (mm) | RMS log |
 |---|---|---|---|---|---|
