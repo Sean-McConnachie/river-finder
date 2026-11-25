@@ -180,6 +180,18 @@ def _external(args):
         print(json.dumps(X.attach(out, log=print), indent=1))
 
 
+def _hydro(args):
+    import json
+
+    from . import hydro
+
+    if args.step == "check":
+        hydro.check(log=print)
+    else:
+        s = hydro.attach(log=print)
+        print(json.dumps(s["classes"], indent=1))
+
+
 def _ml(args):
     from . import ml, mlpage
 
@@ -346,13 +358,17 @@ def main(argv: list[str] | None = None) -> None:
     px.add_argument("step", choices=["fetch", "attach", "all"])
     px.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz",
                     help="attach: viewer directory to write <region>_x.txt / _falls.json into")
+    ph = sub.add_parser("hydro", help="hydro-diverted, regulated and reservoir reaches from config/hydro.toml: "
+                                      "check (where each point snaps) | attach (data/nz/hydro.pkl; see "
+                                      "src/river_finder/hydro.py, docs/hydro.md)")
+    ph.add_argument("step", choices=["check", "attach"])
     pw = sub.add_parser("web", help="web app (Map, Top rivers, Models, Info): build | serve (see web/README.md)")
     pw.add_argument("step", choices=["data", "build", "serve", "pages"],
                     help="data: per-region extras (sections, roads, tracks, gauges, LINZ rivers, satellite) into "
                          "--data; build: the pages; serve: localhost; pages: stage the site for GitHub Pages "
                          "(--push to publish)")
     pw.add_argument("--push", action="store_true", help="pages: force-push the staged site to the gh-pages branch")
-    pw.add_argument("--only", nargs="+", choices=["sections", "access", "gauges", "linz", "satellite"],
+    pw.add_argument("--only", nargs="+", choices=["sections", "access", "gauges", "linz", "satellite", "hydro"],
                     help="data: run only these steps (e.g. --only linz rebuilds <region>_linz.json from the cached "
                          "LINZ lines, no network)")
     pw.add_argument("--data", type=Path, default=REPO_ROOT / "data" / "viewer_nz",
@@ -476,15 +492,18 @@ def main(argv: list[str] | None = None) -> None:
     if args.cmd == "external":
         _external(args)
         return
+    if args.cmd == "hydro":
+        _hydro(args)
+        return
     if args.cmd == "web":
         from . import webapp
 
         if args.step == "data":
             from .linz import write_linz
-            from .webdata import write_access, write_gauges, write_satellite, write_sections
+            from .webdata import write_access, write_gauges, write_hydro, write_satellite, write_sections
 
             steps = {"sections": write_sections, "access": write_access, "gauges": write_gauges, "linz": write_linz,
-                     "satellite": write_satellite}
+                     "satellite": write_satellite, "hydro": write_hydro}
             for k, step in steps.items():
                 if not args.only or k in args.only:
                     step(args.data)

@@ -93,6 +93,8 @@ uv run river-finder run kaimai karangahake tutamoe  # fetch (8 m + 5 m LiDAR, RE
 uv run river-finder score kaimai karangahake tutamoe  # re-score only (regression is pooled across the regions given)
 uv run river-finder nz fetch|tiles|score|viewer   # national 8 m scan in 64 km tiles (data/nz/, ~4 h)
 uv run river-finder external fetch|attach   # OSM waterfalls/roads/tracks per reach via Overture S3 (~10 min)
+uv run river-finder hydro check|attach      # hydro-diverted/regulated/reservoir reaches from config/hydro.toml -> data/nz/hydro.pkl
+                                          # (~30 s; ml audit and web data --only hydro use it; docs/hydro.md)
 uv run river-finder web data|build|serve|pages  # web app (Map, Top rivers, Models, Info) -> data/web/
 uv run river-finder ml table|explore|cv|page|audit  # ML: features, grouped repeated 5-fold OOF + LORO, ML page (~10 min);
                                           # audit: top unlisted runs of a model -> models/audits/

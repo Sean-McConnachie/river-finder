@@ -1,0 +1,996 @@
+# Hydro schemes that divert, regulate or drown river reaches (rf-8x2). Read by src/river_finder/hydro.py;
+# method, sources and limits in docs/hydro.md. `river-finder hydro check` prints where each point snaps and how far
+# its marking runs; `river-finder hydro attach` writes data/nz/hydro.pkl (per reach) and data/nz/hydro_summary.json.
+#
+# Each scheme lists points. role:
+#   intake  `take` (default 1) of the natural flow leaves the river here (weir, dam or intake into a canal or tunnel):
+#           the reaches below are "diverted" while the water taken is at least `diverted_share` of their natural flow
+#   dam     storage dam or lake control structure with the station at the dam toe: the flow below is "regulated"
+#   return  tailrace or outfall: the water of `returns` (default: every intake of the scheme) comes back here; it
+#           ends their "diverted" reaches and makes the reaches below "regulated" (regulates = false: a run-of-river
+#           bypass, the river is natural again below)
+# reservoir = true also marks the lake behind the point (and the dam itself) as "reservoir".
+# A point snaps to the nearest reach of `river` (REC2 name) within snap_named_m; river = "" takes the nearest reach.
+# `until` (river name) stops the marking at that confluence, `km` after that distance.
+#
+# Coordinates: dams, weirs and power stations mapped in OpenStreetMap (Overture Maps 2026-10-21.0, base/infrastructure
+# water/dam, water/weir, power/plant, power/generator: "osm" in the notes), else from the operator and scheme
+# descriptions ("approx": placed on the named river from the description; check before relying on the extent).
+#
+# General sources for every scheme:
+#   Electricity Authority, Hydrological Modelling Dataset, Report 4: Hydro power scheme background and descriptions
+#     (2022): https://www.emi.ea.govt.nz/Environment/Datasets/HydrologicalModellingDataset/1_InfrastructureAndHydroConstraintAttributes/HMD_Report4_HydroPowerSchemeBackgroundAndDescriptions_2022.pdf
+#   Te Ara, Hydroelectricity: https://teara.govt.nz/mi/hydroelectricity/print
+#   Wikipedia, Hydroelectric power in New Zealand: https://en.wikipedia.org/wiki/Hydroelectric_power_in_New_Zealand
+
+[settings]
+diverted_share = 0.5    # diverted: the water taken upstream is at least this share of the reach's natural flow (by area)
+regulated_share = 0.5   # regulated: water taken + controlled upstream is at least this share
+snap_named_m = 3000.0   # snap to the named river within this distance
+snap_any_m = 700.0      # else to the nearest reach (1 km2 or more) within this distance
+max_km = 400.0          # longest walk down from a point
+reservoir_grad = 0.5    # m/km: reaches upstream of a reservoir point this flat are the lake (lakes are flat in the DEM)
+reservoir_km = 30.0     # default lake length searched upstream (per point: reservoir_km)
+dam_m = 300.0           # reaches within this distance of a reservoir point are the dam itself
+
+[audit]
+# Hydro classes left out of `ml audit` and the candidate runs (models/audits/<model>_top_runs.csv). [] keeps them in
+# (the audit then only labels them in its `hydro` column).
+exclude = ["diverted", "reservoir"]
+
+[web]
+enabled = true          # `web data` writes <region>_hydro.json (the Top rivers page and the map's details read it)
+
+# ------------------------------------------------------------------------------------------------ North Island
+[[scheme]]
+id = "tongariro"
+name = "Tongariro Power Scheme"
+operator = "Genesis Energy"
+note = """Western Diversion: the Whakapapa intake and a 16.5 km tunnel to Lake Te Whaiau, with intake dams on the Okupata,
+Taurewa, Tawhitikuri and Mangatepopo streams on the way; the Whanganui headwaters go by a short tunnel to the Te
+Whaiau Stream; Lake Otamangakau and the Wairehu Canal take it all to Lake Rotoaira. Eastern Diversion: Lake Moawhango
+(Moawhango River, 22 Whangaehu tributaries) to the Tongariro by a 19 km tunnel; Rangipo Dam diverts the Tongariro to
+Rangipo Power Station, whose 3 km tailrace tunnel returns it just above the Poutu Intake, which sends the river to
+Lake Rotoaira and Tokaanu (Lake Taupo). Not modelled: the Whangaehu-side aqueduct intakes, Taurewa and Tawhitikuri."""
+sources = ["https://en.wikipedia.org/wiki/Tongariro_Power_Scheme", "https://teara.govt.nz/en/map/11834/tongariro-power-development",
+           "https://genesisenergy.co.nz/about/generation/rivers-lakes-and-rainfall",
+           "https://www.horizons.govt.nz/HRC/media/Media/One%20Plan/Jarrod-Bowler-for-Genesis-Power-Ltd.pdf?ext=.pdf"]
+
+[[scheme.point]]
+id = "whanganui_intake"
+name = "Whanganui Intake"
+river = "Whanganui River"
+role = "intake"
+lat = -39.02747
+lon = 175.60162
+note = "osm weir 'Whanganui Intake'"
+
+[[scheme.point]]
+id = "te_whaiau_dam"
+name = "Te Whaiau Dam"
+river = "Te Whaiau Stream"
+role = "intake"
+reservoir = true
+reservoir_km = 5
+lat = -39.01684
+lon = 175.60530
+note = "osm dam"
+
+[[scheme.point]]
+id = "otamangakau_dam"
+name = "Otamangakau Dam (Lake Otamangakau)"
+river = "Otamangakau Stream"
+role = "intake"
+reservoir = true
+reservoir_km = 8
+lat = -39.00562
+lon = 175.61796
+note = "osm dam; the Wairehu Canal takes the lake to Lake Rotoaira"
+
+[[scheme.point]]
+id = "whakapapa_intake"
+name = "Whakapapa Intake"
+river = "Whakapapa River"
+role = "intake"
+lat = -39.11806
+lon = 175.46761
+note = "osm dam 'Whakapapa Intake'; 16.5 km tunnel to Lake Te Whaiau"
+
+[[scheme.point]]
+id = "mangatepopo_intake"
+name = "Mangatepopo intake"
+river = "Mangatepopo Stream"
+role = "intake"
+lat = -39.0651
+lon = 175.5640
+note = "approx: where the Whakapapa-Te Whaiau tunnel crosses the stream (intake capacity about 5 m3/s)"
+
+[[scheme.point]]
+id = "okupata_intake"
+name = "Okupata intake"
+river = "Okupata Stream"
+role = "intake"
+lat = -39.0740
+lon = 175.4980
+note = "approx: where the tunnel crosses the stream (about 2 m3/s). Taurewa and Tawhitikuri intakes: not modelled (unnamed in REC2)"
+
+[[scheme.point]]
+id = "moawhango_dam"
+name = "Moawhango Dam (Lake Moawhango)"
+river = "Moawhango River"
+role = "intake"
+reservoir = true
+reservoir_km = 12
+lat = -39.40634
+lon = 175.75300
+note = "osm dam; 19.2 km tunnel north to the Tongariro"
+
+[[scheme.point]]
+id = "rangipo_dam"
+name = "Rangipo Dam"
+river = "Tongariro River"
+role = "intake"
+reservoir = true
+reservoir_km = 3
+lat = -39.20958
+lon = 175.77803
+note = "osm dam; head pond of Rangipo Power Station"
+
+[[scheme.point]]
+id = "rangipo_tailrace"
+name = "Rangipo tailrace outlet"
+river = "Tongariro River"
+role = "return"
+returns = ["rangipo_dam", "moawhango_dam"]
+lat = -39.1325
+lon = 175.8218
+note = "approx: 3 km tailrace tunnel 'to the Tongariro River immediately upstream of the Poutu Intake' (Genesis)"
+
+[[scheme.point]]
+id = "poutu_intake"
+name = "Poutu Intake"
+river = "Tongariro River"
+role = "intake"
+lat = -39.12902
+lon = 175.82214
+note = "osm dam 'Poutu Intake Dam'; Poutu Canal to Lake Rotoaira. The lower Tongariro keeps a residual flow"
+
+[[scheme]]
+id = "waikaremoana"
+name = "Waikaremoana Power Scheme"
+operator = "Genesis Energy"
+note = """Lake Waikaremoana (held by a landslide dam) feeds Kaitawa, Tuai and Piripaua through tunnels and Lakes Kaitawa
+and Whakamarino; Piripaua discharges into the Waikaretaheke River. The steep reaches below the lake outlet are the
+landslide dam face, dewatered by the scheme."""
+sources = ["https://genesisenergy.co.nz/about/generation/rivers-lakes-and-rainfall",
+           "https://www.engineeringnz.org/programmes/heritage/heritage-records/waikaremoana-power-stations/",
+           "https://www.nzherald.co.nz/hawkes-bay-today/news/inside-the-waikaremoana-power-scheme/IR5V443FIZGKTC4PDFIRKE35DM"]
+
+[[scheme.point]]
+id = "lake_outlet"
+name = "Lake Waikaremoana outlet (Kaitawa intake)"
+river = ""
+role = "intake"
+reservoir = true
+reservoir_km = 25
+lat = -38.7980
+lon = 177.1227
+note = "the lake outlet reach (unnamed in REC2; the Waikaretaheke River below it)"
+
+[[scheme.point]]
+id = "piripaua"
+name = "Piripaua Power Station"
+river = "Waikaretaheke River"
+role = "return"
+lat = -38.83910
+lon = 177.16788
+note = "osm plant"
+
+[[scheme]]
+id = "kaimai"
+name = "Kaimai hydro scheme"
+operator = "Manawa Energy (formerly Trustpower)"
+note = """Run of river with daily storage: weirs and tunnels take the upper Wairoa (REC2 name), Opuiaki, Ngatuhoa and
+Omanawa into Lake Mangaonui, Lloyd Mandeno and Lower Mangapapa stations, then Lake McLaren; the Ruahihi Canal takes
+the Wairoa from Lake McLaren to Ruahihi Power Station. The Wairoa below McLaren Falls runs only on release days (about
+26 a year, the dam-release run). Not modelled: the Opuiaki and Ngatuhoa intakes (positions not found)."""
+sources = ["https://www.manawaenergy.co.nz/kaimai-power-scheme",
+           "https://en.wikipedia.org/wiki/Kaimai_hydro_power_scheme"]
+
+[[scheme.point]]
+id = "wairoa_weir"
+name = "Upper Wairoa intake weir"
+river = "Wairoa River"
+role = "intake"
+lat = -37.87921
+lon = 176.05555
+note = "osm weir; Lloyd Mandeno diversion tunnel 1 km east"
+
+[[scheme.point]]
+id = "omanawa_intake"
+name = "Omanawa intake dam"
+river = "Omanawa River"
+role = "intake"
+lat = -37.88735
+lon = 176.09229
+note = "osm dam"
+
+[[scheme.point]]
+id = "lloyd_mandeno"
+name = "Lloyd Mandeno Power Station"
+river = "Wairoa River"
+role = "return"
+returns = ["wairoa_weir", "omanawa_intake"]
+lat = -37.84393
+lon = 176.05042
+note = "osm plant"
+
+[[scheme.point]]
+id = "mclaren_dam"
+name = "Lake McLaren dam (Ruahihi Canal intake)"
+river = "Wairoa River"
+role = "intake"
+reservoir = true
+reservoir_km = 3
+lat = -37.80820
+lon = 176.04432
+note = "osm dam at the head of the Ruahihi Canal"
+
+[[scheme.point]]
+id = "ruahihi"
+name = "Ruahihi Power Station"
+river = "Wairoa River"
+role = "return"
+returns = ["mclaren_dam"]
+lat = -37.77739
+lon = 176.05530
+note = "osm plant"
+
+[[scheme]]
+id = "rangitaiki"
+name = "Aniwhenua and Matahina (Rangitaiki River)"
+operator = "Aniwhenua: Southern Generation; Matahina: Manawa Energy (formerly Trustpower)"
+note = """Aniwhenua: a barrage above the Aniwhenua Falls (Lake Aniwaniwa) diverts the river through a canal and head
+pond to the power station, which returns it below the falls; a compensation flow (about 2.5 m3/s) keeps the falls
+running. Matahina: storage dam with the station at its toe (Lake Matahina)."""
+sources = ["https://en.wikipedia.org/wiki/Aniwhenua_Power_Station",
+           "https://environment.govt.nz/assets/what-government-is-doing/Fast-Track-Unlisted/Aniwhenua-Hydroscheme/145.03-Potential-env-effects-to-be-assessed-and-management-1.pdf",
+           "https://contact.co.nz/about-us/our-story/our-powerstations/hydro/matahina"]
+
+[[scheme.point]]
+id = "aniwhenua_barrage"
+name = "Aniwhenua barrage (Lake Aniwaniwa)"
+river = "Rangitaiki River"
+role = "intake"
+reservoir = true
+reservoir_km = 8
+lat = -38.3095
+lon = 176.7925
+note = "approx: top of the bypassed reach above the falls"
+
+[[scheme.point]]
+id = "aniwhenua_ps"
+name = "Aniwhenua Power Station"
+river = "Rangitaiki River"
+role = "return"
+regulates = false
+lat = -38.29367
+lon = 176.79231
+note = "osm generator"
+
+[[scheme.point]]
+id = "matahina_dam"
+name = "Matahina Dam"
+river = "Rangitaiki River"
+role = "dam"
+reservoir = true
+reservoir_km = 25
+lat = -38.11478
+lon = 176.81621
+note = "osm dam"
+
+[[scheme]]
+id = "wheao"
+name = "Wheao and Flaxy"
+operator = "Manawa Energy (formerly Trustpower)"
+note = """The Rangitaiki is dammed and all but a residual flow (0.5 m3/s) diverted by canal, with the Wheao River, to
+the Flaxy and Wheao stations, which discharge into the Wheao River above its confluence with the Rangitaiki."""
+sources = ["https://en.wikipedia.org/wiki/Rangitaiki_River"]
+
+[[scheme.point]]
+id = "rangitaiki_intake"
+name = "Rangitaiki diversion dam"
+river = "Rangitaiki River"
+role = "intake"
+reservoir = true
+reservoir_km = 6
+lat = -38.6622
+lon = 176.4720
+note = "approx: bottom of the flat (impounded) stretch of the upper Rangitaiki"
+
+[[scheme.point]]
+id = "wheao_dam"
+name = "Wheao Dam"
+river = "Wheao River"
+role = "intake"
+reservoir = true
+reservoir_km = 3
+lat = -38.68110
+lon = 176.56955
+note = "osm dam"
+
+[[scheme.point]]
+id = "wheao_ps"
+name = "Wheao Power Station"
+river = "Wheao River"
+role = "return"
+lat = -38.63311
+lon = 176.57803
+note = "osm generator"
+
+[[scheme]]
+id = "waikato"
+name = "Waikato hydro system"
+operator = "Mercury"
+note = """Lake Taupo control gates and eight dams. Aratiatia diverts the river past the Aratiatia Rapids (released a few
+times a day); Arapuni's station sits about 1 km below its dam, so the gorge between is bypassed. The others are
+reservoirs with the station at the dam."""
+sources = ["https://subsite.waikatoregion.govt.nz/assets/WRC/FreshwaterInfoSheetsHydroelecticity.pdf",
+           "https://en.wikipedia.org/wiki/Hydroelectric_power_in_New_Zealand"]
+
+[[scheme.point]]
+id = "taupo_gates"
+name = "Taupo control gates"
+river = "Waikato River"
+role = "dam"
+area_km2 = 3300
+lat = -38.68111
+lon = 176.06992
+note = "osm weir 'Taupo Control Gates'. area_km2: Lake Taupo's catchment; the national network does not route the lake into the Waikato here (3 km2), so the area is given"
+
+[[scheme.point]]
+id = "aratiatia_dam"
+name = "Aratiatia Dam"
+river = "Waikato River"
+role = "intake"
+reservoir = true
+reservoir_km = 8
+lat = -38.61722
+lon = 176.13639
+note = "osm dam"
+
+[[scheme.point]]
+id = "aratiatia_ps"
+name = "Aratiatia Power Station"
+river = "Waikato River"
+role = "return"
+returns = ["aratiatia_dam"]
+lat = -38.61580
+lon = 176.14171
+note = "osm plant"
+
+[[scheme.point]]
+id = "ohakuri_dam"
+name = "Ohakuri Dam"
+river = "Waikato River"
+role = "dam"
+reservoir = true
+lat = -38.40853
+lon = 176.09005
+note = "osm dam"
+
+[[scheme.point]]
+id = "atiamuri_dam"
+name = "Atiamuri Dam"
+river = "Waikato River"
+role = "dam"
+reservoir = true
+reservoir_km = 10
+lat = -38.39232
+lon = 176.02306
+note = "osm dam"
+
+[[scheme.point]]
+id = "whakamaru_dam"
+name = "Whakamaru Dam"
+river = "Waikato River"
+role = "dam"
+reservoir = true
+lat = -38.41985
+lon = 175.80798
+note = "osm dam"
+
+[[scheme.point]]
+id = "maraetai_dam"
+name = "Maraetai Dam"
+river = "Waikato River"
+role = "dam"
+reservoir = true
+lat = -38.35196
+lon = 175.74692
+note = "osm dam"
+
+[[scheme.point]]
+id = "waipapa_dam"
+name = "Waipapa Dam"
+river = "Waikato River"
+role = "dam"
+reservoir = true
+reservoir_km = 12
+lat = -38.29204
+lon = 175.68383
+note = "osm generators"
+
+[[scheme.point]]
+id = "arapuni_dam"
+name = "Arapuni Dam"
+river = "Waikato River"
+role = "intake"
+reservoir = true
+lat = -38.08214
+lon = 175.63922
+note = "osm dam"
+
+[[scheme.point]]
+id = "arapuni_ps"
+name = "Arapuni Power Station"
+river = "Waikato River"
+role = "return"
+returns = ["arapuni_dam"]
+lat = -38.07168
+lon = 175.64397
+note = "osm generator"
+
+[[scheme.point]]
+id = "karapiro_dam"
+name = "Karapiro Dam"
+river = "Waikato River"
+role = "dam"
+reservoir = true
+lat = -37.92448
+lon = 175.53948
+note = "osm dam"
+
+[[scheme]]
+id = "piriaka"
+name = "Piriaka"
+operator = "King Country Energy"
+note = """Small run-of-river station on the Whanganui near Manunui: a weir and short canal bypass about 1.5 km of the
+river. Approx: weir position and the share taken (take = 0.6) are estimates."""
+sources = ["https://en.wikipedia.org/wiki/List_of_power_stations_in_New_Zealand"]
+
+[[scheme.point]]
+id = "piriaka_weir"
+name = "Piriaka weir"
+river = "Whanganui River"
+role = "intake"
+take = 0.6
+lat = -38.9284
+lon = 175.3514
+note = "approx"
+
+[[scheme.point]]
+id = "piriaka_ps"
+name = "Piriaka Power Station"
+river = "Whanganui River"
+role = "return"
+regulates = false
+lat = -38.91195
+lon = 175.34286
+note = "osm plant"
+
+[[scheme]]
+id = "patea"
+name = "Patea (Lake Rotorangi)"
+operator = "Manawa Energy (formerly Trustpower)"
+note = "Storage dam with the station at its toe; Lake Rotorangi is about 46 km long."
+sources = ["https://en.wikipedia.org/wiki/List_of_power_stations_in_New_Zealand"]
+
+[[scheme.point]]
+id = "patea_dam"
+name = "Patea Dam"
+river = "Patea River"
+role = "dam"
+reservoir = true
+reservoir_km = 50
+lat = -39.54584
+lon = 174.56826
+note = "osm dam"
+
+[[scheme]]
+id = "mangahao"
+name = "Mangahao"
+operator = "King Country Energy / Todd Generation"
+note = """Dams on the upper Mangahao River (No. 1 and No. 2) send it by tunnel through the Tararua foothills to the
+Mangahao Power Station near Shannon, which discharges into the Mangaore Stream (Manawatu). The Mangahao below the
+dams keeps a residual flow."""
+sources = ["https://en.wikipedia.org/wiki/List_of_power_stations_in_New_Zealand"]
+
+[[scheme.point]]
+id = "mangahao_no1"
+name = "Mangahao No. 1 Dam"
+river = "Mangahao River"
+role = "intake"
+reservoir = true
+reservoir_km = 5
+lat = -40.62611
+lon = 175.47891
+note = "osm dam"
+
+[[scheme.point]]
+id = "mangahao_ps"
+name = "Mangahao Power Station"
+river = "Mangaore Stream"
+role = "return"
+lat = -40.57676
+lon = 175.45019
+note = "osm plant; water from another catchment (the Mangahao)"
+
+# ------------------------------------------------------------------------------------------------ South Island
+[[scheme]]
+id = "cobb"
+name = "Cobb"
+operator = "Manawa Energy (formerly Trustpower)"
+note = "Cobb Dam (Cobb Reservoir) sends the Cobb River by tunnel and penstock to the power station on the Takaka."
+sources = ["https://en.wikipedia.org/wiki/List_of_power_stations_in_New_Zealand"]
+
+[[scheme.point]]
+id = "cobb_dam"
+name = "Cobb Dam"
+river = "Cobb River"
+role = "intake"
+reservoir = true
+reservoir_km = 8
+lat = -41.10355
+lon = 172.68782
+note = "osm dam"
+
+[[scheme.point]]
+id = "cobb_ps"
+name = "Cobb Power Station"
+river = "Takaka River"
+role = "return"
+lat = -41.08628
+lon = 172.73226
+note = "osm generator"
+
+[[scheme]]
+id = "coleridge"
+name = "Lake Coleridge"
+operator = "Manawa Energy (formerly Trustpower)"
+note = """Lake Coleridge feeds the power station on the Rakaia; the Harper River and part of the Wilberforce River are
+diverted into the lake. Approx: intake positions and the shares taken (Harper 0.5, Wilberforce 0.3) are estimates."""
+sources = ["https://en.wikipedia.org/wiki/List_of_power_stations_in_New_Zealand"]
+
+[[scheme.point]]
+id = "harper_diversion"
+name = "Harper diversion"
+river = "Harper River"
+role = "intake"
+take = 0.5
+lat = -43.2163
+lon = 171.4718
+note = "approx"
+
+[[scheme.point]]
+id = "wilberforce_diversion"
+name = "Wilberforce diversion"
+river = "Wilberforce River"
+role = "intake"
+take = 0.3
+lat = -43.1989
+lon = 171.4167
+note = "approx"
+
+[[scheme.point]]
+id = "coleridge_ps"
+name = "Coleridge Power Station"
+river = "Rakaia River"
+role = "return"
+lat = -43.36418
+lon = 171.52726
+note = "osm plant"
+
+[[scheme]]
+id = "highbank"
+name = "Highbank (Rangitata Diversion Race)"
+operator = "Manawa Energy (formerly Trustpower); race: Rangitata Diversion Race Management"
+note = """The Rangitata Diversion Race takes up to about 30 m3/s of the Rangitata at Klondyke for irrigation and the
+Montalto and Highbank stations, which discharge into the Rakaia. A small share of the Rangitata flood flow: no
+reach is flagged (take = 0.25 is below the thresholds); listed for coverage."""
+sources = ["https://en.wikipedia.org/wiki/List_of_power_stations_in_New_Zealand"]
+
+[[scheme.point]]
+id = "rdr_intake"
+name = "Rangitata Diversion Race intake (Klondyke)"
+river = "Rangitata River"
+role = "intake"
+take = 0.25
+lat = -43.8488
+lon = 171.2609
+note = "approx"
+
+[[scheme.point]]
+id = "highbank_ps"
+name = "Highbank Power Station"
+river = "Rakaia River"
+role = "return"
+lat = -43.57317
+lon = 171.73555
+note = "osm generator"
+
+[[scheme]]
+id = "opuha"
+name = "Opuha Dam"
+operator = "Opuha Water"
+note = "Storage dam for irrigation and power (Lake Opuha); the station is at the dam toe."
+sources = ["https://en.wikipedia.org/wiki/List_of_power_stations_in_New_Zealand"]
+
+[[scheme.point]]
+id = "opuha_dam"
+name = "Opuha Dam"
+river = "Opuha River"
+role = "dam"
+reservoir = true
+reservoir_km = 8
+lat = -44.00078
+lon = 170.89225
+note = "osm generator 'Opuha Dam'"
+
+[[scheme]]
+id = "waitaki"
+name = "Waitaki hydro scheme"
+operator = "Meridian Energy; Tekapo A and B: Genesis Energy"
+note = """Lake Tekapo goes by canal to Tekapo B and Lake Pukaki; Pukaki and Ohau go by canals to Ohau A (Lake
+Ruataniwha) and Ohau B and C (Lake Benmore). The Tekapo, Pukaki and Ohau rivers below their control structures carry
+only residual flows down to Lake Benmore. Benmore, Aviemore and Waitaki are storage dams; the Waitaki below is
+regulated to the sea."""
+sources = ["https://www.meridianenergy.co.nz/power-stations/hydro/about-the-waitaki-hydro-scheme",
+           "https://en.wikipedia.org/wiki/Waitaki_River"]
+
+[[scheme.point]]
+id = "tekapo_gates"
+name = "Lake Tekapo control structure"
+river = "Tekapo River"
+role = "intake"
+lat = -44.0060
+lon = 170.4805
+note = "approx: lake outlet"
+
+[[scheme.point]]
+id = "pukaki_dam"
+name = "Pukaki High Dam"
+river = "Pukaki River"
+role = "intake"
+lat = -44.18786
+lon = 170.14955
+note = "osm dam"
+
+[[scheme.point]]
+id = "ohau_weir"
+name = "Lake Ohau weir"
+river = "Ohau River"
+role = "intake"
+lat = -44.2645
+lon = 169.9826
+note = "approx: lake outlet"
+
+[[scheme.point]]
+id = "ohau_a"
+name = "Ohau A (into Lake Ruataniwha)"
+river = "Ohau River"
+role = "return"
+returns = ["ohau_weir", "tekapo_gates", "pukaki_dam"]
+lat = -44.26427
+lon = 170.03189
+note = "osm generators"
+
+[[scheme.point]]
+id = "ruataniwha_dam"
+name = "Ruataniwha Dam (Lake Ruataniwha)"
+river = "Ohau River"
+role = "intake"
+reservoir = true
+reservoir_km = 6
+lat = -44.28629
+lon = 170.08728
+note = "osm dam; Ohau B and C canal"
+
+[[scheme.point]]
+id = "ohau_c"
+name = "Ohau C (into Lake Benmore)"
+river = ""
+role = "return"
+lat = -44.34189
+lon = 170.18258
+note = "osm generator; returns every intake of the scheme"
+
+[[scheme.point]]
+id = "benmore_dam"
+name = "Benmore Dam (Lake Benmore)"
+river = "Waitaki River"
+role = "dam"
+reservoir = true
+reservoir_km = 45
+lat = -44.56641
+lon = 170.19737
+note = "osm dam"
+
+[[scheme.point]]
+id = "aviemore_dam"
+name = "Aviemore Dam"
+river = "Waitaki River"
+role = "dam"
+reservoir = true
+reservoir_km = 20
+lat = -44.65635
+lon = 170.35317
+note = "osm dam"
+
+[[scheme.point]]
+id = "waitaki_dam"
+name = "Waitaki Dam"
+river = "Waitaki River"
+role = "dam"
+reservoir = true
+reservoir_km = 10
+lat = -44.68881
+lon = 170.42672
+note = "osm dam"
+
+[[scheme]]
+id = "clutha"
+name = "Clutha hydro scheme and lake controls"
+operator = "Contact Energy"
+note = """Clyde (Lake Dunstan) and Roxburgh are storage dams with the stations at the dam; the Clutha below is regulated.
+Lake Hawea is a controlled storage (Hawea River below the control dam). The Kawarau Falls gates control Lake Wakatipu
+within a narrow range (take = 0.3: no reach flagged on their own)."""
+sources = ["https://en.wikipedia.org/wiki/Hydroelectric_power_in_New_Zealand"]
+
+[[scheme.point]]
+id = "hawea_dam"
+name = "Lake Hawea control dam"
+river = "Hawea River"
+role = "dam"
+lat = -44.61038
+lon = 169.24974
+note = "osm dam"
+
+[[scheme.point]]
+id = "kawarau_gates"
+name = "Kawarau Falls control gates"
+river = "Kawarau River"
+role = "dam"
+take = 0.3
+lat = -45.0301
+lon = 168.7401
+note = "approx: Lake Wakatipu outlet"
+
+[[scheme.point]]
+id = "clyde_dam"
+name = "Clyde Dam (Lake Dunstan)"
+river = "Clutha River"
+role = "dam"
+reservoir = true
+reservoir_km = 30
+lat = -45.17958
+lon = 169.30602
+note = "osm dam"
+
+[[scheme.point]]
+id = "roxburgh_dam"
+name = "Roxburgh Dam (Lake Roxburgh)"
+river = "Clutha River"
+role = "dam"
+reservoir = true
+reservoir_km = 35
+lat = -45.47606
+lon = 169.32253
+note = "osm dam"
+
+[[scheme]]
+id = "waipori"
+name = "Waipori"
+operator = "Manawa Energy (formerly Trustpower)"
+note = """Lake Mahinerangi (Mahinerangi Dam) feeds four stations down the Waipori gorge (1A, 2A, 3, 4) through tunnels
+and penstocks; the riverbed between the dam and Waipori 4 carries a residual flow."""
+sources = ["https://en.wikipedia.org/wiki/List_of_power_stations_in_New_Zealand"]
+
+[[scheme.point]]
+id = "mahinerangi_dam"
+name = "Mahinerangi Dam"
+river = "Waipori River"
+role = "intake"
+reservoir = true
+reservoir_km = 20
+lat = -45.8770
+lon = 169.9750
+note = "approx: next to Waipori 1A (osm)"
+
+[[scheme.point]]
+id = "waipori4"
+name = "Waipori 4 Power Station"
+river = "Waipori River"
+role = "return"
+lat = -45.92521
+lon = 170.02107
+note = "osm generator"
+
+[[scheme]]
+id = "manapouri"
+name = "Manapouri"
+operator = "Meridian Energy"
+note = """Lake Manapouri discharges through the power station and tailrace tunnels to Doubtful Sound. The Mararoa Weir
+turns the Mararoa and the upper Waiau into the lake; the lower Waiau below it carries a residual flow. The Te Anau
+control gates regulate the upper Waiau between Lakes Te Anau and Manapouri."""
+sources = ["https://en.wikipedia.org/wiki/Hydroelectric_power_in_New_Zealand"]
+
+[[scheme.point]]
+id = "te_anau_gates"
+name = "Lake Te Anau control gates"
+river = "Waiau River"
+role = "dam"
+lat = -45.4421
+lon = 167.6840
+note = "approx: lake outlet"
+
+[[scheme.point]]
+id = "mararoa_weir"
+name = "Mararoa Weir control structure"
+river = "Waiau River"
+role = "intake"
+lat = -45.61539
+lon = 167.69050
+note = "osm dam"
+
+[[scheme]]
+id = "monowai"
+name = "Monowai"
+operator = "Pioneer Energy"
+note = "Lake Monowai outlet control and a canal to the power station near the Waiau; the Monowai River between is bypassed."
+sources = ["https://en.wikipedia.org/wiki/List_of_power_stations_in_New_Zealand"]
+
+[[scheme.point]]
+id = "monowai_gates"
+name = "Lake Monowai outlet"
+river = "Monowai River"
+role = "intake"
+lat = -45.8069
+lon = 167.5284
+note = "approx: lake outlet"
+
+[[scheme.point]]
+id = "monowai_ps"
+name = "Monowai Power Station"
+river = "Monowai River"
+role = "return"
+lat = -45.77568
+lon = 167.61670
+note = "osm generator (unnamed), by the Waiau: the Monowai walk ends where the Monowai joins the Waiau"
+
+[[scheme]]
+id = "arnold"
+name = "Arnold"
+operator = "Manawa Energy (formerly Trustpower)"
+note = "A weir on the Arnold River below Lake Brunner and a canal to the power station bypass part of the river. Approx."
+sources = ["https://en.wikipedia.org/wiki/List_of_power_stations_in_New_Zealand"]
+
+[[scheme.point]]
+id = "arnold_intake"
+name = "Arnold intake weir"
+river = ""
+role = "intake"
+lat = -42.5400
+lon = 171.4250
+note = "approx; the Arnold River is unnamed in REC2 here (nearest reach)"
+
+[[scheme.point]]
+id = "arnold_ps"
+name = "Arnold Power House"
+river = ""
+role = "return"
+regulates = false
+lat = -42.52369
+lon = 171.40790
+note = "osm generator"
+
+[[scheme]]
+id = "kumara"
+name = "Kumara"
+operator = "Manawa Energy (formerly Trustpower)"
+note = "Old water races take the Kawhaka Creek (Taramakau tributary) to Kapitia Reservoir and the Kumara, Dillmans and Duffers stations."
+sources = ["https://en.wikipedia.org/wiki/List_of_power_stations_in_New_Zealand"]
+
+[[scheme.point]]
+id = "kawhaka_intake"
+name = "Kawhaka intake"
+river = "Kawhaka Creek"
+role = "intake"
+lat = -42.75606
+lon = 171.22523
+note = "osm weir 'Dfs Kaiwhaka Intake'"
+
+[[scheme]]
+id = "kaniere"
+name = "Kaniere Forks and McKays Creek"
+operator = "Manawa Energy (formerly Trustpower)"
+note = "Lake Kaniere water goes by race to Kaniere Forks and McKays Creek stations; the Kaniere River below the lake is reduced. Approx."
+sources = ["https://en.wikipedia.org/wiki/List_of_power_stations_in_New_Zealand"]
+
+[[scheme.point]]
+id = "kaniere_outlet"
+name = "Lake Kaniere outlet"
+river = "Kaniere River"
+role = "intake"
+lat = -42.7863
+lon = 171.1341
+note = "approx: top of the Kaniere River"
+
+[[scheme.point]]
+id = "kaniere_forks"
+name = "Kaniere Forks Power Station"
+river = "Kaniere River"
+role = "return"
+lat = -42.76623
+lon = 171.06951
+note = "osm generator"
+
+[[scheme]]
+id = "roaring_meg"
+name = "Roaring Meg"
+operator = "Pioneer Energy"
+note = "Upper and Lower Roaring Meg stations take the stream by pipeline; it returns at the lower station by the Kawarau. Approx intake."
+sources = ["https://en.wikipedia.org/wiki/List_of_power_stations_in_New_Zealand"]
+
+[[scheme.point]]
+id = "roaring_meg_intake"
+name = "Roaring Meg intake"
+river = "Roaring Meg"
+role = "intake"
+lat = -44.9728
+lon = 169.0511
+note = "approx: above the upper station (osm)"
+
+[[scheme.point]]
+id = "roaring_meg_lower"
+name = "Lower Roaring Meg Power House"
+river = "Roaring Meg"
+role = "return"
+regulates = false
+lat = -45.00156
+lon = 169.06998
+note = "osm generator"
+
+[[scheme]]
+id = "branch"
+name = "Branch River (Argyle and Wairau)"
+operator = "Manawa Energy (formerly Trustpower)"
+note = "A weir on the Branch River feeds a canal to Argyle and Wairau stations, which discharge into the Wairau. Approx weir."
+sources = ["https://en.wikipedia.org/wiki/List_of_power_stations_in_New_Zealand"]
+
+[[scheme.point]]
+id = "branch_weir"
+name = "Branch River intake weir"
+river = "Branch River"
+role = "intake"
+lat = -41.7718
+lon = 173.1255
+note = "approx"
+
+[[scheme]]
+id = "waihopai"
+name = "Waihopai"
+operator = "Manawa Energy (formerly Trustpower)"
+note = "Small storage dam with the station at its toe."
+sources = ["https://en.wikipedia.org/wiki/List_of_power_stations_in_New_Zealand"]
+
+[[scheme.point]]
+id = "waihopai_dam"
+name = "Waihopai Dam"
+river = "Waihopai River"
+role = "dam"
+reservoir = true
+reservoir_km = 5
+lat = -41.66457
+lon = 173.57142
+note = "osm dam"

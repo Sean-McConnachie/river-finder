@@ -808,7 +808,7 @@ AUDIT_DIR = MODELS_DIR / "audits"
 
 
 def candidate_runs(card: dict, t: pd.DataFrame | None = None, min_pct: float = 99.0, min_len_km: float = 1.0,
-                   max_gap: int = 1) -> pd.DataFrame:
+                   max_gap: int = 1, hydro_exclude: tuple[str, ...] | None = None) -> pd.DataFrame:
     """Runs that a card ranks in the top ``100 - min_pct`` % of *unlisted* reaches (domain reaches that no
     known section covers). A trained model puts its own training rivers at the very top nationally,
     so the cut is taken among unlisted reaches only.
@@ -819,7 +819,14 @@ def candidate_runs(card: dict, t: pd.DataFrame | None = None, min_pct: float = 9
     card's recipe (mean over repeats, ``data/nz/ml_oof.npz``), a check that the run is not an
     in-sample or single-fit artefact. For hand audits, the guide status of the river name, terrain,
     reach style, OSM waterfalls and road distance are listed for the reader; access never changes the
-    order (it is the paddler's call)."""
+    order (it is the paddler's call).
+
+    Hydro-affected reaches (``hydro.py``, ``config/hydro.toml``): reaches of the ``hydro_exclude`` classes (default
+    ``[audit] exclude``: diverted and reservoir, where the natural flood overstates the flow) never start, join or
+    bridge a run; they stay in the percentile reference, so the other reaches keep their percentiles. ``hydro``,
+    ``hydro_scheme`` and ``hydro_frac`` label what is left (mostly regulated reaches below storage dams); the
+    reaches and rivers left out are in ``out.attrs["hydro_excluded"]``."""
+    from . import hydro as H
     from .models import all_sections, guide_mask, logits, norm_river, percentiles
 
     t = t if t is not None else ml_table()
@@ -842,7 +849,11 @@ def candidate_runs(card: dict, t: pd.DataFrame | None = None, min_pct: float = 9
             k = f"cv_{card['recipe']}"
             if k in z.files and z[k].shape[1] == len(t):
                 oof = within(np.nan_to_num(z[k].mean(axis=0), nan=-1e9))
-    hot = unl & (pct >= min_pct)
+    hy = H.columns(t)
+    ex_cls = H.load_config().audit_exclude if hydro_exclude is None else tuple(hydro_exclude)
+    excl = hy["hydro"].isin(ex_cls).to_numpy() if ex_cls else np.zeros(len(t), dtype=bool)
+    dropped = unl & (pct >= min_pct) & excl
+    hot = unl & (pct >= min_pct) & ~excl
     # a river is "in the guides" if a guide names it or a guide section lies on it (REC2 spellings differ:
     # Manganui-a-te-ao / Manganui-o-te-ao, Routeburn / Route Burn)
     listed = ({norm_river(s.river) for s in secs if s.status == "runnable"}
@@ -861,7 +872,7 @@ def candidate_runs(card: dict, t: pd.DataFrame | None = None, min_pct: float = 9
         if seen[s] or (up[s] >= 0 and hot[up[s]]):
             continue
         members, gap, cur = [], [], s
-        while cur >= 0 and not seen[cur]:
+        while cur >= 0 and not seen[cur] and not excl[cur]:
             if hot[cur]:
                 members += gap + [cur]
                 gap = []
@@ -901,6 +912,7 @@ def candidate_runs(card: dict, t: pd.DataFrame | None = None, min_pct: float = 9
             np.isfinite(sub["falls_max_h_m"]).any() else None,
             "road_min_m": round(float(np.nanmin(road[m])), 0) if road is not None else None,
             "river_in_guides": bool(norm_river(name) in listed) if name else False,
+            **dict(zip(("hydro", "hydro_scheme", "hydro_frac"), H.run_class(hy, m, length), strict=True)),
             "lat_top": round(float(sub["lat"].iloc[0]), 5), "lon_top": round(float(sub["lon"].iloc[0]), 5),
             "lat_bottom": round(float(sub["lat"].iloc[-1]), 5), "lon_bottom": round(float(sub["lon"].iloc[-1]), 5),
             "top_seg_id": int(sub["seg_id"].iloc[0]),
@@ -909,6 +921,12 @@ def candidate_runs(card: dict, t: pd.DataFrame | None = None, min_pct: float = 9
     if len(out):
         out = out.sort_values(["median_pct", "length_km"], ascending=False).reset_index(drop=True)
         out.insert(0, "rank", np.arange(1, len(out) + 1))
+    names = t["river"].fillna("").to_numpy()[dropped]
+    out.attrs["hydro_excluded"] = {
+        "classes": list(ex_cls), "reaches": int(dropped.sum()),
+        "km": round(float(length[dropped].sum() / 1000.0), 1),
+        "by_scheme": {k: int(v) for k, v in pd.Series(hy["hydro_scheme"].to_numpy()[dropped]).value_counts().items()},
+        "rivers": sorted({str(r) for r in names if r})}
     return out
 
 
@@ -924,4 +942,8 @@ def write_audit(model_id: str, n: int = 60, log=print) -> Path:
     p = AUDIT_DIR / f"{model_id}_top_runs.csv"
     best.to_csv(p, index=False)
     log(f"audit: {len(runs)} runs in the top 1% of unlisted reaches; best of {len(best)} rivers -> {p}")
+    ex = runs.attrs.get("hydro_excluded") or {}
+    if ex.get("reaches"):
+        log(f"audit: hydro ({', '.join(ex['classes'])}) left out {ex['reaches']} top-1% reaches ({ex['km']} km): "
+            f"{', '.join(f'{k} {v}' for k, v in ex['by_scheme'].items())}; rivers: {', '.join(ex['rivers']) or '-'}")
     return p

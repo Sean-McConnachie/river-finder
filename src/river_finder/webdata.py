@@ -6,6 +6,7 @@ viewer``, ``external attach``). Written into the viewer data directory (default 
 | ``<vid>_sections.json`` | known whitewater sections placed on the region's viewer reaches |
 | ``<vid>_access.json`` | roads, 4WD/private roads and foot tracks in the region (OpenStreetMap via Overture) |
 | ``gauges.json`` | national river-flow gauges (NIWA flood-statistics sites) and rain gauges (NIWA CliFlo) |
+| ``<vid>_hydro.json`` | hydro-diverted, regulated and reservoir reaches (``hydro.py``, ``config/hydro.toml``) |
 
 Sections come from ``labels/known_runs.toml`` (local knowledge) and ``labels/guide_research.json``
 (NZ RiverGuide, packraftingtrips.nz and others), placed with ``models.map_section``. Each record:
@@ -174,6 +175,65 @@ def write_sections(data_dir: Path, log=print) -> dict:
             (data_dir / f"{vid}_sections.json").write_text(json.dumps(recs, ensure_ascii=False, separators=(",", ":")))
             counts[vid] = len(recs)
             log(f"sections: {vid} {len(recs)}")
+    return counts
+
+
+# ---------------------------------------------------------------------------- hydro-affected reaches
+def hydro_record(h, vi, cfg) -> dict:
+    """``<vid>_hydro.json`` for one region: ``h`` the ``hydro.classify`` columns of its reaches, ``vi`` their viewer
+    index (-1 not shown). Layout: ``{"classes": ["", "diverted", "regulated", "reservoir"], "exclude": [classes the
+    lists leave out of new leads], "notes": {class: text}, "schemes": [{id, name, operator, note, src: [url]}],
+    "r": [[viewer reach, class index, scheme index, share %], ...]}``, flagged reaches only."""
+    from . import hydro as H
+
+    cls = h["hydro"].astype(str).to_numpy()
+    sch = h["hydro_scheme"].astype(str).to_numpy()
+    share = h["hydro_share"].to_numpy(dtype=float)
+    vi = np.asarray(vi)
+    rows = np.flatnonzero((cls != "") & (vi >= 0))
+    ids = sorted({sch[r] for r in rows})
+    sidx = {s: i for i, s in enumerate(ids)}
+    by_id = {s.id: s for s in cfg.schemes}
+    rows = rows[np.argsort(vi[rows])]
+    schemes = [{"id": s, "name": by_id[s].name, "operator": by_id[s].operator, "note": " ".join(by_id[s].note.split()),
+                "src": list(by_id[s].sources)} for s in ids]
+    return {"classes": list(H.CLASSES), "exclude": list(cfg.audit_exclude), "notes": dict(H.NOTES), "schemes": schemes,
+            "r": [[int(vi[r]), H.CLASSES.index(cls[r]), sidx[sch[r]], round(100 * min(float(share[r]), 1.0))]
+                  for r in rows]}
+
+
+def write_hydro(data_dir: Path, log=print) -> dict:
+    """``<vid>_hydro.json`` (see ``hydro_record``) for every region in ``regions_index.json``: national regions from
+    ``data/nz/hydro.pkl`` (``hydro attach``; computed now if it is missing or stale), 5 m reference areas
+    classified on their own network. Off with ``[web] enabled = false`` in ``config/hydro.toml``."""
+    from . import hydro as H
+    from .models import national_table, reference_frame
+    from .nzscore import slug
+
+    cfg = H.load_config()
+    if not cfg.web:
+        log("hydro: [web] enabled = false in config/hydro.toml; no <region>_hydro.json written")
+        return {}
+    index = json.loads((data_dir / "regions_index.json").read_text())
+    refs = set(list_regions())
+    counts = {}
+    nat = [e["id"] for e in index if e["id"] not in refs]
+    if nat:
+        t = national_table()
+        h = H.columns(t)
+        reg = t["region"].map({r: slug(r) for r in t["region"].unique()}).to_numpy()
+        for vid in nat:
+            sel = np.flatnonzero(reg == vid)
+            rec = hydro_record(h.iloc[sel], t["vi"].to_numpy()[sel], cfg)
+            (data_dir / f"{vid}_hydro.json").write_text(json.dumps(rec, ensure_ascii=False, separators=(",", ":")))
+            counts[vid] = len(rec["r"])
+    for e in index:
+        if e["id"] in refs:
+            f = reference_frame(e["id"], guide_regions=False)
+            rec = hydro_record(H.classify(f, cfg), f["vi"].to_numpy(), cfg)
+            (data_dir / f"{e['id']}_hydro.json").write_text(json.dumps(rec, ensure_ascii=False, separators=(",", ":")))
+            counts[e["id"]] = len(rec["r"])
+    log("hydro: " + ", ".join(f"{k} {v}" for k, v in counts.items()) + " flagged viewer reaches")
     return counts
 
 

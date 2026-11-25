@@ -127,6 +127,38 @@
 
   const section = (title, ...kids) => el("section", { class: "det-sec" }, el("h3", { text: title }), ...kids);
 
+  // Hydro-affected reaches (river_finder.webdata.write_hydro): <id>_hydro.json, optional.
+  const hydroFiles = new Map();
+  function hydroFile(id) {
+    if (!hydroFiles.has(id)) {
+      hydroFiles.set(id, fetch(`${id}_hydro.json`).then((res) => (res.ok ? res.json() : null)).then((H) => {
+        if (H) H.at = new Map(H.r.map(([m, c, sc]) => [m, [H.classes[c], H.schemes[sc]]]));
+        return H;
+      }).catch(() => null));
+    }
+    return hydroFiles.get(id);
+  }
+  const HYDRO_PILL = { diverted: "Hydro-diverted", regulated: "Regulated flow", reservoir: "Hydro lake or dam" };
+  /** {cls, scheme, frac, note}: the hydro class over most of the flagged length of these reaches; null if none. */
+  function hydroOf(H, S, ms) {
+    if (!H || !H.at?.size) return null;
+    const by = new Map(); let all = 0, hit = 0;
+    ms.forEach((m) => {
+      all += S.len[m]; const h = H.at.get(m); if (!h) return;
+      hit += S.len[m]; const k = `${h[0]}|${h[1].id}`, cur = by.get(k);
+      if (cur) cur.len += S.len[m]; else by.set(k, { cls: h[0], scheme: h[1], len: S.len[m] });
+    });
+    if (!hit) return null;
+    const top = [...by.values()].sort((a, b) => b.len - a.len)[0];
+    return { cls: top.cls, scheme: top.scheme, frac: hit / all, note: H.notes[top.cls] || "" };
+  }
+  function hydroNote(hy) {
+    const part = hy.frac < 0.95 ? `${Math.round(100 * hy.frac)}% of this stretch: ` : "";
+    const src = (hy.scheme.src || []).filter((u) => /^https?:\/\//i.test(u))[0];
+    return el("p", { class: "rf-note det-hydro" }, `${part}${hy.note} ${hy.scheme.name}${hy.scheme.operator ? ` (${hy.scheme.operator})` : ""}. `,
+      src ? ext(src, "Scheme source") : null);
+  }
+
   async function riverDetail(f, ctx) {
     const R = await RF.data.region(f.region), S = R.segments;
     let ms, sec = null, highlight;
@@ -141,6 +173,7 @@
     const score = sc?.pct?.length ? { pct: st.score,
       model: sc.fallback ? "Pooled regression (this build has no per-model scores)" : RF.models.get(RF.state.model)?.title || RF.state.model } : null;
     const onSection = f.kind !== "section" ? R.sections.find((x) => ms.some((m) => x.m.includes(m))) : null;
+    const hy = hydroOf(await hydroFile(R.id), S, f.kind === "reach" ? [f.seg] : ms);
     const name = f.kind === "section" ? sec.river : f.name;
 
     // header
@@ -157,6 +190,7 @@
     if (sec) pills.append(el("span", { class: "rf-pill det-grade", style: `--g:${M.gradeColor(M.gradeBin(sec))}`, text: sec.grade ? `Grade ${sec.grade}` : "Grade not recorded" }));
     if (f.kind === "run" && !(onSection && f.status === "candidate")) pills.append(el("span", { class: `rf-pill ${f.status === "candidate" ? "rf-pill--ok" : f.status === "heldout" ? "rf-pill--warn" : ""}`, text: f.status === "candidate" ? "Not in the guides" : f.status === "heldout" ? "Test river (held out)" : "In the guides" }));
     if (onSection) pills.append(el("span", { class: "rf-pill rf-pill--accent", text: `In the guides: overlaps ${onSection.river}${onSection.section ? ` (${onSection.section})` : ""}` }));
+    if (hy && hy.frac >= 0.5) pills.append(el("span", { class: `rf-pill${hy.cls === "regulated" ? "" : " rf-pill--warn"}`, text: HYDRO_PILL[hy.cls] || hy.cls }));
     if (sec?.popularity) pills.append(el("span", { class: "rf-pill", text: sec.popularity }));
     if (sec?.time) pills.append(el("span", { class: "rf-pill", text: sec.time }));
     const desc = sec?.desc ? [el("p", { class: "det-desc", text: sec.desc }), el("p", { class: "rf-note", text: SRC_NOTE[sec.src] || "" })]
@@ -179,7 +213,7 @@
     const midC = S.c[st.stem[st.stem.length >> 1]][0];
 
     const body = [
-      el("div", { class: "det-summary" }, pills, ...desc, gen, apart),
+      el("div", { class: "det-summary" }, pills, ...desc, gen, apart, hy ? hydroNote(hy) : null),
       section("Key numbers", statsTable(st, score)),
       section("Long profile", ...profile(S, st.stem, highlight), stemNote),
       M.rain?.section(f, R), // 57-rain.js: live rain at the outlet (null without live rain)

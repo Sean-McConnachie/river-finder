@@ -10,9 +10,12 @@
   const PARALLEL = 3;    // regions fetched at a time for "All regions"
   const STORE = "top:filters";
   const ROMAN = { 2: "II", 3: "III", 4: "IV", 5: "V", 6: "VI" };
-  const STATUS = [["candidate", "New leads"], ["listed", "In guides"], ["heldout", "Test rivers"]];
+  // "hydro": a run not in the guides on mostly hydro-diverted (or reservoir) reaches: not a new lead (<id>_hydro.json)
+  const STATUS = [["candidate", "New leads"], ["listed", "In guides"], ["heldout", "Test rivers"], ["hydro", "Hydro-affected"]];
   const STATUS_KEYS = STATUS.map(([k]) => k);
-  const PILL = { candidate: ["rf-pill--ok", "New lead"], listed: ["", "In guides"], heldout: ["rf-pill--warn", "Test river"] };
+  const PILL = { candidate: ["rf-pill--ok", "New lead"], listed: ["", "In guides"], heldout: ["rf-pill--warn", "Test river"],
+    hydro: ["rf-pill--warn", "Hydro-affected"] };
+  const HYDRO_PILL = { diverted: "Hydro-diverted", regulated: "Regulated flow", reservoir: "Hydro lake or dam" };
   const SORTS = [["score", "Score (best first)"], ["grad", "Gradient (steepest)"], ["maf", "Flood flow (largest)"], ["len", "Length (longest)"]];
   const SORT_KEY = { grad: (r) => r.grad, maf: (r) => r.maf, len: (r) => r.len };
   const OPT = { grade: [2, 3, 4, 5, 6], grad: [10, 20, 30, 40, 50, 60, 80, 100], len: [1, 2, 3, 5, 10, 20],
@@ -39,6 +42,8 @@
       if (!s || typeof s !== "object") return d;
       const pick = (v, opts) => (opts.includes(v) ? v : null);
       const status = Array.isArray(s.status) ? STATUS_KEYS.filter((k) => s.status.includes(k)) : [];
+      // saved before "hydro" existed: every other status on means no status filter, so keep it that way
+      if (!status.includes("hydro") && ["candidate", "listed", "heldout"].every((k) => status.includes(k))) status.push("hydro");
       return { scope: s.scope === ALL ? ALL : null, sort: SORTS.some(([k]) => k === s.sort) ? s.sort : d.sort,
         status: status.length ? status : d.status, gMin: pick(s.gMin, OPT.grade), gMax: pick(s.gMax, OPT.grade),
         lenMin: pick(s.lenMin, OPT.len), lenMax: pick(s.lenMax, OPT.len), mafMin: pick(s.mafMin, OPT.maf), mafMax: pick(s.mafMax, OPT.maf),
@@ -69,16 +74,46 @@
     }
     return m;
   }
+  // ---------- hydro-affected reaches (river_finder.webdata.write_hydro): <id>_hydro.json, optional ----------
+  const hydroFiles = new Map();   // region id → Promise<{classes, exclude, notes, schemes, at: Map(reach → [class, scheme])} | null>
+  function hydroFile(id) {
+    if (!hydroFiles.has(id)) {
+      hydroFiles.set(id, fetch(`${id}_hydro.json`).then((res) => (res.ok ? res.json() : null)).then((H) => {
+        if (!H) return null;
+        H.at = new Map(H.r.map(([m, c, s]) => [m, [H.classes[c], H.schemes[s]]]));
+        return H;
+      }).catch(() => null));
+    }
+    return hydroFiles.get(id);
+  }
+  /** The hydro class covering most of a run's flagged length, when at least half the run is flagged (as ml.py). */
+  function runHydro(H, S, members) {
+    if (!H || !H.at.size) return null;
+    const by = new Map(); let all = 0, hit = 0;
+    members.forEach((m) => {
+      const L = S.len[m]; all += L;
+      const h = H.at.get(m); if (!h) return;
+      hit += L; const key = `${h[0]}|${h[1].id}`, cur = by.get(key);
+      if (cur) cur.len += L; else by.set(key, { cls: h[0], scheme: h[1], len: L });
+    });
+    if (!all || hit / all < 0.5) return null;
+    const top = [...by.values()].sort((a, b) => b.len - a.len)[0];
+    return { cls: top.cls, scheme: top.scheme, frac: hit / all, note: H.notes[top.cls] || "", out: (H.exclude || []).includes(top.cls) };
+  }
+
   /** Rows of one region: the run plus what the list shows about it. The section a run is matched to is the
-   *  graded one it overlaps most (else the one it overlaps most); the guide link is the first one with a link. */
-  function itemsFor(R, runs) {
+   *  graded one it overlaps most (else the one it overlaps most); the guide link is the first one with a link.
+   *  st: the status the list filters on ("hydro" for a run not in the guides on mostly hydro-diverted reaches). */
+  function itemsFor(R, runs, H) {
     const idx = sectionsByReach(R), title = R.title || R.id;
     return runs.map((r, k) => {
       const hits = new Map();
       r.members.forEach((m) => (idx.get(m) || []).forEach((s) => hits.set(s, (hits.get(s) || 0) + 1)));
       const secs = [...hits].sort((a, b) => (gradeBin(b[0]) ? 1 : 0) - (gradeBin(a[0]) ? 1 : 0) || b[1] - a[1]).map(([s]) => s);
       const sec = secs[0] || null;
-      return { r, k, region: title, sec, bin: sec ? gradeBin(sec) : 0, link: secs.map(guideLink).find(Boolean) || null };
+      const hy = runHydro(H, R.segments, r.members);
+      return { r, k, region: title, sec, bin: sec ? gradeBin(sec) : 0, link: secs.map(guideLink).find(Boolean) || null,
+        hy, st: r.status === "candidate" && hy?.out ? "hydro" : r.status };
     });
   }
 
@@ -95,8 +130,9 @@
     if (hit) return hit;
     const R = await RF.data.region(id);
     const sc = model ? await RF.data.scores(id, model) : null;
+    const H = await hydroFile(id);
     await yieldMain();   // the region was just decoded: let the page paint before the run finder runs
-    const out = { model, params, items: itemsFor(R, RF.runs.find(R, { model: sc })), fallback: !!sc?.fallback };
+    const out = { model, params, items: itemsFor(R, RF.runs.find(R, { model: sc }), H), fallback: !!sc?.fallback };
     if (model === RF.state.model && params === RF.state.runParams) cache.set(id, out);
     if (release) RF.data.release(id);
     return out;
@@ -158,7 +194,7 @@
   // ---------- filtering and sorting ----------
   function passes(it) {
     const r = it.r;
-    if (!F.status.includes(r.status)) return false;
+    if (!F.status.includes(it.st)) return false;
     if ((F.gMin != null || F.gMax != null) && !(it.bin && it.bin >= (F.gMin ?? 2) && it.bin <= (F.gMax ?? 6))) return false;
     if (F.lenMin != null && !(r.len >= F.lenMin)) return false;
     if (F.lenMax != null && !(r.len <= F.lenMax)) return false;
@@ -213,16 +249,20 @@
   const dist = (m) => (m < 1000 ? `${m} m` : `${m / 1000} km`);
 
   function row(it, i, multi) {
-    const r = it.r, [pc, pt] = PILL[r.status] || PILL.candidate;
+    const r = it.r, [pc, pt] = PILL[it.st] || PILL.candidate;
     const grade = it.sec && (it.sec.grade || it.bin) ? el("span", { class: "rf-pill top-grade", title: `${it.sec.river}${it.sec.section ? `: ${it.sec.section}` : ""}` },
       it.bin ? el("span", { class: "top-gdot", style: `background:var(--grade-${it.bin})`, "aria-hidden": "true" }) : null,
       `Grade ${it.sec.grade || ROMAN[it.bin]}${sameRiver(r.name, it.sec.river) ? "" : ` on ${it.sec.river}`}`) : null;
     const falls = r.falls > 0 ? el("span", { class: "rf-pill top-falls", title: "Mapped waterfalls (OpenStreetMap; coverage is patchy)" },
       `${r.falls} waterfall${r.falls === 1 ? "" : "s"}${r.fallsH ? `, ${r.fallsH} m` : ""}`) : null;
-    const name = r.name;
+    const name = r.name, hy = it.hy;
+    const hydro = hy ? el("span", { class: `rf-pill top-hydro${hy.cls === "regulated" ? "" : " rf-pill--warn"}`,
+      title: `${hy.note} ${hy.scheme.name}${hy.scheme.operator ? ` (${hy.scheme.operator})` : ""}.` },
+    it.st === "hydro" ? hy.scheme.name : `${HYDRO_PILL[hy.cls] || hy.cls}: ${hy.scheme.name}`) : null;
     return el("tr", { role: "row", "data-id": r.id },
       cell(0, String(i + 1)),
-      cell(1, el("strong", { text: name }), " ", el("span", { class: `rf-pill ${pc}`, text: pt }), grade ? " " : null, grade, falls ? " " : null, falls,
+      cell(1, el("strong", { text: name }), " ", el("span", { class: `rf-pill ${pc}`, text: it.st === "hydro" ? HYDRO_PILL[hy.cls] || pt : pt }),
+        hydro ? " " : null, hydro, grade ? " " : null, grade, falls ? " " : null, falls,
         multi ? el("span", { class: "top-sub", text: it.region }) : null),
       cell(2, r.len.toFixed(1)), cell(3, fmt.grad(r.grad)), cell(4, fmt.flow(r.maf)), cell(5, r.acc ? road(r.acc.putIn) : "–"),
       cell(6, el("span", { class: `top-dot top-dot--${band(r.score)}`, "aria-hidden": "true" }), r.score.toFixed(0)),
