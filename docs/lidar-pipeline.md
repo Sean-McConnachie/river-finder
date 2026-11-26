@@ -46,6 +46,26 @@ seam | lakes | report`). Outputs (gitignored): `data/analysis/lidar-bench/` (`st
   raw cross-section stacks): it does not fit next to today's data in this session's ~8 GB; run it in a fresh session
   with >= 20 GB free, or delete the 8 m tile rasters (2.9 GB) first and keep the minimal outputs.
 
+## Decisions (2026-11-26)
+
+The user settled the open decisions as follows. Where they differ from the recommendations above, these decisions
+apply.
+
+- **Routing at 2 m, not 5 m.** The 2 m block mean of the full-resolution 1 m cells is routed with the lean router
+  on tiles of about 32 km core with a 3 km halo. That is about 200 tiles, each a 38 km box of about 361 M cells. The
+  estimate is ~9 GB peak and ~15 h for the country. Lines lie 0.7 m (median) / 4.4 m (p90) from the 1 m channel.
+  Profiles and cross-sections are still sampled at 1 m. The 10-20 m section stages come from the 2 m DEM, which is
+  already in memory. Products such as the area code and hillshade stay at 5-10 m. Before the national run,
+  measure memory and time on one full 2 m tile (rf-lxa.6).
+- **Reach geometry from the LiDAR routing, LINZ for names only** (rf-3ri.7). Each reach records `linz_dist_m`. Spot-
+  check the lines against the LINZ aerial photos, because the benchmark used the LiDAR itself as the reference.
+- **The reference areas are processed in the national run** (kaimai, karangahake, tutamoe). This gives one
+  resolution and one method everywhere, and closes rf-3ri.6.
+- **The national mosaic is the only LiDAR source.** The 2026 surveys that are newer than the mosaic are not read.
+- **Reach areas** come from network accumulation of local catchment areas over the stitched national network
+  (rf-lxa.5). With smaller tiles this matters even more. REC2 inflows are kept as a check.
+- **Disk**: decided when the run starts. Plan on a fresh session with at least 20 GB free.
+
 ## Benchmark setup
 
 - **Tile `x05y07`** (West Coast, Hokitika to Harihari and the Main Divide; box = 64 km core + 3 km halo =
