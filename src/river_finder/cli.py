@@ -375,7 +375,18 @@ def main(argv: list[str] | None = None) -> None:
     pli = sub.add_parser("lidar", help="1 m LiDAR DEM coverage from the nz-elevation STAC: fetch (survey table and "
                                        "footprints) | coverage (layer, per-reach and per-catchment coverage, gaps, "
                                        "summary) | all (src/river_finder/lidar.py, docs/lidar-coverage.md)")
-    pli.add_argument("step", choices=["fetch", "coverage", "all"])
+    pli.add_argument("step", choices=["fetch", "coverage", "all", "bench"],
+                     help="bench: the 1 m pipeline benchmark on tile x05y07 (src/river_finder/lidarbench.py, "
+                          "docs/lidar-pipeline.md; outputs in data/analysis/lidar-bench)")
+    pli.add_argument("bench_step", nargs="?",
+                     choices=["stream", "speed", "route", "compare", "tiling", "seam", "lakes", "report", "profiles"],
+                     help="bench: stream (1 m -> 5 / 8 m aggregates, sub-area 1 / 2 m) | speed (read throughput) | "
+                          "route (each variant) | compare (offsets, REC2, flats, profiles) | tiling (2 x 2 sub-tiles) "
+                          "| seam (simulated gap, lake holes) | lakes (lake holes only) | report (tables.md) | "
+                          "profiles (redo the profiles)")
+    pli.add_argument("--variants", nargs="+", default=None,
+                     help="bench route / compare: variants (lidarbench.VARIANTS)")
+    pli.add_argument("--threads", type=int, default=32, help="bench stream: read threads")
     pli.add_argument("--out", type=Path, default=None, help="output directory (default data/analysis/lidar)")
     pli.add_argument("--refresh", action="store_true", help="fetch the STAC tables and footprints again and recompute")
     pw = sub.add_parser("web", help="web app (Map, Top rivers, Models, Info): build | serve (see web/README.md)")
@@ -528,7 +539,11 @@ def main(argv: list[str] | None = None) -> None:
     if args.cmd == "lidar":
         from . import lidar
 
-        if args.step == "fetch":
+        if args.step == "bench":
+            from . import lidarbench
+
+            lidarbench.run(args.bench_step or "stream", variants=args.variants, threads=args.threads)
+        elif args.step == "fetch":
             lidar.fetch(args.out, refresh=args.refresh)
         else:
             lidar.run(args.out, refresh=args.refresh)
