@@ -1,6 +1,6 @@
 /* Map page (#map): mounts MapLibre, the panel, the card and the floating controls; opens regions.
-   Public: RF.go("map", {select: feature, aerial?}) (aerial: true also turns on the LINZ aerial photos and zooms
-   along the feature, where the site has them) and RF.map.{instance, select, zoomTo, region}. Owner: map agent. */
+   Public: RF.go("map", {select: feature, aerial?}) (aerial: true also switches to the Aerial base map, where the
+   site has it) and RF.map.{instance, select, zoomTo, region}. Owner: map agent. */
 (() => {
   "use strict";
   const RF = window.RF, M = RF.mapkit, { el, icon } = RF.util;
@@ -33,9 +33,11 @@
     if (!params?.select || !M.ready) return;
     const f = params.select;
     if (f.region && (!M.R || M.R.id !== f.region)) await M.openRegion(f.region, { fit: false });
-    const aerial = params.aerial && M.aerial?.available();
-    M.select(f, { fit: !aerial });
-    if (aerial) M.aerial.view(f);
+    if (params.aerial && M.aerial?.available()) M.setBasemap("linz-aerial");
+    // The map may have been created while its page was hidden (0 x 0): size it before fitting, or fitBounds
+    // computes the camera for an empty canvas and the view lands far from the feature.
+    M.map.resize();
+    M.select(f, { fit: true });
   }
 
   function mountMap(container) {

@@ -168,18 +168,11 @@
   flex: none; width: 14px; height: 14px; border-radius: 3px; border: 2px solid var(--map-catch);
   background: color-mix(in srgb, var(--map-catch-fill) 30%, transparent);
 }
-/* LINZ aerial photos (47-aerial.js): the survey line, the View aerial toggle and the steps along the river */
+/* LINZ aerial survey line on river cards (47-aerial.js) */
 .map-aerial-line { display: flex; align-items: flex-start; gap: var(--sp-2); }
 .map-aerial-key { flex: none; display: inline-flex; margin-top: 1px; color: var(--muted); }
 .map-aerial-key svg { width: 15px; height: 15px; }
 .map-aerial-link { white-space: nowrap; }
-.map-card-aerial[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
-.map-aerial-short { display: none; }
-.map-aerial-steps { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); color: var(--fg); }
-.map-aerial-steps .rf-btn:disabled { opacity: 0.45; cursor: default; }
-.map-aerial-pos { flex: 1; min-width: 0; text-align: center; line-height: 1.3; }
-.map-aerial-pos .num { white-space: nowrap; }
-.map-aerial-steps .rf-btn { flex: none; }
 
 /* ---------- MapLibre controls in our tokens ---------- */
 .map-root .maplibregl-ctrl-group { background: var(--surface); box-shadow: 0 0 0 1px var(--line), var(--shadow); }
@@ -217,8 +210,6 @@
   /* Details, Zoom to and Show catchment stay on one row down to 360 px, with room for wider system fonts */
   .map-card-actions { gap: 6px; }
   .map-card-actions .rf-btn { padding: 0 10px; gap: 6px; }
-  .map-aerial-long { display: none; }
-  .map-aerial-short { display: inline; }
   .map-minilegend { bottom: 30px; width: 190px; }
   .map-root:has(.map-card:not([hidden])) .map-minilegend { display: none; }
   .map-basemaps { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }

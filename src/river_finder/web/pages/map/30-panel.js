@@ -78,9 +78,6 @@
     });
     const parts = [list];
     if (!M.basemapAvailable({ site: true })) parts.push(el("p", { class: "rf-note", text: "Topographic maps and LINZ aerial photos need the standalone site: this host blocks map tile servers. Satellite here is a pre-rendered image of the region; river cards still say which aerial survey covers them." }));
-    if (cur === "linz-aerial" && M.basemapAvailable(M.BASEMAPS.find((x) => x.id === cur))) {
-      parts.push(el("p", { class: "rf-note map-aerial-note", text: `Photos from zoom ${M.AERIAL_MIN_ZOOM} (about 1:70 000) down to street level; zoomed out you see the satellite map. Where LINZ has no photos it shows 10 m satellite. Select a river and use View aerial to follow it downstream.` }));
-    }
     if (cur.startsWith("catch")) {
       const s = M.catchSettings();
       // smallest coloured area: 2e-5 km² (every cell) to 100 km², log slider

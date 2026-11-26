@@ -1,7 +1,7 @@
 /* Selection on the map: tap anything drawn to highlight it and get a short card; "Details" opens the
    full-screen detail view (RF.detail), which closes back to the same map view; "Show catchment" shades
-   what drains into the river (45-catchment.js) until the selection changes; "View aerial" turns on the LINZ
-   aerial photos and zooms along the river (47-aerial.js).
+   what drains into the river (45-catchment.js) until the selection changes; the card names the LINZ aerial
+   survey over the river (47-aerial.js).
    Layer files register:
      M.clickable({layers: [layerIds], priority, feature(mapFeature, event, allHits) → feature reference | null})
      M.card[kind] = (feature) → {eyebrow, title, lines: [Node|string]}
@@ -123,7 +123,6 @@
     if (!def.noDetails) actions.append(el("button", { type: "button", class: "rf-btn rf-btn--primary", onclick: (e) => RF.detail.open(f, { opener: e.currentTarget }) }, "Details"));
     if (M.geometryOf(f)) actions.append(el("button", { type: "button", class: "rf-btn", onclick: () => M.zoomTo(f) }, "Zoom to"));
     if (M.catchment?.offers(f)) actions.append(M.catchment.button(f)); // 45-catchment.js
-    if (M.aerial?.offers(f)) actions.append(M.aerial.button(f)); // 47-aerial.js
     cardEl.replaceChildren(el("div", { class: "map-card-head" },
       el("div", { class: "map-card-titles" }, el("span", { class: "rf-eyebrow", text: def.eyebrow || "" }), el("strong", { class: "map-card-title", text: def.title || "" })), close),
     ...[...(def.lines || []), ...(M.aerial?.lines(f) || []), ...(M.rain?.lines(f) || []), ...(M.catchment?.lines(f) || [])].filter(Boolean)

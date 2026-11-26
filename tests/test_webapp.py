@@ -174,7 +174,7 @@ def test_rain_decoder_matches_the_reference_decoder(tmp_path):
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 @pytest.mark.parametrize("target,key", [("site", ""), ("site", "DUMMY"), ("artifact", "")])
 def test_aerial_basemap_only_with_a_basemaps_key(tmp_path, target, key):
-    """pages/map/20-basemaps.js: the Aerial (LINZ) option and its tile source exist only on a site built with a key
+    """pages/map/20-basemaps.js: the Aerial option and its tile source exist only on a site built with a key
     (like Topo50); on the artifact the option shows but cannot be chosen (the host blocks tile servers)."""
     js = webapp.web_root().joinpath("pages/map/20-basemaps.js").read_text()
     (tmp_path / "run.mjs").write_text(
@@ -203,7 +203,7 @@ def test_aerial_basemap_only_with_a_basemaps_key(tmp_path, target, key):
         assert picker["linz-aerial"] and picker["topo"]
         src = got["sources"]["bm-aerial"]
         assert src["tiles"] == ["https://basemaps.linz.govt.nz/v1/tiles/aerial/WebMercatorQuad/{z}/{x}/{y}.webp?api=DUMMY"]
-        assert src["minzoom"] == 13 and got["layers"]["bm-aerial"]["minzoom"] == 13 and "LINZ" in src["attribution"]
-        assert got["vis"]["bm-aerial"] and got["vis"]["bm-sat"]  # photos drawn over the satellite map
+        assert "minzoom" not in src and "minzoom" not in got["layers"]["bm-aerial"] and "LINZ" in src["attribution"]
+        assert got["vis"]["bm-aerial"] and not got["vis"]["bm-sat"]  # the LINZ layer at every zoom, on its own
     else:
         assert picker["linz-aerial"] is False and "bm-aerial" not in got["sources"] and not got["vis"]["bm-aerial"]

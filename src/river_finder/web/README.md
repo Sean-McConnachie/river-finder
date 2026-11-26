@@ -64,17 +64,15 @@ Publishing:
   `<region>_sat.jpg`) as a single orphan commit and force-pushes it to `gh-pages`, which only ever
   holds the latest build. The satellite base map is Sentinel-2 cloudless 2025 (EOX, CC BY-NC-SA 4.0):
   live tiles on the site, `<region>_sat.jpg` (from `web data`) on the artifact. The topographic and
-  the Aerial (LINZ) base maps need a LINZ Basemaps API key at build time (`--basemaps-key` or
+  the Aerial base maps need a LINZ Basemaps API key at build time (`--basemaps-key` or
   `$LINZ_BASEMAPS_KEY`; Basemaps keys are public by design and end up in the page). Without one both
   options are left out, because LINZ answers HTTP 400 for tiles outside its CDN cache. With no data the
   app still builds and every page shows its empty state. Run `uv run pytest -q tests/test_webapp.py` before pushing.
 
-LINZ aerial photos (`<region>_aerial.json`, `aerial.py`, bead rf-aq6.29): the Aerial (LINZ) base map draws the
-LINZ Basemaps `aerial` tiles from zoom 13 over the satellite map (zoomed out, and where LINZ has no photos, people see
-satellite). River cards and the Details name the survey under the river ("Aerial photo: 0.2 m, 2024-2025, Bay of
-Plenty West Rural Aerial Photos") on every host, from the data file; on the site with a key the card's **View aerial**
-turns the photos on and zooms in, with Upstream / Downstream steps a screen at a time along a long river, and the
-Details get an **Aerial photos** button. The artifact gets no photos: its host blocks tile servers, and pre-rendered
+LINZ aerial photos (`<region>_aerial.json`, `aerial.py`, bead rf-aq6.29): the **Aerial** base map, next to
+Satellite, draws the LINZ Basemaps `aerial` layer at every zoom (full coverage: LINZ fills gaps in its photos with its
+own satellite imagery). River cards and the Details name the survey under the river ("Aerial photo: 0.2 m, 2024-2025,
+Bay of Plenty West Rural Aerial Photos") on every host, from the data file. The artifact gets no photos: its host blocks tile servers, and pre-rendered
 strips for the top rivers would be about 0.5 MB per km at 0.5 m pixels (hundreds of MB for the top runs of 19 regions),
 so it shows the survey line and a "See it in LINZ Basemaps" link instead.
 
@@ -140,7 +138,7 @@ Stable unless noted. Anything not listed here is internal.
 | `RF.setRunParams(params \| null)` | merge over defaults (null resets); emits `runs` |
 | `RF.select(feature)` | emits `select` |
 | `RF.on(evt, fn)` → `unsubscribe` | events: `ready`, `page`, `region`, `model`, `runs`, `select`, `detail-close`, `rain` |
-| `RF.go(pageId, params)` | open a page; e.g. `RF.go("map", {select: feature})` zooms the map to it and highlights it; `{select, aerial: true}` also turns on the LINZ aerial photos and zooms along it (site with a Basemaps key) |
+| `RF.go(pageId, params)` | open a page; e.g. `RF.go("map", {select: feature})` zooms the map to it and highlights it; `{select, aerial: true}` also switches to the Aerial base map (site with a Basemaps key) |
 
 ### Data: `RF.data`
 

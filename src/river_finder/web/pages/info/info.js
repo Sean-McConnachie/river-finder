@@ -17,7 +17,7 @@
       "CC BY-NC-SA 4.0", "https://cloudless.eox.at"],
     ["NZ Topo50 maps", "LINZ Basemaps", "Topographic base map (standalone site, when built with a Basemaps key)", "CC BY 4.0", "https://basemaps.linz.govt.nz/"],
     ["Aerial photos (rural and urban surveys)", "LINZ, via LINZ Basemaps and the nz-imagery open data bucket",
-      "Aerial base map from zoom 13 (standalone site, when built with a Basemaps key); the survey, pixel size and year named on river cards", "CC BY 4.0",
+      "Aerial base map (standalone site, when built with a Basemaps key); the survey, pixel size and year named on river cards", "CC BY 4.0",
       "https://registry.opendata.aws/nz-imagery/"],
     ["River lines and names (NZ River Name Lines, Topo50)", "LINZ Data Service", "The river network on the map and its names", "CC BY 4.0",
       "https://data.linz.govt.nz/layer/103632-nz-river-name-lines-pilot/"],

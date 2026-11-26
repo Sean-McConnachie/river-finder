@@ -106,9 +106,10 @@ Basemaps layer list cannot be fetched, the finest rural or urban survey, then th
 115 MB of STAC JSON (313 collections) and 14 MB of footprints, about a minute; after that the step runs offline in
 about 30 s for the whole country. `--refresh` fetches the two tables again (new surveys appear every month or two).
 
-Basemaps draws rural photos from zoom 13 and urban ones from 14; below that, and where it has no photos, its own 10 m
-satellite. The tiles need a LINZ Basemaps API key (not the LDS key) built into the standalone site; Basemaps keys are
-public by design (they end up in the page). Without a key the Aerial (LINZ) option is left out; the survey still shows
+The site's Aerial base map is the LINZ Basemaps `aerial` layer at every zoom: rural photos from zoom 13, urban ones
+from 14, and LINZ's own 10 m satellite below that and where it has no photos, so it covers the whole country. The tiles
+need a LINZ Basemaps API key (not the LDS key) built into the standalone site; Basemaps keys are public by design (they
+end up in the page). Without a key the Aerial option is left out; the survey still shows
 on river cards, from the data file.
 
 Coverage in November 2026 (124 Basemaps aerial layers matched to STAC; 2 Canterbury 2021 layers have no STAC

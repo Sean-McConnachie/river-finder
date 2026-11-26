@@ -189,11 +189,6 @@
     const showBtn = el("button", { type: "button", class: "rf-btn det-show", "aria-label": "Show on map", onclick: () => { ctx.close(); RF.go("map", { select: f }); } },
       el("span", { html: icon("pin"), "aria-hidden": "true" }), el("span", { class: "det-show-label", text: "Show on map" }));
     ctx.actions.append(showBtn);
-    if (M.aerial?.available() && air?.sv !== null) {
-      ctx.actions.append(el("button", { type: "button", class: "rf-btn det-show det-aerial", "aria-label": "Aerial photos on the map", title: "LINZ aerial photos on the map, zoomed in along the river",
-        onclick: () => { ctx.close(); RF.go("map", { select: f, aerial: true }); } },
-      el("span", { html: M.aerial.PHOTO, "aria-hidden": "true" }), el("span", { class: "det-show-label", text: "Aerial photos" })));
-    }
     const eyebrow = f.kind === "section" ? `Known river · ${sec.srcName === "riverguide" ? "NZ RiverGuide" : sec.srcName}`
       : f.kind === "run" ? (f.status === "listed" ? "Predicted run · in the guides" : f.status === "heldout" ? "Predicted run · test river" : "Predicted run · not in the guides")
         : f.linz ? `LINZ ${f.linz.type} · numbers from the modelled channel` : "Modelled channel";
