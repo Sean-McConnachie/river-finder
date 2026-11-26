@@ -53,7 +53,7 @@ SHOW = {
     "xs_w20": ("Cross-section width at 20 m stage", "log10 m"),
     "xs_wall": ("Lower valley wall (150 m)", "m, capped at 300"),
     "xs_h2a": ("Cross-sectional height-to-area", "log10(lower wall / sqrt(area at 20 m stage))"),
-    "xs_pinch": ("Constriction (pinch point)", "log10(narrowest / neighbourhood median width at 10 m stage)"),
+    "xs_pinch": ("Constriction (pinch point)", "log10(narrowest / median section width at 20 m stage)"),
     "xs_omega10": ("Unit stream power over the 10 m-stage width", "log10 W/m²"),
     "xs_vel": ("Mean velocity at MAF (Manning)", "log10 m/s"),
     "xs_omega_q": ("Unit stream power at MAF (Manning width)", "log10 W/m²"),

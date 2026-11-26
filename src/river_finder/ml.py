@@ -320,9 +320,9 @@ EXTRA: dict[str, tuple] = {
                                   / np.sqrt(g["xs_a20_med"].fillna(20000.0).clip(50, 20000))),
                "Cross-sectional height-to-area: lower wall height / sqrt(flow area at the 20 m stage), log10",
                "xsec"),
-    "xs_pinch": (lambda g: np.log10(g["xs_pinch10_ratio"].fillna(1.0).clip(0.05, 2.0)),
-                 "Constriction: narrowest section's 10 m-stage width / median 10 m width of the reach and its "
-                 "neighbours up and down, log10", "xsec"),
+    "xs_pinch": (lambda g: np.log10((g["xs_w20_min"] / g["xs_w20_med"]).fillna(1.0).clip(0.05, 1.0)),
+                 "Constriction index: narrowest section's width / the reach's median width, both at the 20 m stage, "
+                 "log10 (0 = no pinch point)", "xsec"),
     "xs_omega10": (lambda g: np.log10(g["xs_omega10_wm2"].fillna(0.1).clip(0.1, 1e5)),
                    "Unit stream power at the mean annual flood over the 10 m-stage width, rho g Q S / w10, log10 W/m2",
                    "xsec"),

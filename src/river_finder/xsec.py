@@ -28,8 +28,8 @@ Method
 Per reach (``reach_table``): number of sections, median and minimum width per stage, median area and wetted
 perimeter per stage, the share of sections censored per stage, median (and 90 % / minimum) bank and wall heights,
 the share of flat sections (both sides censored at 1 m: lakes, wide flats), the no-data share and the DEM cell size
-(``xs_res_m``). ``derive`` adds the constriction index, a valley-scale unit stream power and the Manning flood
-hydraulics (``hydraulics``), which read the flood, the gradient and the network of the table they are joined to.
+(``xs_res_m``). ``derive`` adds a valley-scale unit stream power and the Manning flood
+hydraulics (``hydraulics``), which read the flood and the gradient of the table they are joined to.
 
 Resolution
 ----------
@@ -52,7 +52,6 @@ import json
 import math
 import resource
 import time
-import warnings
 from pathlib import Path
 
 import numpy as np
@@ -520,7 +519,7 @@ def run_region(region, dem: str = "8m", out_dir: Path | None = None, min_area_km
 
 
 # ---------------------------------------------------------------------------- joins and derived columns
-DERIVED = ("xs_pinch10_ratio", "xs_omega10_wm2", "xs_h_q", "xs_w_q", "xs_a_q", "xs_v_q", "xs_omega_q")
+DERIVED = ("xs_omega10_wm2", "xs_h_q", "xs_w_q", "xs_a_q", "xs_v_q", "xs_omega_q")
 
 
 def attach(f: pd.DataFrame, table: pd.DataFrame, key: str) -> pd.DataFrame:
@@ -534,32 +533,18 @@ def attach(f: pd.DataFrame, table: pd.DataFrame, key: str) -> pd.DataFrame:
     return f
 
 
-def _neighbour(v: np.ndarray, idx: np.ndarray) -> np.ndarray:
-    ok = (idx >= 0) & (idx < len(v))
-    return np.where(ok, v[np.where(ok, idx, 0)], np.nan)
+def derive(f: pd.DataFrame) -> pd.DataFrame:
+    """The ``DERIVED`` columns from the joined ``xs_*`` columns, the flood ``maf_m3s`` and the gradient ``grad_s``.
+    In place; call again after the MAF changes.
 
-
-def derive(f: pd.DataFrame, stage: str = "10") -> pd.DataFrame:
-    """The ``DERIVED`` columns from the joined ``xs_*`` columns, the network (``down``, ``up``: row positions in ``f``),
-    the flood ``maf_m3s`` and the gradient ``grad_s``. In place; call again after the MAF changes.
-
-    - ``xs_pinch10_ratio``: constriction index, the narrowest section's width at the 10 m stage over the median
-      10 m width of the reach and its neighbours (main stem up, down); < 1 marks a pinch point.
     - ``xs_omega10_wm2``: unit stream power at the mean annual flood spread over the 10 m-stage width,
-      rho g Q S / w10 (W/m2). A valley-scale index: the real flood is narrower, see ``hydraulics``.
+      rho g Q S / w10 (W/m2, S floored at 0.1 m/km). A valley-scale index: the real flood is narrower.
     - ``xs_h_q`` ... ``xs_omega_q``: Manning flood stage, width, area, velocity and unit stream power
       (``hydraulics``)."""
-    n = len(f)
-    wmed = f[f"xs_w{stage}_med"].to_numpy(dtype=float)
-    wmin = f[f"xs_w{stage}_min"].to_numpy(dtype=float)
-    down = f["down"].to_numpy() if "down" in f else np.full(n, -1)
-    up = f["up"].to_numpy() if "up" in f else np.full(n, -1)
-    ref = np.column_stack([_neighbour(wmed, up), wmed, _neighbour(wmed, down)])
-    with np.errstate(divide="ignore", invalid="ignore"), warnings.catch_warnings():
-        warnings.simplefilter("ignore", RuntimeWarning)       # all-NaN neighbourhoods
-        f[f"xs_pinch{stage}_ratio"] = (wmin / np.nanmedian(ref, axis=1)).astype(np.float32)
+    with np.errstate(divide="ignore", invalid="ignore"):
         S = np.maximum(f["grad_s"].to_numpy(dtype=float), 0.1) / 1000.0
-        f[f"xs_omega{stage}_wm2"] = (RHO_G * f["maf_m3s"].to_numpy(dtype=float) * S / wmed).astype(np.float32)
+        f["xs_omega10_wm2"] = (RHO_G * f["maf_m3s"].to_numpy(dtype=float) * S
+                               / f["xs_w10_med"].to_numpy(dtype=float)).astype(np.float32)
     h = hydraulics(f)
     for c in h.columns:
         f[c] = h[c].to_numpy(dtype=np.float32)

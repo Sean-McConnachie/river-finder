@@ -116,14 +116,14 @@ def test_pinch_point_and_constriction_index():
     sec = XS.extract(z, TR, geoms)
     rt = XS.reach_table(sec, 3, res_m=CS)
     assert list(rt["xs_n"]) == [6, 6, 6]
-    assert rt.loc[1, "xs_w10_min"] == pytest.approx(16.0 + 20.0, rel=1e-3)
-    assert rt.loc[1, "xs_w10_med"] == pytest.approx(180.0, rel=1e-3)
-    f = rt.assign(down=[1, 2, -1], up=[-1, 0, 1], maf_m3s=50.0, grad_s=20.0)
+    assert rt.loc[1, "xs_w20_min"] == pytest.approx(16.0 + 40.0, rel=1e-3)
+    assert rt.loc[1, "xs_w20_med"] == pytest.approx(200.0, rel=1e-3)
+    f = rt.assign(maf_m3s=50.0, grad_s=20.0)
     XS.derive(f)
-    assert f.loc[1, "xs_pinch10_ratio"] == pytest.approx(36.0 / 180.0, rel=1e-3)
-    assert f.loc[0, "xs_pinch10_ratio"] == pytest.approx(1.0, rel=1e-3)
+    pinch_idx = ml.column(f, "xs_pinch")
+    assert pinch_idx[1] == pytest.approx(math.log10(56.0 / 200.0), rel=1e-3)
+    assert abs(pinch_idx[0]) < 1e-6 and abs(pinch_idx[2]) < 1e-6
     assert f.loc[2, "xs_omega10_wm2"] == pytest.approx(1000 * 9.81 * 50.0 * 0.02 / 180.0, rel=1e-3)
-    assert (ml.column(f, "xs_pinch") < 0)[1] and abs(ml.column(f, "xs_pinch")[0]) < 1e-6
 
 
 def test_manning_flood_stage():
@@ -149,7 +149,7 @@ def test_reach_without_valid_section():
     z = np.full((NR, NC), np.nan, np.float32)
     rt = XS.reach_table(XS.extract(z, TR, [line()]), 1)
     assert rt.loc[0, "xs_n"] == 0 and np.isnan(rt.loc[0, "xs_w10_med"])
-    f = rt.assign(down=-1, up=-1, maf_m3s=10.0, grad_s=5.0)
+    f = rt.assign(maf_m3s=10.0, grad_s=5.0)
     XS.derive(f)
     assert ml.column(f, "xs_w10")[0] == pytest.approx(3.0)      # a reach with no section counts as wide open
     assert ml.column(f, "xs_pinch")[0] == 0.0
