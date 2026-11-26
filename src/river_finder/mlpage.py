@@ -49,6 +49,14 @@ SHOW = {
     "karst_bed": ("Channel on karst", "0/1"),
     "karst_up": ("Karst share of catchment", "fraction"),
     "rock_age": ("Bed rock age", "log10 Ma"),
+    "xs_w10": ("Cross-section width at 10 m stage", "log10 m (8 m DEM, median of sections)"),
+    "xs_w20": ("Cross-section width at 20 m stage", "log10 m"),
+    "xs_wall": ("Lower valley wall (150 m)", "m, capped at 300"),
+    "xs_h2a": ("Cross-sectional height-to-area", "log10(lower wall / sqrt(area at 20 m stage))"),
+    "xs_pinch": ("Constriction (pinch point)", "log10(narrowest / neighbourhood median width at 10 m stage)"),
+    "xs_omega10": ("Unit stream power over the 10 m-stage width", "log10 W/m²"),
+    "xs_vel": ("Mean velocity at MAF (Manning)", "log10 m/s"),
+    "xs_omega_q": ("Unit stream power at MAF (Manning width)", "log10 W/m²"),
     "falls": ("OSM waterfalls on reach", "ln(1 + count)"),
     "falls_h": ("Tallest OSM waterfall", "m"),
     "rapids": ("OSM rapids near reach", "ln(1 + count)"),
@@ -89,7 +97,8 @@ def explore(t: pd.DataFrame | None = None, L: ml.Labels | None = None, log=print
     regions = sorted(set(reg[dom]) - {""})
     styles = list(t["style"].cat.categories)
     sc = t["style"].cat.codes.to_numpy()
-    feats = [f for f in SHOW if f == "area" or f in ml.FEATURES or f in ml.EXTRA]
+    feats = [f for f in SHOW if (f == "area" or f in ml.FEATURES or f in ml.EXTRA)
+             and (f not in ml.XSEC_ALL or "xs_n" in t.columns)]
     cols = {f: _col(t, f) for f in feats}
     out: dict = {"created": dt.datetime.now().isoformat(timespec="minutes"), "regions": regions, "styles": styles,
                  "style_labels": RT.STYLE_LABELS, "reach_types": RT.classes(),

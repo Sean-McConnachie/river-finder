@@ -11,19 +11,25 @@ Method
   ``HALF_WIDTH_M`` (500 m) on each side of the channel.
 - **Channel bottom**: the lowest sample within ``SNAP_M`` (16 m, two 8 m cells) of the reach line, because the
   routed line can sit a cell or two off the DEM's valley axis. The section is re-centred there and every
-  height is measured from that bottom ``z0``.
+  height is measured from that bottom ``z0``. Where a DEM cell in the 3 x 3 window around the station is lower,
+  ``z0`` is that cell (``cell_floor``): on a diagonal D8 stretch the station can sit on a cell corner, where bilinear
+  sampling averages two channel cells with two bank cells and lifts the bottom by up to half a cell's rise.
 - **Stage h** (``STAGES``: 1, 2, 5, 10, 20 m above ``z0``): on each side, walk outward from the bottom until the
   ground first rises above ``z0 + h`` (linear interpolation between samples). Width ``w(h)`` is the sum of the
   two distances, flow area ``A(h)`` the area between the level and the ground over that span (trapezoids), and
   ``P(h)`` the wetted perimeter (ground length). Ground beyond a ridge never counts. A side that does not reach
   the level within 500 m is *censored*: its distance is 500 m. No-data samples (sea) count as flat ground at
   ``z0``, so coastal and lake sections come out wide and censored.
-- **Bank height**: the highest ground within ``BANK_M`` (50 m) of the bottom on each side, minus ``z0``; ``bank_lo``
-  is the lower of the two sides (the bank the flood overtops first), ``bank_hi`` the higher.
+- **Bank and wall height**: the highest ground within ``BANK_M`` (50 m) of the bottom on each side, minus ``z0``;
+  ``bank_lo`` is the lower of the two sides (the bank the flood overtops first), ``bank_hi`` the higher. The same
+  within ``GORGE_M`` (150 m, the gorge radius of ``reaches.py``) gives the wall heights ``gorge_lo`` / ``gorge_hi``.
+  On the 8 m DEM the 50 m bank is nearly flat (median 5-15 % of the LiDAR value), the 150 m wall is not.
 
 Per reach (``reach_table``): number of sections, median and minimum width per stage, median area and wetted
-perimeter per stage, the share of sections censored per stage, median lower and higher bank height, the share
-of flat sections (both sides censored at 1 m: lakes, wide flats) and the DEM cell size (``xs_res_m``).
+perimeter per stage, the share of sections censored per stage, median (and 90 % / minimum) bank and wall heights,
+the share of flat sections (both sides censored at 1 m: lakes, wide flats), the no-data share and the DEM cell size
+(``xs_res_m``). ``derive`` adds the constriction index, a valley-scale unit stream power and the Manning flood
+hydraulics (``hydraulics``), which read the flood, the gradient and the network of the table they are joined to.
 
 Resolution
 ----------
@@ -46,6 +52,7 @@ import json
 import math
 import resource
 import time
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -112,7 +119,8 @@ def sample_profiles(z: np.ndarray, transform, x, y, nx, ny, half_samples: int, d
 
 
 @njit(cache=True)
-def _measure(Z, du, snap, side_n, bank_n, gorge_n, stages, w, a, p, cens, z0o, offo, blo, bhi, glo, ghi, nod):
+def _measure(Z, zfloor, du, snap, side_n, bank_n, gorge_n, stages, w, a, p, cens, z0o, offo, blo, bhi, glo, ghi,
+             nod):
     """Per section: channel bottom, then width, area, wetted perimeter and censoring per stage, bank heights."""
     n, K = Z.shape
     c = K // 2
@@ -127,6 +135,8 @@ def _measure(Z, du, snap, side_n, bank_n, gorge_n, stages, w, a, p, cens, z0o, o
                 j0 = j
         if j0 < 0:
             continue
+        if zfloor[i] < z0:      # a DEM cell next to the station is lower than the interpolated profile
+            z0 = zfloor[i]
         z0o[i] = z0
         offo[i] = (j0 - c) * du
         lo = np.inf
@@ -192,8 +202,11 @@ def _measure(Z, du, snap, side_n, bank_n, gorge_n, stages, w, a, p, cens, z0o, o
 
 
 def measure(Z: np.ndarray, du: float, snap_samples: int, side_samples: int, bank_samples: int,
-            gorge_samples: int, stages=STAGES) -> dict:
+            gorge_samples: int, stages=STAGES, zfloor: np.ndarray | None = None) -> dict:
     """Section geometry from profiles ``Z`` (n, 2 * (side + snap) + 1), centred on the reach line.
+
+    The channel bottom ``z0`` is the lowest profile sample within ``snap_samples`` of the centre, or ``zfloor`` (the
+    lowest DEM cell next to the station, ``cell_floor``) where that is lower.
 
     Returns arrays: ``w``, ``a``, ``p`` (n, stages; m, m2, m), ``cens`` (n, stages; sides censored, 0-2), ``z0``,
     ``offset`` (bottom position relative to the line, m), ``bank_lo``, ``bank_hi`` (lower and higher side's highest
@@ -207,10 +220,29 @@ def measure(Z: np.ndarray, du: float, snap_samples: int, side_samples: int, bank
     out["cens"] = np.zeros((n, len(st)), np.int8)
     for k in ("z0", "offset", "bank_lo", "bank_hi", "gorge_lo", "gorge_hi", "nodata"):
         out[k] = np.full(n, np.nan)
-    _measure(np.ascontiguousarray(Z, dtype=np.float32), float(du), int(snap_samples), int(side_samples),
+    zf = np.full(n, np.inf) if zfloor is None else np.where(np.isfinite(zfloor), zfloor, np.inf).astype(np.float64)
+    _measure(np.ascontiguousarray(Z, dtype=np.float32), zf, float(du), int(snap_samples), int(side_samples),
              int(bank_samples), int(gorge_samples), st, out["w"], out["a"], out["p"], out["cens"], out["z0"],
              out["offset"], out["bank_lo"], out["bank_hi"], out["gorge_lo"], out["gorge_hi"], out["nodata"])
     return out
+
+
+def cell_floor(z: np.ndarray, transform, x, y, radius: int = 1) -> np.ndarray:
+    """Lowest DEM cell in the (2 radius + 1)^2 window around each point (NaN if none). Bilinear sampling lifts the
+    bottom of a diagonal D8 channel at cell corners (half the neighbours are bank cells); the cells do not."""
+    nr, nc = z.shape
+    cs = transform.a
+    r0 = np.floor((transform.f - np.asarray(y)) / cs).astype(np.int64)
+    c0 = np.floor((np.asarray(x) - transform.c) / cs).astype(np.int64)
+    out = np.full(len(r0), np.inf)
+    for dr in range(-radius, radius + 1):
+        for dc in range(-radius, radius + 1):
+            r, c = r0 + dr, c0 + dc
+            ok = (r >= 0) & (r < nr) & (c >= 0) & (c < nc)
+            v = np.full(len(r0), np.inf)
+            v[ok] = z[r[ok], c[ok]]
+            out = np.fmin(out, np.where(np.isfinite(v), v, np.inf))
+    return np.where(np.isfinite(out), out, np.nan)
 
 
 def extract(z: np.ndarray, transform, geoms, spacing: float = SPACING_M, half_width: float = HALF_WIDTH_M,
@@ -230,7 +262,8 @@ def extract(z: np.ndarray, transform, geoms, spacing: float = SPACING_M, half_wi
     for i0 in range(0, len(ri), chunk):
         sl = slice(i0, i0 + chunk)
         Z = sample_profiles(z, transform, x[sl], y[sl], nx[sl], ny[sl], side_n + snap_n, du)
-        parts.append(measure(Z, du, snap_n, side_n, bank_n, gorge_n, stages))
+        zf = cell_floor(z, transform, x[sl], y[sl])
+        parts.append(measure(Z, du, snap_n, side_n, bank_n, gorge_n, stages, zf))
     if parts:
         sec = {k: np.concatenate([q[k] for q in parts]) for k in parts[0]}
     else:
@@ -261,7 +294,7 @@ def reach_table(sec: dict, n_reaches: int, stages=STAGES, res_m: float = np.nan)
     out = pd.DataFrame(index=pd.RangeIndex(n_reaches))
     out["xs_n"] = g.size().reindex(out.index).fillna(0).astype(np.int16)
     out["xs_res_m"] = np.float32(res_m)
-    for j, h in enumerate(stages):
+    for h in stages:
         tg = stage_tag(h)
         out[f"xs_w{tg}_med"] = med[f"w{tg}"]
         out[f"xs_w{tg}_min"] = g[f"w{tg}"].min()
@@ -486,8 +519,8 @@ def run_region(region, dem: str = "8m", out_dir: Path | None = None, min_area_km
     return dst
 
 
-# ---------------------------------------------------------------------------- joins
-XS_COLS_REQUIRED = ("xs_n",)
+# ---------------------------------------------------------------------------- joins and derived columns
+DERIVED = ("xs_pinch10_ratio", "xs_omega10_wm2", "xs_h_q", "xs_w_q", "xs_a_q", "xs_v_q", "xs_omega_q")
 
 
 def attach(f: pd.DataFrame, table: pd.DataFrame, key: str) -> pd.DataFrame:
@@ -499,3 +532,68 @@ def attach(f: pd.DataFrame, table: pd.DataFrame, key: str) -> pd.DataFrame:
         f[c] = j[c].to_numpy()
     f["xs_n"] = f["xs_n"].fillna(0).astype(np.int16)
     return f
+
+
+def _neighbour(v: np.ndarray, idx: np.ndarray) -> np.ndarray:
+    ok = (idx >= 0) & (idx < len(v))
+    return np.where(ok, v[np.where(ok, idx, 0)], np.nan)
+
+
+def derive(f: pd.DataFrame, stage: str = "10") -> pd.DataFrame:
+    """The ``DERIVED`` columns from the joined ``xs_*`` columns, the network (``down``, ``up``: row positions in ``f``),
+    the flood ``maf_m3s`` and the gradient ``grad_s``. In place; call again after the MAF changes.
+
+    - ``xs_pinch10_ratio``: constriction index, the narrowest section's width at the 10 m stage over the median
+      10 m width of the reach and its neighbours (main stem up, down); < 1 marks a pinch point.
+    - ``xs_omega10_wm2``: unit stream power at the mean annual flood spread over the 10 m-stage width,
+      rho g Q S / w10 (W/m2). A valley-scale index: the real flood is narrower, see ``hydraulics``.
+    - ``xs_h_q`` ... ``xs_omega_q``: Manning flood stage, width, area, velocity and unit stream power
+      (``hydraulics``)."""
+    n = len(f)
+    wmed = f[f"xs_w{stage}_med"].to_numpy(dtype=float)
+    wmin = f[f"xs_w{stage}_min"].to_numpy(dtype=float)
+    down = f["down"].to_numpy() if "down" in f else np.full(n, -1)
+    up = f["up"].to_numpy() if "up" in f else np.full(n, -1)
+    ref = np.column_stack([_neighbour(wmed, up), wmed, _neighbour(wmed, down)])
+    with np.errstate(divide="ignore", invalid="ignore"), warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)       # all-NaN neighbourhoods
+        f[f"xs_pinch{stage}_ratio"] = (wmin / np.nanmedian(ref, axis=1)).astype(np.float32)
+        S = np.maximum(f["grad_s"].to_numpy(dtype=float), 0.1) / 1000.0
+        f[f"xs_omega{stage}_wm2"] = (RHO_G * f["maf_m3s"].to_numpy(dtype=float) * S / wmed).astype(np.float32)
+    h = hydraulics(f)
+    for c in h.columns:
+        f[c] = h[c].to_numpy(dtype=np.float32)
+    return f
+
+
+def national_table_path() -> Path:
+    from .national import nz_dir
+
+    return nz_dir() / "xsec.pkl"
+
+
+def region_table_path(region: str, dem: str = "8m") -> Path:
+    from .regions import REPO_ROOT
+
+    return REPO_ROOT / "data" / region / f"xsec_{dem}.pkl"
+
+
+def join(f: pd.DataFrame, path: Path | None = None, log=print) -> bool:
+    """Join the stored cross-sections into ``f`` (national reaches by ``gid`` from ``data/nz/xsec.pkl``; a reference
+    area's frame, one ``region`` and no ``gid``, by ``seg_id`` from ``data/<region>/xsec_8m.pkl``) and ``derive``.
+    In place; False (and ``f`` unchanged) when there is no table for it."""
+    if path is None:
+        if "gid" in f:
+            path = national_table_path()
+        elif "region" in f and f["region"].nunique() == 1:
+            path = region_table_path(str(f["region"].iloc[0]))
+        else:
+            return False
+    if not Path(path).exists():
+        return False
+    table = pd.read_pickle(path)
+    key = "gid" if "gid" in table.columns else "seg_id"
+    attach(f, table, key)
+    derive(f)
+    log(f"xsec: {int((f['xs_n'] > 0).sum())} of {len(f)} reaches have cross-sections ({path})")
+    return True
