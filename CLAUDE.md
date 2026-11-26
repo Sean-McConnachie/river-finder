@@ -96,6 +96,8 @@ uv run river-finder external fetch|attach   # OSM waterfalls/roads/tracks per re
 uv run river-finder hydro check|attach      # hydro-diverted/regulated/reservoir reaches from config/hydro.toml -> data/nz/hydro.pkl
                                           # (~30 s; ml audit and web data --only hydro use it; docs/hydro.md)
 uv run river-finder web data|build|serve|pages  # web app (Map, Top rivers, Models, Info) -> data/web/
+uv run river-finder nz xsec [tiles]; xsec <region>  # 8 m DEM cross-sections per reach (widths at 10/20 m stages, walls,
+                                          # constriction) -> data/nz/xsec.pkl (~65 min, < 2 GB, resumable; docs/cross-sections.md)
 uv run river-finder ml table|explore|cv|page|audit  # ML: features, grouped repeated 5-fold OOF + LORO, ML page (~10 min);
                                           # audit: top unlisted runs of a model -> models/audits/
 uv run river-finder models train --kind gbm --recipe gbm_terrain --name v3  # LightGBM registry card (+ v3.lgb.txt)
