@@ -169,3 +169,41 @@ def test_rain_decoder_matches_the_reference_decoder(tmp_path):
                 a = np.array([np.nan if v is None else v for v in g], dtype=float)
             np.testing.assert_allclose(a, want[k].astype(float), rtol=1e-6, equal_nan=True, err_msg=f"{f} {k}")
     assert got["m3"] == ["850", "3.4k", "120k", "4.1M", "120M"]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+@pytest.mark.parametrize("target,key", [("site", ""), ("site", "DUMMY"), ("artifact", "")])
+def test_aerial_basemap_only_with_a_basemaps_key(tmp_path, target, key):
+    """pages/map/20-basemaps.js: the Aerial (LINZ) option and its tile source exist only on a site built with a key
+    (like Topo50); on the artifact the option shows but cannot be chosen (the host blocks tile servers)."""
+    js = webapp.web_root().joinpath("pages/map/20-basemaps.js").read_text()
+    (tmp_path / "run.mjs").write_text(
+        "const out = { sources: {}, layers: {}, vis: {} };\n"
+        f"const RF = {{ config: {{ target: {json.dumps(target)}, basemapsKey: {json.dumps(key)} }},\n"
+        "  util: { debounce: (f) => f, toast() {} }, data: { regions: () => [] } };\n"
+        "globalThis.window = { RF };\n"
+        "globalThis.document = { querySelector: () => null };\n"
+        "const M = RF.mapkit = { prefs: { basemap: 'linz-aerial', catch: {} }, onRegion() {}, onTheme() {},\n"
+        "  token: () => '#888', isDark: () => false,\n"
+        "  addLayer: (def) => { out.layers[def.id] = def; }, vis: (id, on) => { out.vis[id] = on; },\n"
+        "  map: { addSource: (id, s) => { out.sources[id] = s; }, on() {}, getLayer: () => null,\n"
+        "         getSource: () => null } };\n"
+        f"(0, eval)({json.dumps(js)});\n"
+        "M.initBasemaps();\n"
+        "out.picker = M.BASEMAPS.filter((b) => !M.basemapHidden(b)).map((b) => [b.id, M.basemapAvailable(b)]);\n"
+        "console.log(JSON.stringify(out));\n")
+    r = subprocess.run(["node", str(tmp_path / "run.mjs")], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    got = json.loads(r.stdout)
+    picker = dict(got["picker"])
+    if target == "site" and not key:
+        assert "linz-aerial" not in picker and "topo" not in picker
+        assert "bm-aerial" not in got["sources"] and got["vis"]["terrain"] and not got["vis"]["bm-aerial"]
+    elif target == "site":
+        assert picker["linz-aerial"] and picker["topo"]
+        src = got["sources"]["bm-aerial"]
+        assert src["tiles"] == ["https://basemaps.linz.govt.nz/v1/tiles/aerial/WebMercatorQuad/{z}/{x}/{y}.webp?api=DUMMY"]
+        assert src["minzoom"] == 13 and got["layers"]["bm-aerial"]["minzoom"] == 13 and "LINZ" in src["attribution"]
+        assert got["vis"]["bm-aerial"] and got["vis"]["bm-sat"]  # photos drawn over the satellite map
+    else:
+        assert picker["linz-aerial"] is False and "bm-aerial" not in got["sources"] and not got["vis"]["bm-aerial"]

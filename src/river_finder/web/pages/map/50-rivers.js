@@ -82,6 +82,12 @@
       }
     });
     if (M.isDark()) { map.setPaintProperty("names-label", "text-color", "#9cc4f2"); map.setPaintProperty("names-label", "text-halo-color", "#111513"); }
+    // On the LINZ aerial photos the river lines fade from zoom 13, so the channel shows through them (still a guide).
+    const OPACITY = { "linz-line": 0.95, "net-line": 0.9, "pred-casing": 0.85, "pred-line": 1, "known-casing": 0.9, "known-line": 1 };
+    const fade = (use) => Object.entries(OPACITY).forEach(([l, o]) => map.getLayer(l) && map.setPaintProperty(l, "line-opacity",
+      use === "linz-aerial" ? ["interpolate", ["linear"], ["zoom"], M.AERIAL_MIN_ZOOM, o, 16, +(o * 0.3).toFixed(2)] : o));
+    M.onBasemap(fade);
+    fade(document.querySelector(".map-root")?.dataset.basemap);
 
     M.clickable({ layers: ["known-line", "known-casing"], priority: 90, feature: (f) => sectionFeature(f.properties.i) });
     M.clickable({ layers: ["pred-line", "pred-casing"], priority: 80, feature: (f) => runs[f.properties.i] || null });

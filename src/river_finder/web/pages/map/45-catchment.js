@@ -208,7 +208,7 @@
   const casing = () => (M.isDark() ? "#0b0f0d" : "#ffffff");
   function paint() {
     const map = M.map; if (!map?.getLayer("catchsel-fill")) return;
-    const sat = document.querySelector(".map-root")?.dataset.basemap === "satellite"; // dark imagery takes a stronger tint
+    const sat = M.isImagery(document.querySelector(".map-root")?.dataset.basemap); // dark imagery takes a stronger tint
     map.setPaintProperty("catchsel-fill", "fill-color", M.token(`${TOKEN}-fill`));
     map.setPaintProperty("catchsel-fill", "fill-opacity", (M.isDark() ? 0.3 : 0.26) + (sat ? 0.1 : 0));
     map.setPaintProperty("catchsel-casing", "line-color", casing());

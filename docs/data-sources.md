@@ -88,3 +88,52 @@ layer 105690. The BOPRC ImageServer also serves the BoP DEM.
 ## 6. Imagery (for checking candidates by eye)
 
 - LINZ aerial imagery bucket `s3://nz-imagery` (same COG + STAC layout) — rural ~0.3 m.
+
+### LINZ aerial photos on the map (bead rf-aq6.29)
+
+| What | Source | Key |
+|---|---|---|
+| Survey table: one STAC collection per survey, `linz:geospatial_category`, `gsd`, capture interval, `capture-area.geojson` footprint | `https://nz-imagery.s3-ap-southeast-2.amazonaws.com/catalog.json` (public S3, CC BY 4.0) | none |
+| Which surveys the LINZ Basemaps `aerial` tile set draws, bottom to top, with their zoom range | `linz/basemaps-config` on GitHub, `config/tileset/aerial.json` | none |
+| The photos on the map | LINZ Basemaps tiles `https://basemaps.linz.govt.nz/v1/tiles/aerial/WebMercatorQuad/{z}/{x}/{y}.webp?api=KEY` | Basemaps API key |
+
+`river-finder web data --only aerial` (`aerial.py`, `webdata.write_aerial`) writes `<region>_aerial.json`: per viewer
+reach the survey that Basemaps draws on top at zoom 16 over most of the reach (sample points every 25 m), with its GSD
+and capture dates (NZ dates), and the share of the reach under any photo. Only RGB rural, urban and (where Basemaps
+draws them) ancillary storm and flood flights are used, never satellite, near-infrared or historic scans. If the
+Basemaps layer list cannot be fetched, the finest rural or urban survey, then the newest, is used instead. Caches in
+`data/nz/aerial/` (`surveys.json`, `basemaps_aerial.json`, `capture/<slug>.geojson`): the first run downloads about
+115 MB of STAC JSON (313 collections) and 14 MB of footprints, about a minute; after that the step runs offline in
+about 30 s for the whole country. `--refresh` fetches the two tables again (new surveys appear every month or two).
+
+Basemaps draws rural photos from zoom 13 and urban ones from 14; below that, and where it has no photos, its own 10 m
+satellite. The tiles need a LINZ Basemaps API key (not the LDS key) built into the standalone site; Basemaps keys are
+public by design (they end up in the page). Without a key the Aerial (LINZ) option is left out; the survey still shows
+on river cards, from the data file.
+
+Coverage in November 2026 (124 Basemaps aerial layers matched to STAC; 2 Canterbury 2021 layers have no STAC
+collection and are left out):
+
+| Region | Reaches covered | Main GSD (share of km) | Capture years (share of km) |
+|---|---:|---|---|
+| Northland | 100 % | 0.3 m 98 % | 2023-2025 |
+| Auckland | 100 % | 0.075 m 97 % (urban survey of the whole region) | 2024-2025 |
+| Waikato | 100 % | 0.3 m 80 %, 0.1 m 8 % | 2021-2026 (most 2023-2024) |
+| Bay of Plenty | 100 % | 0.2 m 88 %, 0.1 m 12 % | 2024-2026 |
+| Gisborne | 100 % | 0.1 m 69 %, 0.2 m 29 % | 2024-2026 |
+| Hawke's Bay | 100 % | 0.2 m 94 % | 2025-2026 |
+| Taranaki | 100 % | 0.25 m 91 % | 2021-2022 |
+| Whanganui | 100 % | 0.3 m 92 % | 2021-2022 87 % |
+| Manawatū | 100 % | 0.3 m 50 %, 0.2 m 38 % | 2021-2024 |
+| Wellington | 100 % | 0.2 m 89 % | 2025-2026 |
+| Tasman | 100 % | 0.25 m 74 %, 0.3 m 19 % | 2020-2025 |
+| Marlborough | 100 % | 0.25 m 96 % | 2021-2025 |
+| West Coast | 88 % | 0.2 m 59 %, 0.3 m 33 % | 2024-2026 60 %, 2015-2017 26 % |
+| Canterbury | 100 % | 0.2 m 34 %, 0.3 m 28 %, 0.25 m | 2016-2025 |
+| Otago | 99 % | 0.2 m 65 %, 0.3 m 31 % | 2017-2025 |
+| Southland | 100 % | 0.25 m 54 %, 0.75 m 38 % (Fiordland: the 2005-2011 survey) | 2023-2024 54 %, 2005-2011 38 % |
+| Kaimai, Karangahake, Tutamoe (5 m) | 100 % | 0.2-0.3 m | 2023-2026 |
+
+Nationally 99 % of 612 000 reaches (143 500 km); 85 % of the length is at 0.2-0.3 m, 9 % finer (urban surveys), 5 % at
+0.4-1 m; 69 % was flown in 2024-2026, 4 % (Southland) in 2005-2011. The gaps are on the West Coast (12 % of its reaches:
+the 2024-2026 survey is still being flown) and a little of Otago.

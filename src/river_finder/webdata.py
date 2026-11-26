@@ -7,6 +7,7 @@ viewer``, ``external attach``). Written into the viewer data directory (default 
 | ``<vid>_access.json`` | roads, 4WD/private roads and foot tracks in the region (OpenStreetMap via Overture) |
 | ``gauges.json`` | national river-flow gauges (NIWA flood-statistics sites) and rain gauges (NIWA CliFlo) |
 | ``<vid>_hydro.json`` | hydro-diverted, regulated and reservoir reaches (``hydro.py``, ``config/hydro.toml``) |
+| ``<vid>_aerial.json`` | LINZ aerial photo survey over each viewer reach (``aerial.py``; ``write_aerial``) |
 
 Sections come from ``labels/known_runs.toml`` (local knowledge) and ``labels/guide_research.json``
 (NZ RiverGuide, packraftingtrips.nz and others), placed with ``models.map_section``. Each record:
@@ -234,6 +235,82 @@ def write_hydro(data_dir: Path, log=print) -> dict:
             (data_dir / f"{e['id']}_hydro.json").write_text(json.dumps(rec, ensure_ascii=False, separators=(",", ":")))
             counts[e["id"]] = len(rec["r"])
     log("hydro: " + ", ".join(f"{k} {v}" for k, v in counts.items()) + " flagged viewer reaches")
+    return counts
+
+
+# ---------------------------------------------------------------------------- aerial photo coverage
+def unpack_coords(blob: bytes, head: dict) -> list[np.ndarray]:
+    """The reach lines (``[[lon, lat], ...]`` arrays, viewer order) of a ``viewer_nz.pack_segments`` buffer."""
+    n, C = int(head["n"]), head["coords"]
+    cnt = np.frombuffer(blob, "<u2", n, C["count"]).astype(np.int64)
+    first = np.frombuffer(blob, "<i4", 2 * n, C["first"]).reshape(n, 2).astype(np.int64)
+    d = np.frombuffer(blob, "<i2", 2 * int(C["ndelta"]), C["delta"]).reshape(-1, 2).astype(np.int64)
+    out, p = [], 0
+    for i in range(n):
+        k = int(cnt[i]) - 1
+        out.append(np.vstack([first[i], first[i] + np.cumsum(d[p:p + k], axis=0)]) * C["scale"])
+        p += k
+    return out
+
+
+def reach_lines(data_dir: Path, entry: dict) -> list[np.ndarray] | None:
+    """A region's viewer reaches as ``[[lon, lat], ...]`` arrays in viewer order (``Region.segments.c``): inline
+    in ``<vid>.json`` (5 m reference areas) or packed in ``<vid>_seg.txt``; None when the files are missing."""
+    import base64
+
+    src = data_dir / entry.get("src", f"{entry['id']}.json")
+    if not src.exists():
+        return None
+    meta = json.loads(src.read_text())
+    S = meta.get("segments")
+    if isinstance(S, dict) and "c" in S:
+        return [np.asarray(c, dtype=float).reshape(-1, 2) for c in S["c"]]
+    if meta.get("segB64") and meta.get("segHead") and (data_dir / meta["segB64"]).exists():
+        return unpack_coords(base64.b64decode((data_dir / meta["segB64"]).read_text()), meta["segHead"])
+    return None
+
+
+def _to_nztm(lines: list[np.ndarray]) -> list[np.ndarray]:
+    from pyproj import Transformer
+
+    if not lines:
+        return []
+    tr = Transformer.from_crs("EPSG:4326", "EPSG:2193", always_xy=True)
+    allc = np.concatenate(lines)
+    x, y = tr.transform(allc[:, 0], allc[:, 1])
+    return np.split(np.column_stack([x, y]), np.cumsum([len(c) for c in lines])[:-1])
+
+
+def write_aerial(data_dir: Path, refresh: bool = False, log=print) -> dict:
+    """``<vid>_aerial.json`` for every region in ``regions_index.json``: the LINZ aerial photo survey over each
+    viewer reach (``aerial.py``; the file format is in ``web/README.md``). Needs no key; the STAC survey table,
+    the Basemaps layer list and the footprints are cached in ``data/nz/aerial/`` (``refresh`` fetches the tables
+    again)."""
+    from . import aerial as A
+
+    ranked, rule = A.rank(A.surveys(refresh, log), A.basemaps_layers(refresh, log), log=log)
+    log(f"aerial: {len(ranked)} surveys can be on top at zoom {A.ZOOM} (ranked by {rule})")
+    index = json.loads((data_dir / "regions_index.json").read_text())
+    boxes = [[e["bounds"][0][1], e["bounds"][0][0], e["bounds"][1][1], e["bounds"][1][0]] for e in index]
+    need = [r for r in ranked if any(A.overlaps(r["bbox"], b) for b in boxes)]
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(8) as ex:
+        fps = dict(zip([r["slug"] for r in need], ex.map(A.footprint, need), strict=True))
+    counts = {}
+    for e, box in zip(index, boxes, strict=True):
+        lines = reach_lines(data_dir, e)
+        if lines is None:
+            log(f"aerial: {e['id']} skipped (no viewer reaches)")
+            continue
+        sub = [r for r in need if A.overlaps(r["bbox"], box)]
+        rec = A.region_record(_to_nztm(lines), sub, [fps.get(r["slug"]) for r in sub], rule)
+        path = data_dir / f"{e['id']}_aerial.json"
+        path.write_text(json.dumps(rec, ensure_ascii=False, separators=(",", ":")))
+        st = rec["stats"]
+        counts[e["id"]] = st
+        log(f"aerial: {e['id']} {st['covered']}/{st['reaches']} reaches ({st['kmCovered']:.0f} of {st['km']:.0f} km) "
+            f"under {len(rec['surveys'])} surveys, {path.stat().st_size / 1e3:.0f} kB")
     return counts
 
 

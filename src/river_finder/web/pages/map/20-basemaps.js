@@ -1,7 +1,9 @@
 /* Base maps: none, terrain (own LINZ-DEM hillshade), NZ Topo50 (LINZ Basemaps; standalone site only,
    needs a Basemaps key), satellite (Sentinel-2 cloudless 2025 by EOX, CC BY-NC-SA 4.0: live tiles on the
    standalone site, a pre-rendered image per region on the artifact host, which blocks tile servers),
-   catchment area (linear) and catchment area (log), plus region outlines. Owner: map agent. */
+   aerial (LINZ Basemaps aerial photos from zoom 13 over the satellite map; standalone site with a key, like
+   Topo50; coverage per reach in 47-aerial.js), catchment area (linear) and catchment area (log), plus region
+   outlines. Owner: map agent. */
 (() => {
   "use strict";
   const RF = window.RF, M = RF.mapkit;
@@ -9,6 +11,7 @@
   const KEY = RF.config.basemapsKey || "";
   const linz = (set) => `https://basemaps.linz.govt.nz/v1/tiles/${set}/WebMercatorQuad/{z}/{x}/{y}.webp${KEY ? `?api=${encodeURIComponent(KEY)}` : ""}`;
   const LINZ_ATTR = '<a href="https://basemaps.linz.govt.nz/" target="_blank" rel="noopener">LINZ Basemaps</a> CC BY 4.0';
+  const LINZ_AERIAL_ATTR = 'Aerial photos <a href="https://basemaps.linz.govt.nz/" target="_blank" rel="noopener">LINZ Basemaps</a> CC BY 4.0';
   // EOxCloudless (Sentinel-2 cloudless) 2025: the newest cloud-free mosaic, CC BY-NC-SA 4.0
   const S2_TILES = "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2025_3857/default/g/{z}/{y}/{x}.jpg";
   M.S2_ATTR = 'Satellite <a href="https://cloudless.eox.at" target="_blank" rel="noopener">EOxCloudless 2025</a> by EOX (modified Copernicus Sentinel data 2025) <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noopener">CC BY-NC-SA 4.0</a>';
@@ -16,16 +19,21 @@
   M.BASEMAPS = [
     { id: "none", label: "None", note: "Plain background" },
     { id: "terrain", label: "Terrain", note: "Shaded relief from the LINZ elevation model" },
-    { id: "topo", label: "Topographic", note: "NZ Topo50 maps (LINZ)", site: true },
+    { id: "topo", label: "Topographic", note: "NZ Topo50 maps (LINZ)", site: true, key: true },
     { id: "satellite", label: "Satellite", note: "Sentinel-2 cloudless 2025 (EOX), 10 m pixels" },
+    { id: "linz-aerial", label: "Aerial (LINZ)", site: true, key: true,
+      note: "LINZ aerial photos (mostly 0.075 to 0.3 m pixels) from zoom 13; zoomed out, and where LINZ has no photos, satellite" },
     { id: "catch", label: "Catchment area", note: "Upstream area at every point, linear colour scale" },
     { id: "catch-log", label: "Catchment area (log)", note: "Upstream area, logarithmic colour scale" },
   ];
-  // Topographic needs a LINZ Basemaps key built into the site (web build --basemaps-key); without one
-  // LINZ answers 400 for most tiles, so the option is left out.
-  M.basemapAvailable = (b) => (!b.site || SITE) && (b.id !== "topo" || !!KEY);
-  /** Left out of the picker: topographic on a site built without a key (nothing to enable it). */
-  M.basemapHidden = (b) => SITE && b.id === "topo" && !KEY;
+  // Topographic and aerial need a LINZ Basemaps key built into the site (web build --basemaps-key); without
+  // one LINZ answers 400 for most tiles, so those options are left out.
+  M.basemapAvailable = (b) => (!b.site || SITE) && (!b.key || !!KEY);
+  /** Left out of the picker: topographic and aerial on a site built without a key (nothing to enable them). */
+  M.basemapHidden = (b) => SITE && !!b.key && !KEY;
+  /** Photo base maps (dark imagery: overlays take a stronger tint). */
+  M.isImagery = (id) => id === "satellite" || id === "linz-aerial";
+  M.AERIAL_MIN_ZOOM = 13; // LINZ Basemaps aerial draws photos from zoom 13 (urban surveys from 14); below, 10 m satellite
   /** Two significant figures, no trailing zeros: 0.05, 0.5, 3.2, 45, 1200. */
   M.nice = (v) => v <= 0 ? "0" : String(+v.toPrecision(2));
 
@@ -51,8 +59,11 @@
     if (SITE) {
       if (KEY) map.addSource("bm-topo", { type: "raster", tiles: [linz("topo-raster")], tileSize: 256, maxzoom: 17, attribution: LINZ_ATTR });
       map.addSource("bm-sat", { type: "raster", tiles: [S2_TILES], tileSize: 256, maxzoom: 14 });
+      // Aerial photos over the satellite map from zoom 13 (Basemaps shows its own 10 m satellite where it has no photos)
+      if (KEY) map.addSource("bm-aerial", { type: "raster", tiles: [linz("aerial")], tileSize: 256, minzoom: M.AERIAL_MIN_ZOOM, maxzoom: 20, attribution: LINZ_AERIAL_ATTR });
       if (KEY) M.addLayer({ id: "bm-topo", type: "raster", source: "bm-topo", layout: { visibility: "none" }, paint: { "raster-fade-duration": 150 } }, "base");
       M.addLayer({ id: "bm-sat", type: "raster", source: "bm-sat", layout: { visibility: "none" }, paint: { "raster-fade-duration": 150 } }, "base");
+      if (KEY) M.addLayer({ id: "bm-aerial", type: "raster", source: "bm-aerial", minzoom: M.AERIAL_MIN_ZOOM, layout: { visibility: "none" }, paint: { "raster-fade-duration": 150 } }, "base");
     }
     let warned = false;
     map.on("error", (e) => {
@@ -244,7 +255,8 @@
     const b = M.BASEMAPS.find((x) => x.id === id);
     const use = b && M.basemapAvailable(b) ? id : "terrain";
     M.vis("bm-topo", use === "topo");
-    M.vis("bm-sat", use === "satellite");
+    M.vis("bm-sat", use === "satellite" || use === "linz-aerial");
+    M.vis("bm-aerial", use === "linz-aerial");
     M.vis("sat-img", use === "satellite");
     M.vis("terrain", use === "terrain" || use.startsWith("catch"));
     M.vis("catch", use.startsWith("catch"));

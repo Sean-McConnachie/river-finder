@@ -35,6 +35,7 @@ uv run river-finder nz viewer                        # region data files -> data
 uv run river-finder external all                     # waterfalls, roads, tracks (~1 min for the refs)
 LINZ_LDS_KEY=... uv run river-finder web data        # known sections, roads/tracks, gauges, LINZ rivers (key: LDS, never committed)
 uv run river-finder web data --only linz             # only <region>_linz.json, from the cached LINZ lines (no key, no network)
+uv run river-finder web data --only aerial           # only <region>_aerial.json, LINZ aerial survey per reach (no key; ~1 min)
 uv run river-finder web build                        # -> data/web/index.html + artifact.html (+ data files)
 uv run river-finder web serve                        # http://localhost:8000/
 ```
@@ -62,11 +63,40 @@ Publishing:
   stages `data/web_pages/` (`index.html`, data files, glyphs, `.nojekyll`; not the artifact files or
   `<region>_sat.jpg`) as a single orphan commit and force-pushes it to `gh-pages`, which only ever
   holds the latest build. The satellite base map is Sentinel-2 cloudless 2025 (EOX, CC BY-NC-SA 4.0):
-  live tiles on the site, `<region>_sat.jpg` (from `web data`) on the artifact. The topographic base
-  map needs a LINZ Basemaps API key at build time (`--basemaps-key` or `$LINZ_BASEMAPS_KEY`; Basemaps
-  keys are public by design and end up in the page). Without one the option is left out, because LINZ
-  answers HTTP 400 for tiles outside its CDN cache. With no data the app still builds and every
-page shows its empty state. Run `uv run pytest -q tests/test_webapp.py` before pushing.
+  live tiles on the site, `<region>_sat.jpg` (from `web data`) on the artifact. The topographic and
+  the Aerial (LINZ) base maps need a LINZ Basemaps API key at build time (`--basemaps-key` or
+  `$LINZ_BASEMAPS_KEY`; Basemaps keys are public by design and end up in the page). Without one both
+  options are left out, because LINZ answers HTTP 400 for tiles outside its CDN cache. With no data the
+  app still builds and every page shows its empty state. Run `uv run pytest -q tests/test_webapp.py` before pushing.
+
+LINZ aerial photos (`<region>_aerial.json`, `aerial.py`, bead rf-aq6.29): the Aerial (LINZ) base map draws the
+LINZ Basemaps `aerial` tiles from zoom 13 over the satellite map (zoomed out, and where LINZ has no photos, people see
+satellite). River cards and the Details name the survey under the river ("Aerial photo: 0.2 m, 2024-2025, Bay of
+Plenty West Rural Aerial Photos") on every host, from the data file; on the site with a key the card's **View aerial**
+turns the photos on and zooms in, with Upstream / Downstream steps a screen at a time along a long river, and the
+Details get an **Aerial photos** button. The artifact gets no photos: its host blocks tile servers, and pre-rendered
+strips for the top rivers would be about 0.5 MB per km at 0.5 m pixels (hundreds of MB for the top runs of 19 regions),
+so it shows the survey line and a "See it in LINZ Basemaps" link instead.
+
+File format (`webdata.write_aerial`; ``aerial.region_record``):
+
+```json
+{"v": 1, "rank": "basemaps", "zoom": 16, "minZoom": 13, "step": 25.0, "attribution": "...", "licence": "CC BY 4.0",
+ "surveys": [..., {"id": "bay-of-plenty_2024_0.2m", "title": "Bay of Plenty West 0.2m Rural Aerial Photos (2024-2025)",
+                   "name": "Bay of Plenty West Rural Aerial Photos", "gsd": 0.2, "years": "2024-2025",
+                   "start": "2024-01-26", "end": "2025-01-14", "cat": "rural", "km": 730.2}, ...],
+ "s": [5, 2, 4, 4, -1, ...],
+ "part": [[831, 80], [911, 60], ...],
+ "stats": {"reaches": 6730, "covered": 6730, "km": 1532.6, "kmCovered": 1532.6}}
+```
+
+`s[i]`: index into `surveys` of the survey drawn on top (at `zoom`) over most of viewer reach `i` (same order as
+`Region.segments`), -1 = no aerial photo over the reach. `part`: `[reach, percent]` for reaches only partly under any
+photo (the rest are 100 % when `s >= 0`, 0 % when -1). `rank`: `"basemaps"` (the survey Basemaps draws on top) or `"gsd"`
+(finest, then newest: the Basemaps layer list could not be read). `gsd` in metres, dates are NZ capture dates,
+`cat` rural | urban | ancillary (storm and flood flights Basemaps draws), `km` the length of reaches it is the main
+survey of (times their covered share). A file whose `s` length differs from the
+region's reach count is from another build and is ignored. Coverage numbers per region: `docs/data-sources.md`.
 
 ## Writing a page
 
@@ -110,7 +140,7 @@ Stable unless noted. Anything not listed here is internal.
 | `RF.setRunParams(params \| null)` | merge over defaults (null resets); emits `runs` |
 | `RF.select(feature)` | emits `select` |
 | `RF.on(evt, fn)` → `unsubscribe` | events: `ready`, `page`, `region`, `model`, `runs`, `select`, `detail-close`, `rain` |
-| `RF.go(pageId, params)` | open a page; e.g. `RF.go("map", {select: feature})` zooms the map to it and highlights it |
+| `RF.go(pageId, params)` | open a page; e.g. `RF.go("map", {select: feature})` zooms the map to it and highlights it; `{select, aerial: true}` also turns on the LINZ aerial photos and zooms along it (site with a Basemaps key) |
 
 ### Data: `RF.data`
 

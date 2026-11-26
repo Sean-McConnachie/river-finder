@@ -1,6 +1,7 @@
 /* Selection on the map: tap anything drawn to highlight it and get a short card; "Details" opens the
    full-screen detail view (RF.detail), which closes back to the same map view; "Show catchment" shades
-   what drains into the river (45-catchment.js) until the selection changes.
+   what drains into the river (45-catchment.js) until the selection changes; "View aerial" turns on the LINZ
+   aerial photos and zooms along the river (47-aerial.js).
    Layer files register:
      M.clickable({layers: [layerIds], priority, feature(mapFeature, event, allHits) → feature reference | null})
      M.card[kind] = (feature) → {eyebrow, title, lines: [Node|string]}
@@ -33,16 +34,29 @@
   const coordsOf = (g) => !g ? [] : g.type === "Point" ? [g.coordinates] : g.type === "LineString" ? g.coordinates
     : g.type === "MultiLineString" ? g.coordinates.flat() : [];
 
+  const CASING_W = ["interpolate", ["linear"], ["zoom"], 8, 7, 14, 12], SEL_W = ["interpolate", ["linear"], ["zoom"], 8, 3, 14, 6];
   M.initSelection = () => {
     const map = M.map;
     map.addSource("sel", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
     M.addLayer({ id: "sel-casing", type: "line", source: "sel", filter: ["in", ["geometry-type"], ["literal", ["LineString", "MultiLineString"]]],
-      layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 8, 7, 14, 12], "line-opacity": 0.9 } }, "select");
+      layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": CASING_W, "line-opacity": 0.9 } }, "select");
     M.addLayer({ id: "sel-line", type: "line", source: "sel", filter: ["in", ["geometry-type"], ["literal", ["LineString", "MultiLineString"]]],
-      layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": M.token("--accent"), "line-width": ["interpolate", ["linear"], ["zoom"], 8, 3, 14, 6] } }, "select");
+      layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": M.token("--accent"), "line-width": SEL_W } }, "select");
     M.addLayer({ id: "sel-point", type: "circle", source: "sel", filter: ["in", ["geometry-type"], ["literal", ["Point", "MultiPoint"]]],
       paint: { "circle-radius": 9, "circle-color": "rgba(0,0,0,0)", "circle-stroke-color": M.token("--accent"), "circle-stroke-width": 3 } }, "select");
     M.onTheme(() => { if (map.getLayer("sel-line")) { map.setPaintProperty("sel-line", "line-color", M.token("--accent")); map.setPaintProperty("sel-point", "circle-stroke-color", M.token("--accent")); } });
+    // On the aerial photos a selected river is drawn as two rails either side of its line, so the channel itself shows.
+    const gap = ["interpolate", ["linear"], ["zoom"], 12, 0, 14, 8, 17, 30];
+    const selStyle = (use) => {
+      if (!map.getLayer("sel-line")) return;
+      const photo = use === "linz-aerial";
+      map.setPaintProperty("sel-line", "line-gap-width", photo ? gap : 0);
+      map.setPaintProperty("sel-casing", "line-gap-width", photo ? gap : 0);
+      map.setPaintProperty("sel-line", "line-width", photo ? 2.5 : SEL_W);
+      map.setPaintProperty("sel-casing", "line-width", photo ? 5 : CASING_W);
+    };
+    M.onBasemap(selStyle);
+    selStyle(document.querySelector(".map-root")?.dataset.basemap);
 
     map.on("click", (e) => onClick(e));
     map.on("mousemove", RF.util.debounce((e) => {
@@ -109,9 +123,11 @@
     if (!def.noDetails) actions.append(el("button", { type: "button", class: "rf-btn rf-btn--primary", onclick: (e) => RF.detail.open(f, { opener: e.currentTarget }) }, "Details"));
     if (M.geometryOf(f)) actions.append(el("button", { type: "button", class: "rf-btn", onclick: () => M.zoomTo(f) }, "Zoom to"));
     if (M.catchment?.offers(f)) actions.append(M.catchment.button(f)); // 45-catchment.js
+    if (M.aerial?.offers(f)) actions.append(M.aerial.button(f)); // 47-aerial.js
     cardEl.replaceChildren(el("div", { class: "map-card-head" },
       el("div", { class: "map-card-titles" }, el("span", { class: "rf-eyebrow", text: def.eyebrow || "" }), el("strong", { class: "map-card-title", text: def.title || "" })), close),
-    ...[...(def.lines || []), ...(M.rain?.lines(f) || []), ...(M.catchment?.lines(f) || [])].filter(Boolean).map((l) => el("div", { class: "map-card-line" }, l)), actions);
+    ...[...(def.lines || []), ...(M.aerial?.lines(f) || []), ...(M.rain?.lines(f) || []), ...(M.catchment?.lines(f) || [])].filter(Boolean)
+      .map((l) => el("div", { class: "map-card-line" }, l)), actions);
     cardEl.hidden = false;
   }
   /** Draw the open card again (e.g. once the model scores it shows have loaded). kind: only a card of that kind. */

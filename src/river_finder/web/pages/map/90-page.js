@@ -1,5 +1,6 @@
 /* Map page (#map): mounts MapLibre, the panel, the card and the floating controls; opens regions.
-   Public: RF.go("map", {select: feature}) and RF.map.{instance, select, zoomTo, region}. Owner: map agent. */
+   Public: RF.go("map", {select: feature, aerial?}) (aerial: true also turns on the LINZ aerial photos and zooms
+   along the feature, where the site has them) and RF.map.{instance, select, zoomTo, region}. Owner: map agent. */
 (() => {
   "use strict";
   const RF = window.RF, M = RF.mapkit, { el, icon } = RF.util;
@@ -32,7 +33,9 @@
     if (!params?.select || !M.ready) return;
     const f = params.select;
     if (f.region && (!M.R || M.R.id !== f.region)) await M.openRegion(f.region, { fit: false });
-    M.select(f, { fit: true });
+    const aerial = params.aerial && M.aerial?.available();
+    M.select(f, { fit: !aerial });
+    if (aerial) M.aerial.view(f);
   }
 
   function mountMap(container) {

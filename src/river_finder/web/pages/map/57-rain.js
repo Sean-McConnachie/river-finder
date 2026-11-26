@@ -152,7 +152,7 @@
 
   function paint() {
     const map = M.map; if (!map?.getLayer("rain-line")) return;
-    const v = ["coalesce", ["get", key()], -1], r = ramp(), sat = M.prefs.basemap === "satellite";
+    const v = ["coalesce", ["get", key()], -1], r = ramp(), sat = M.isImagery(M.prefs.basemap);
     LINES.forEach((id) => {
       map.setPaintProperty(id, "line-color", ["step", v, "rgba(0,0,0,0)", ...TENTHS.flatMap((t, k) => [t, r[k]])]);
       map.setPaintProperty(id, "line-opacity", ["step", v, 0, TENTHS[0], 0.6, TENTHS[1], 1]);

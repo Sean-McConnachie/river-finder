@@ -1,7 +1,7 @@
 /* Full-screen river details (RF.detail renderers for "section", "run" and "reach"): summary, a stats
-   table, the long profile (elevation and height-to-area against distance), a flow-rate placeholder,
-   put-in / take-out coordinates, hazards and links to sources. Renderers load their region through
-   RF.data, so they work from any page. Owner: map agent. */
+   table (with the LINZ aerial survey over the river, 47-aerial.js), the long profile (elevation and
+   height-to-area against distance), a flow-rate placeholder, put-in / take-out coordinates, hazards and
+   links to sources. Renderers load their region through RF.data, so they work from any page. Owner: map agent. */
 (() => {
   "use strict";
   const RF = window.RF, M = RF.mapkit, { el, fmt, icon } = RF.util;
@@ -39,7 +39,7 @@
       zMax: Math.max(...ms.map((m) => S.zt[m])), zMin: Math.min(...ms.map((m) => S.zb[m])), mel: median(ms.map((m) => S.mel[m])) });
   }
 
-  function statsTable(st, score) {
+  function statsTable(st, score, air) {
     // not one joined stretch: no single top → bottom, so say what each figure covers
     const many = st.n > 1, over = many ? `${st.n} separate pieces` : "the main stem and its side branches";
     const rows = [
@@ -59,6 +59,14 @@
         : ["Road access", `${fmt.dist(st.acc.putIn)} · ${fmt.dist(st.acc.takeOut)}`, "From the top · from the bottom (OpenStreetMap)"]);
       rows.push(["Nearest foot track", fmt.dist(st.acc.foot), "Along the section"]);
       rows.push(["Mapped waterfalls", st.falls ? `${st.falls}${st.fallsH ? `, tallest ${st.fallsH} m` : ""}` : "None mapped", "OpenStreetMap; coverage is patchy"]);
+    }
+    if (air) {
+      if (!air.sv) rows.push(["Aerial photos", "None", "No LINZ aerial photos over this stretch: satellite only"]);
+      else {
+        const d = M.aerial.describe(air), pct = Math.round(100 * air.share);
+        rows.push(["Aerial photos", d.value, `${d.name} (LINZ, pixel size and capture years)${pct < 95 ? `, over ${pct}% of the length` : ""}`
+          + `${air.others ? `; ${air.others} other survey${air.others > 1 ? "s" : ""} on parts` : ""}`]);
+      }
     }
     return el("div", { class: "rf-tablewrap" }, el("table", { class: "rf-table det-stats" },
       el("thead", {}, el("tr", {}, el("th", { text: "Measure" }), el("th", { class: "n", text: "Value" }), el("th", { class: "det-note", text: "Note" }))),
@@ -116,7 +124,7 @@
     if (!near?.flow.length && !near?.rain.length) gauges.push(el("span", { class: "rf-note", text: "No gauges within 25 km." }));
     groups.push(["Gauges", gauges]);
     groups.push(["Maps", [
-      ext(`https://basemaps.linz.govt.nz/@${lat.toFixed(5)},${lon.toFixed(5)},z14`, "LINZ Basemaps"),
+      ext(`https://basemaps.linz.govt.nz/@${lat.toFixed(5)},${lon.toFixed(5)},z16`, "LINZ Basemaps (aerial photos)"),
       ext(`https://www.openstreetmap.org/?mlat=${lat.toFixed(5)}&mlon=${lon.toFixed(5)}#map=14/${lat.toFixed(5)}/${lon.toFixed(5)}`, "OpenStreetMap"),
       ext(`https://www.google.com/maps/search/?api=1&query=${lat.toFixed(5)},${lon.toFixed(5)}`, "Google Maps")]]);
     groups.push(["Videos and web", [
@@ -174,12 +182,18 @@
       model: sc.fallback ? "Pooled regression (this build has no per-model scores)" : RF.models.get(RF.state.model)?.title || RF.state.model } : null;
     const onSection = f.kind !== "section" ? R.sections.find((x) => ms.some((m) => x.m.includes(m))) : null;
     const hy = hydroOf(await hydroFile(R.id), S, f.kind === "reach" ? [f.seg] : ms);
+    const air = M.aerial ? M.aerial.of(await M.aerial.file(R.id), S, ms) : null; // 47-aerial.js; null without data
     const name = f.kind === "section" ? sec.river : f.name;
 
     // header
     const showBtn = el("button", { type: "button", class: "rf-btn det-show", "aria-label": "Show on map", onclick: () => { ctx.close(); RF.go("map", { select: f }); } },
       el("span", { html: icon("pin"), "aria-hidden": "true" }), el("span", { class: "det-show-label", text: "Show on map" }));
     ctx.actions.append(showBtn);
+    if (M.aerial?.available() && air?.sv !== null) {
+      ctx.actions.append(el("button", { type: "button", class: "rf-btn det-show det-aerial", "aria-label": "Aerial photos on the map", title: "LINZ aerial photos on the map, zoomed in along the river",
+        onclick: () => { ctx.close(); RF.go("map", { select: f, aerial: true }); } },
+      el("span", { html: M.aerial.PHOTO, "aria-hidden": "true" }), el("span", { class: "det-show-label", text: "Aerial photos" })));
+    }
     const eyebrow = f.kind === "section" ? `Known river · ${sec.srcName === "riverguide" ? "NZ RiverGuide" : sec.srcName}`
       : f.kind === "run" ? (f.status === "listed" ? "Predicted run · in the guides" : f.status === "heldout" ? "Predicted run · test river" : "Predicted run · not in the guides")
         : f.linz ? `LINZ ${f.linz.type} · numbers from the modelled channel` : "Modelled channel";
@@ -215,7 +229,7 @@
 
     const body = [
       el("div", { class: "det-summary" }, pills, ...desc, gen, apart, hy ? hydroNote(hy) : null),
-      section("Key numbers", statsTable(st, score)),
+      section("Key numbers", statsTable(st, score, air)),
       section("Long profile", ...profile(S, st.stem, highlight), stemNote),
       M.rain?.section(f, R), // 57-rain.js: live rain at the outlet (null without live rain)
       section("Flow rate", RF.chart.placeholder("Flow rate over time",

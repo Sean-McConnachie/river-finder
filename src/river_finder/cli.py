@@ -364,13 +364,18 @@ def main(argv: list[str] | None = None) -> None:
     ph.add_argument("step", choices=["check", "attach"])
     pw = sub.add_parser("web", help="web app (Map, Top rivers, Models, Info): build | serve (see web/README.md)")
     pw.add_argument("step", choices=["data", "build", "serve", "pages"],
-                    help="data: per-region extras (sections, roads, tracks, gauges, LINZ rivers, satellite) into "
+                    help="data: per-region extras (sections, roads, tracks, gauges, LINZ rivers, satellite, hydro, "
+                         "aerial photo coverage) into "
                          "--data; build: the pages; serve: localhost; pages: stage the site for GitHub Pages "
                          "(--push to publish)")
     pw.add_argument("--push", action="store_true", help="pages: force-push the staged site to the gh-pages branch")
-    pw.add_argument("--only", nargs="+", choices=["sections", "access", "gauges", "linz", "satellite", "hydro"],
+    pw.add_argument("--only", nargs="+",
+                    choices=["sections", "access", "gauges", "linz", "satellite", "hydro", "aerial"],
                     help="data: run only these steps (e.g. --only linz rebuilds <region>_linz.json from the cached "
-                         "LINZ lines, no network)")
+                         "LINZ lines, no network; --only aerial writes <region>_aerial.json, the LINZ aerial photo "
+                         "survey per reach, from s3://nz-imagery, no key)")
+    pw.add_argument("--refresh", action="store_true",
+                    help="data: fetch cached source tables again (aerial: the STAC survey table and Basemaps layers)")
     pw.add_argument("--data", type=Path, default=REPO_ROOT / "data" / "viewer_nz",
                     help="region data files (from nz viewer / models viewer / external attach)")
     pw.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "web")
@@ -504,10 +509,11 @@ def main(argv: list[str] | None = None) -> None:
 
         if args.step == "data":
             from .linz import write_linz
-            from .webdata import write_access, write_gauges, write_hydro, write_satellite, write_sections
+            from .webdata import write_access, write_aerial, write_gauges, write_hydro, write_satellite, write_sections
 
             steps = {"sections": write_sections, "access": write_access, "gauges": write_gauges, "linz": write_linz,
-                     "satellite": write_satellite, "hydro": write_hydro}
+                     "satellite": write_satellite, "hydro": write_hydro,
+                     "aerial": lambda d: write_aerial(d, refresh=args.refresh)}
             for k, step in steps.items():
                 if not args.only or k in args.only:
                     step(args.data)
