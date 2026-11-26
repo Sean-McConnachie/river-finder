@@ -82,6 +82,10 @@ def _nz(args):
         nz.export_gis(log)
     elif args.step == "relink":
         _relink(args, log)
+    elif args.step == "xsec":
+        from . import xsec
+
+        xsec.run_tiles(tiles, out_dir=args.xsec_dir, keep_dem=args.keep_dem, log=log)
     elif args.step == "score":
         from .nzscore import score_national
 
@@ -321,9 +325,11 @@ def main(argv: list[str] | None = None) -> None:
         p.add_argument("regions", nargs="*", help=f"region names (default: all of {list_regions()})")
     pn = sub.add_parser("nz", help="national run: fetch | tiles | score | export | viewer | relink "
                                    "(see docs/PLAN.md)")
-    pn.add_argument("step", choices=["fetch", "tiles", "score", "viewer", "export", "relink"],
+    pn.add_argument("step", choices=["fetch", "tiles", "score", "viewer", "export", "relink", "xsec"],
                     help="relink: reconnect, along REC2, reaches of the national table that stop at a tile edge "
-                         "(rf-t26.8), without re-running tiles or score")
+                         "(rf-t26.8), without re-running tiles or score; xsec: DEM cross-sections of every "
+                         "reach >= 1 km2 (8 m DEM fetched again per tile, resumable) -> data/nz/xsec/tiles/ and "
+                         "data/nz/xsec.pkl (src/river_finder/xsec.py, docs/cross-sections.md)")
     pn.add_argument("tiles", nargs="*", help="tile ids such as x11y16 (default: every land tile)")
     pn.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz")
     pn.add_argument("--page-only", action="store_true", help="viewer: re-render only the page, keep the region files")
@@ -332,6 +338,10 @@ def main(argv: list[str] | None = None) -> None:
                          "(default data/nz)")
     pn.add_argument("--table", type=Path, default=None,
                     help="relink: table to read (default <data>/segments_table.pkl)")
+    pn.add_argument("--xsec-dir", type=Path, default=None,
+                    help="xsec: output directory (default data/nz/xsec; the merged table goes next to it as "
+                         "<dir>.pkl)")
+    pn.add_argument("--keep-dem", action="store_true", help="xsec: keep each tile's 8 m DEM in <xsec-dir>/dem/")
     pn.add_argument("--table-out", type=Path, default=None,
                     help="relink: where to write the relinked table (default: replace --table, keeping the old one "
                          "as <name>.pre_relink.pkl); the link log goes next to it as <name>_relink_log.csv")
@@ -477,6 +487,14 @@ def main(argv: list[str] | None = None) -> None:
                     help="national data directory with tiles/ and segments_table.pkl (default: paths.nz_data in "
                          "config/rainfall.toml, i.e. data/nz)")
     pr.add_argument("--config", type=Path, default=None, help="rainfall config (default config/rainfall.toml)")
+    pc = sub.add_parser("xsec", help="DEM cross-sections of a reference area's reaches -> data/<region>/xsec_<dem>.pkl "
+                                     "(src/river_finder/xsec.py, docs/cross-sections.md)")
+    pc.add_argument("regions", nargs="*", help=f"region names (default: all of {list_regions()})")
+    pc.add_argument("--dem", choices=["8m", "5m", "both"], default="8m",
+                    help="8m: the contour DEM the national run uses (what the ML features read); 5m: the LiDAR-derived "
+                         "routing DEM, for the resolution comparison")
+    pc.add_argument("--xsec-dir", type=Path, default=None,
+                    help="write <dir>/<region>_xsec_<dem>.pkl instead of data/<region>/xsec_<dem>.pkl")
     pv = sub.add_parser("viewer", help="build the browser viewer for the given regions")
     pv.add_argument("regions", nargs="*")
     pv.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer")
@@ -540,6 +558,13 @@ def main(argv: list[str] | None = None) -> None:
         return
     regions = [load_region(n) for n in (args.regions or list_regions())]
 
+    if args.cmd == "xsec":
+        from . import xsec
+
+        for r in regions:
+            for dem in (("8m", "5m") if args.dem == "both" else (args.dem,)):
+                xsec.run_region(r, dem=dem, out_dir=args.xsec_dir)
+        return
     if args.cmd == "viewer":
         from .viewer import build
 
