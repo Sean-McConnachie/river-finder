@@ -95,6 +95,8 @@ uv run river-finder nz fetch|tiles|score|viewer   # national 8 m scan in 64 km t
 uv run river-finder external fetch|attach   # OSM waterfalls/roads/tracks per reach via Overture S3 (~10 min)
 uv run river-finder hydro check|attach      # hydro-diverted/regulated/reservoir reaches from config/hydro.toml -> data/nz/hydro.pkl
                                           # (~30 s; ml audit and web data --only hydro use it; docs/hydro.md)
+uv run river-finder lidar fetch|coverage   # 1 m LiDAR coverage from the nz-elevation STAC: survey footprints, per-reach and
+                                          # catchment share, survey + year, gaps, summary -> data/analysis/lidar/ (~7 min; docs/lidar-coverage.md)
 uv run river-finder web data|build|serve|pages  # web app (Map, Top rivers, Models, Info) -> data/web/
 uv run river-finder nz xsec [tiles]; xsec <region>  # 8 m DEM cross-sections per reach (widths at 10/20 m stages, walls,
                                           # constriction) -> data/nz/xsec.pkl (~65 min, < 2 GB, resumable; docs/cross-sections.md)

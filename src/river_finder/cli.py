@@ -372,6 +372,12 @@ def main(argv: list[str] | None = None) -> None:
                                       "check (where each point snaps) | attach (data/nz/hydro.pkl; see "
                                       "src/river_finder/hydro.py, docs/hydro.md)")
     ph.add_argument("step", choices=["check", "attach"])
+    pli = sub.add_parser("lidar", help="1 m LiDAR DEM coverage from the nz-elevation STAC: fetch (survey table and "
+                                       "footprints) | coverage (layer, per-reach and per-catchment coverage, gaps, "
+                                       "summary) | all (src/river_finder/lidar.py, docs/lidar-coverage.md)")
+    pli.add_argument("step", choices=["fetch", "coverage", "all"])
+    pli.add_argument("--out", type=Path, default=None, help="output directory (default data/analysis/lidar)")
+    pli.add_argument("--refresh", action="store_true", help="fetch the STAC tables and footprints again and recompute")
     pw = sub.add_parser("web", help="web app (Map, Top rivers, Models, Info): build | serve (see web/README.md)")
     pw.add_argument("step", choices=["data", "build", "serve", "pages"],
                     help="data: per-region extras (sections, roads, tracks, gauges, LINZ rivers, satellite, hydro, "
@@ -518,6 +524,14 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.cmd == "external":
         _external(args)
+        return
+    if args.cmd == "lidar":
+        from . import lidar
+
+        if args.step == "fetch":
+            lidar.fetch(args.out, refresh=args.refresh)
+        else:
+            lidar.run(args.out, refresh=args.refresh)
         return
     if args.cmd == "hydro":
         _hydro(args)
