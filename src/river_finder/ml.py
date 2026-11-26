@@ -409,6 +409,9 @@ ZOO = [
          description="gbm_terrain + 8 m DEM cross-sections: width at 10 and 20 m stages, lower wall height, "
                      "cross-sectional height-to-area, constriction (pinch points) and unit stream power over the "
                      "10 m-stage width."),
+    Spec("logit_xsec", "logistic", "Logistic, all features + cross-sections", BASE + TERRAIN + OSM + ROCK_ONEHOT + XSEC,
+         description="logit_plus + the gbm_xsec cross-section features. A linear model cannot form width-to-flood "
+                     "or wall-to-width ratios itself, so explicit section features help it more than LightGBM."),
     Spec("gbm_xy", "gbm", "LightGBM, all + coordinates", BASE + TERRAIN + OSM + ["x_km", "y_km"],
          ["rockclass", "rockgroup"],
          description="gbm_osm + NZTM coordinates. Here to show how much location alone inflates CV; compare its "

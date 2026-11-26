@@ -162,8 +162,70 @@ def test_attach_and_registry():
     assert list(f["xs_n"]) == [2, 3, 0] and np.isnan(f.loc[2, "xs_w10_med"])
     spec = ml.spec_by_id("gbm_xsec")
     assert spec.features == ml.BASE + ml.TERRAIN + ml.XSEC
+    assert ml.spec_by_id("logit_xsec").features == ml.spec_by_id("logit_plus").features + ml.XSEC
     assert ml.spec_by_id("gbm_terrain").features == ml.BASE + ml.TERRAIN     # existing recipes unchanged
+    assert not set(ml.XSEC_ALL) & {f for s in ml.ZOO if "xsec" not in s.id for f in s.features}
     assert not ml.available(pd.DataFrame({"x": [1]}), spec) and ml.available(f, spec)
     assert ml.available(pd.DataFrame({"x": [1]}), ml.spec_by_id("gbm_terrain"))
     for name in ml.XSEC_ALL:
         assert name in ml.EXTRA and ml.EXTRA[name][2] == "xsec" and ml.describe(name)
+
+
+def _with_xsec(t: pd.DataFrame, seed: int = 3) -> pd.DataFrame:
+    """Synthetic cross-section columns: steep reaches get narrow, walled sections."""
+    rng = np.random.default_rng(seed)
+    n = len(t)
+    narrow = 1.0 / (1.0 + t["grad_s"].to_numpy() / 20.0)
+    t = t.copy()
+    t["xs_n"] = np.int16(5)
+    for h in XS.STAGES:
+        tg = XS.stage_tag(h)
+        w = np.clip((40 + 30 * h) * narrow * rng.uniform(0.7, 1.3, n), 4, 1000)
+        t[f"xs_w{tg}_med"], t[f"xs_w{tg}_min"] = w, w * rng.uniform(0.3, 1.0, n)
+        t[f"xs_a{tg}_med"], t[f"xs_p{tg}_med"] = 0.6 * w * h, w + 2 * h
+    t["xs_gorge_lo_med"] = 150 * (1 - narrow) * rng.uniform(0.5, 1.5, n)
+    return XS.derive(t)
+
+
+def test_gbm_xsec_card_cv_and_page(tmp_path, monkeypatch):
+    from test_ml import _synthetic_table
+
+    from river_finder import mlpage
+    from river_finder import models as M
+    from river_finder.labels import Section
+    from river_finder.models import Mapped
+
+    t = _with_xsec(_synthetic_table())
+    mapped = []
+    for c in range(0, 120, 3):
+        rows = np.arange(c * 12 + 6, c * 12 + 11)
+        t.loc[rows, "xs_w10_med"] = 30.0                  # known runs sit in narrow sections
+        s = Section(region=f"R{c % 4}", river=f"River {c}", status="runnable", grade="3")
+        mapped.append(Mapped(s, f"River {c} | R{c % 4}", rows, "name"))
+    split = {"name": "s", "train": sorted(m.key for i, m in enumerate(mapped) if i % 4),
+             "test": sorted(m.key for m in mapped[::4])}
+    for mod in (M, ml):
+        monkeypatch.setattr(mod, "MODELS_DIR", tmp_path)
+    monkeypatch.setattr(ml, "CV_DIR", tmp_path)
+    monkeypatch.setitem(ml.GBM_PARAMS, "n_estimators", 20)
+    card, text = ml.train_card(t, mapped, split, "vx", "xsec test", "", spec_id="gbm_xsec", order=9)
+    assert card["recipe"] == "gbm_xsec" and set(ml.XSEC) <= set(card["features"])
+    ml.save_gbm(card, text)
+    ml._BOOSTERS.clear()
+    lg = M.logits(M.load_card("vx"), t)
+    assert np.isfinite(lg).all()
+    # a frame without cross-sections and no stored table for it is refused, not scored with zeros
+    monkeypatch.setattr(XS, "national_table_path", lambda: tmp_path / "none.pkl")
+    bare = t.drop(columns=[c for c in t.columns if c.startswith("xs_")]).assign(gid=np.arange(len(t)))
+    with pytest.raises(KeyError, match="cross-section"):
+        M.logits(card, bare)
+    # CV, summary and the ML page with the new features; without them the page leaves them out
+    L = ml.labels(t, mapped)
+    zoo = [ml.spec_by_id("gbm_terrain"), ml.spec_by_id("gbm_xsec"), ml.spec_by_id("logit_xsec")]
+    cv = ml.run_cv(t, L, zoo, repeats=1, log=lambda m: None)
+    res = ml.summarise(t, L, cv, ml.run_loro(t, L, zoo, log=lambda m: None), zoo)
+    assert [m["id"] for m in res["models"]] == ["gbm_terrain", "gbm_xsec", "logit_xsec"]
+    e = mlpage.explore(t, L, log=lambda m: None)
+    assert {"xs_w10", "xs_pinch"} <= {f["id"] for f in e["features"]}
+    e0 = mlpage.explore(bare, L, log=lambda m: None)
+    assert not any(f["id"].startswith("xs_") for f in e0["features"])
