@@ -252,3 +252,65 @@ def test_default_basemap_is_linz_aerial_where_the_site_has_it(tmp_path, target, 
     assert r.returncode == 0, r.stderr
     got = json.loads(r.stdout)
     assert got["on"] == [want]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_score_layer_colours_every_reach_from_one_expression(tmp_path):
+    """pages/map/52-score.js: off by default, placed after Predicted runs; on, the model's percentiles go to MapLibre
+    once as a literal array indexed by the reach (no per-reach features); "From" makes lower reaches transparent and
+    a tap on one is declined; a model switch repaints with that model's scores."""
+    panel = webapp.web_root().joinpath("pages/map/30-panel.js").read_text()
+    js = webapp.web_root().joinpath("pages/map/52-score.js").read_text()
+    (tmp_path / "run.mjs").write_text(
+        "const out = { paint: [], vis: {}, sources: {}, clicks: [] };\n"
+        "const handlers = {};\n"
+        "const scores = { v1: [10.2, 55.5, 71, 99.6], v2: [90, 80, 20, 0.4] };\n"
+        "const RF = { state: { model: 'v1' }, util: { el: () => ({}), fmt: { int: String }, css: () => '' },\n"
+        "  on: (e, f) => { handlers[e] = f; }, models: { get: (id) => ({ title: `${id}: test` }) },\n"
+        "  data: { scores: async (r, m) => ({ pct: scores[m], role: null }) } };\n"
+        "globalThis.window = { RF };\n"
+        "const feats = [0, 1, 2, 3].map((i) => ({ type: 'Feature', properties: { i, w: i / 3 }, geometry: null }));\n"
+        "const layers = {};\n"
+        "const M = RF.mapkit = { prefs: { layers: {}, colors: {} }, savePrefs() {}, layerInits: [],\n"
+        "  card: { reach: () => ({ lines: [] }) },\n"
+        "  onRegion() {}, onTheme() {}, renderTree() {}, renderLegend() {}, updateNote() {},\n"
+        "  addLayer: (def) => { layers[def.id] = def; }, vis: (id, on) => { out.vis[id] = on; },\n"
+        "  clickable: (c) => { out.clicks.push(c); }, reachFeature: (i) => ({ kind: 'reach', seg: i }),\n"
+        "  map: { addSource: (id, s) => { out.sources[id] = s; }, getLayer: (id) => layers[id],\n"
+        "    getSource: (id) => ({ setData: (d) => { out.sources[id].n = d.features.length; } }),\n"
+        "    setPaintProperty: (id, k, v) => out.paint.push([id, k, v]) } };\n"
+        f"(0, eval)({json.dumps(panel)});\n"
+        "M.colorOf = (id, k) => `#${k}`;\n"
+        "M.defineLayer({ id: 'pred', label: 'Predicted runs' });\n"
+        "M.defineLayer({ id: 'pred-listed', parent: 'pred' });\n"
+        "M.defineLayer({ id: 'linz', label: 'LINZ' });\n"
+        f"(0, eval)({json.dumps(js)});\n"
+        "out.order = M.order.slice(); out.defaultOn = M.nodes.get('score').defaultOn;\n"
+        "M.layerInits.forEach((f) => f());\n"
+        "M.ready = true; M.R = { id: 'r', segments: { g: [1, 1, 1, 1], reg: [1, 2, 3, 4] } };\n"
+        "M.netData = { features: feats };\n"
+        "const tick = () => new Promise((r) => setTimeout(r, 0));\n"
+        "M.nodes.get('score').apply(); out.offVis = out.vis['score-line'];\n"
+        "M.prefs.layers.score = true; M.nodes.get('score').apply(); await tick();\n"
+        "const last = () => out.paint.filter((p) => p[0] === 'score-line').pop()[2];\n"
+        "out.first = last(); out.lo = out.sources['src-score-lo'].n; out.onVis = out.vis['score-line'];\n"
+        "const n0 = out.paint.length; M.nodes.get('score').apply(); out.repaints = out.paint.length - n0;\n"
+        "M.prefs.score.min = 70; M.nodes.get('score').apply(); out.cut = last();\n"
+        "const c = out.clicks[0], hit = (i) => c.feature({ properties: { i } }, null, [{ properties: { i } }]);\n"
+        "out.tap = [hit(0), hit(3)];\n"
+        "RF.state.model = 'v2'; handlers.model(); await tick(); out.v2 = last();\n"
+        "console.log(JSON.stringify(out));\n")
+    r = subprocess.run(["node", str(tmp_path / "run.mjs")], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    got = json.loads(r.stdout)
+    assert got["order"] == ["pred", "score", "pred-listed", "linz"] and got["defaultOn"] is False
+    assert got["offVis"] is False and got["onVis"] is True
+    assert got["lo"] == 2  # the zoomed-out source: reaches with w >= 0.422 (30 km²)
+    let, var, value, ramp = got["first"]
+    assert let == "let" and var == "v" and value == ["at", ["get", "i"], ["literal", [10, 56, 71, 100]]]
+    assert ramp == ["interpolate", ["linear"], ["var", "v"], 0, "#lo", 50, "#mid", 100, "#hi"]
+    assert got["repaints"] == 0  # another layer toggled: same scores, same colours, nothing re-sent
+    case = got["cut"][3]
+    assert case[:3] == ["case", ["<", ["var", "v"], 70], "rgba(0,0,0,0)"] and case[3][3:5] == [70, "#lo"]
+    assert got["tap"] == [None, {"kind": "reach", "seg": 3}]
+    assert got["v2"][2] == ["at", ["get", "i"], ["literal", [90, 80, 20, 0]]]

@@ -6,7 +6,8 @@
                     apply(on, colorOf), count(), note (text, or a function → text), link, legend,
                     legendKey() → Node (legend key of a layer without colours), rowKey() → Node (key in its tree row),
                     legendBlock() → Node | null (a whole legend block instead of a row; mini: true also puts it in the
-                    mini legend), controls() → Node (shown under the row while the node is on)})
+                    mini legend), controls() → Node (shown under the row while the node is on),
+                    after (id of a node defined earlier: placed straight after it instead of last)})
    M.layerNotes: short notes under the tree (e.g. a layer this host cannot show).
    A layer shows when it and every group above it are on (as in QGIS). */
 (() => {
@@ -17,8 +18,10 @@
   M.layerNotes = [];
   const noteOf = (n) => (typeof n.note === "function" ? n.note() : n.note);
 
-  M.defineGroup = (g) => { const n = Object.assign({ type: "group", defaultOn: true, colors: [] }, g); M.nodes.set(n.id, n); M.order.push(n.id); return n; };
-  M.defineLayer = (l) => { const n = Object.assign({ type: "layer", defaultOn: false, colors: [], swatch: "line" }, l); M.nodes.set(n.id, n); M.order.push(n.id); return n; };
+  // after: the id of a node defined earlier; the new node comes straight after it (in the tree and the legend)
+  const place = (n) => { M.nodes.set(n.id, n); const at = n.after ? M.order.indexOf(n.after) : -1; if (at >= 0) M.order.splice(at + 1, 0, n.id); else M.order.push(n.id); return n; };
+  M.defineGroup = (g) => place(Object.assign({ type: "group", defaultOn: true, colors: [] }, g));
+  M.defineLayer = (l) => place(Object.assign({ type: "layer", defaultOn: false, colors: [], swatch: "line" }, l));
   M.isOn = (id) => { const n = M.nodes.get(id); if (!n) return false; const p = M.prefs.layers[id]; return p === undefined ? n.defaultOn : p; };
   M.isVisible = (id) => { let n = M.nodes.get(id); while (n) { if (!M.isOn(n.id)) return false; n = n.parent ? M.nodes.get(n.parent) : null; } return true; };
   /** Resolved colour of a layer's colour slot (user choice, else the token for the current theme). */

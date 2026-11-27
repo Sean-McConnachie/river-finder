@@ -115,6 +115,14 @@
 .map-rain-dot--dry { background: transparent; }
 .map-rain-when { display: block; font-size: var(--fs-xs); }
 
+/* Every reach by its score (52-score.js): the "From" cut, the colour ramp with its stops */
+.map-score-ctl { display: flex; flex-wrap: wrap; gap: 6px var(--sp-2); align-items: center; }
+.map-score-k { color: var(--muted); font-size: var(--fs-sm); }
+.map-score-bar { display: block; width: 100%; max-width: 280px; height: 10px; border-radius: 3px; background: linear-gradient(90deg, var(--lo), var(--mid), var(--hi)); }
+.map-score-ticks { display: flex; justify-content: space-between; max-width: 280px; font-size: 10px; color: var(--muted); }
+.map-minilegend .map-score-bar, .map-minilegend .map-score-ticks { max-width: none; }
+.map-minilegend .map-score-note { display: none; }
+
 .map-model { display: grid; gap: 4px; padding: var(--sp-3); background: var(--surface-2); border-radius: var(--radius); font-size: var(--fs-sm); }
 .map-model-more { justify-self: start; font-size: var(--fs-xs); padding: 0; min-height: 24px; }
 .map-reset { justify-self: start; font-size: var(--fs-xs); color: var(--muted); }

@@ -87,21 +87,23 @@
     }, 30));
   };
 
-  function query(point, tol) {
-    const map = M.map, box = [[point.x - tol, point.y - tol], [point.x + tol, point.y + tol]];
+  /** The clickables with something drawn near the point, highest priority first: [[clickable, hits], ...]
+   *  (all: every one, else only the first). */
+  function query(point, tol, all = false) {
+    const map = M.map, box = [[point.x - tol, point.y - tol], [point.x + tol, point.y + tol]], out = [];
     for (const c of clickables) {
       const layers = c.layers.filter((l) => map.getLayer(l) && map.getLayoutProperty(l, "visibility") !== "none");
       if (!layers.length) continue;
       const hits = map.queryRenderedFeatures(box, { layers });
-      if (hits.length) return [c, hits];
+      if (hits.length) { out.push([c, hits]); if (!all) break; }
     }
-    return [];
+    return out;
   }
 
   async function onClick(e) {
     const tol = window.matchMedia("(pointer: coarse)").matches ? 14 : 6;
-    const [c, hits] = query(e.point, tol);
-    if (c) {
+    // a layer may decline a hit (a transparent reach of the score or rain layer): then the next one down gets it
+    for (const [c, hits] of query(e.point, tol, true)) {
       const f = await c.feature(hits[0], e, hits);
       if (f) { M.select(f, { fit: false }); return; }
     }
