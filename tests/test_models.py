@@ -73,6 +73,39 @@ def test_map_section_put_in_to_take_out_and_name():
     assert list(rows) == [6, 7, 8, 9] and how == "name"
 
 
+def test_map_section_snap_river_override(tmp_path):
+    """'Alpha River' (rows 0-3) drains into 'Main River' (rows 4-7); an unnamed creek (rows 8-9) joins row 2.
+    A take-out on the main river snaps to the nearest Alpha reach unless ``take_out_river`` names the main river;
+    a put-in on the unnamed creek snaps to it only with ``put_in_river`` = ""."""
+    x0, y0 = 1_850_000.0, 5_800_000.0
+    xs = [x0 + 250 * i for i in range(8)] + [x0 + 500, x0 + 500]
+    ys = [y0] * 8 + [y0 + 500, y0 + 250]
+    f = pd.DataFrame({"river": ["Alpha River"] * 4 + ["Main River"] * 4 + ["", ""],
+                      "area_km2": [3, 4, 5, 6, 20, 21, 22, 23, 1.5, 2.0], "length_m": 250.0, "grad_s": 30.0,
+                      "down": [1, 2, 3, 4, 5, 6, 7, -1, 9, 2], "guide_region": "Waikato"})
+    f = M._finish(f, np.array(xs), np.array(ys))
+    idx = M._Index(f)
+    pi, to = _LL.transform(xs[1], ys[1] + 30), _LL.transform(xs[6], ys[6] + 30)
+    rows, how = M.map_section(f, Section("Waikato", "Alpha River", "runnable", put_in=pi, take_out=to), idx)
+    assert list(rows) == [1, 2, 3] and how == "put-in to take-out"     # take-out snapped back onto the Alpha
+    s = Section("Waikato", "Alpha River", "runnable", put_in=pi, take_out=to, extra={"take_out_river": "Main River"})
+    assert M.snap_river(s, "take_out") == "Main River" and M.snap_river(s, "put_in") == "Alpha River"
+    rows, how = M.map_section(f, s, idx)
+    assert list(rows) == [1, 2, 3, 4, 5, 6] and how == "put-in to take-out"
+    creek = _LL.transform(xs[8], ys[8])
+    s = Section("Waikato", "Alpha River", "runnable", put_in=creek, take_out=_LL.transform(xs[3], ys[3]))
+    assert list(M.map_section(f, s, idx)[0]) == [2, 3]                 # put-in snapped to the nearest Alpha reach
+    s.extra = {"put_in_river": ""}
+    assert list(M.map_section(f, s, idx)[0]) == [8, 9, 2, 3]           # '' = the nearest reach, whatever its name
+    # the research importer keeps the override fields
+    p = tmp_path / "r.json"
+    p.write_text(json.dumps({"sections": [{"id": "x", "river": "Alpha River", "region": "Waikato",
+                                           "put_in_coords": [-37.8, 176.0], "take_out_coords": [-37.82, 176.02],
+                                           "take_out_river": "Main River", "put_in_river": ""}]}))
+    (r,) = load_research(p)
+    assert M.snap_river(r, "take_out") == "Main River" and M.snap_river(r, "put_in") == ""
+
+
 def test_map_section_name_rule_keeps_one_valley():
     """'Alpha River' in one valley (rows 0-5, row 2 too flat) and 'Alpha Stream' (same name once normalised)
     in another valley 5 km north (rows 6-8): the name rule keeps one of them."""

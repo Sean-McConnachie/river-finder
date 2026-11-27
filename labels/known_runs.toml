@@ -11,6 +11,8 @@
 #                            path: pieces that join down the river are kept together, same-name reaches in
 #                            other valleys or up another fork are dropped (labels.one_path); APPROXIMATE
 # river must match the REC2 name (see the viewer's river tooltips).
+# put_in_river / take_out_river / outlet_river = optional: the name that point snaps to on the national tables
+#   (models.map_section), e.g. the main river a take-out sits on, or "" for the nearest reach whatever its name
 
 [[section]]
 region = "kaimai"

@@ -253,13 +253,22 @@ def _name_rows(f: pd.DataFrame, s: Section, idx: _Index) -> np.ndarray:
     return np.sort(r)
 
 
+def snap_river(s: Section, point: str) -> str:
+    """The river name a section's ``point`` ("put_in", "take_out" or "outlet") snaps to: the section's river,
+    unless the label overrides it with ``<point>_river`` (another name, e.g. the main river a take-out sits on,
+    or "" for the nearest reach whatever its name: where REC2 leaves the guide's reach unnamed)."""
+    v = (s.extra or {}).get(f"{point}_river")
+    return s.river if v is None else str(v)
+
+
 def map_section(f: pd.DataFrame, s: Section, idx: _Index, info: dict | None = None) -> tuple[np.ndarray, str]:
     """The frame rows a section covers and how they were placed. Put-in and take-out (or outlet and
     length) follow the network; without a path, the name rule takes the steep reaches with the river's
     name and keeps one downstream path of them (``labels.one_path``: "name (1 of 3 pieces)"). ``info``,
-    if given, receives what the name rule dropped (pieces, branches, dropped reaches and km)."""
+    if given, receives what the name rule dropped (pieces, branches, dropped reaches and km). Points snap
+    to the nearest reach with the river's name within 3 km, or to another name (``snap_river``)."""
     if s.put_in and s.take_out:
-        a, b = idx.nearest(s.put_in, s.river), idx.nearest(s.take_out, s.river)
+        a, b = idx.nearest(s.put_in, snap_river(s, "put_in")), idx.nearest(s.take_out, snap_river(s, "take_out"))
         length = s.extra.get("length_km") if s.extra else None
         path = (idx.walk(a, b) or idx.walk(b, a)) if a >= 0 and b >= 0 else []
         if path and (len(path) > 1 or not length):
@@ -274,7 +283,7 @@ def map_section(f: pd.DataFrame, s: Section, idx: _Index, info: dict | None = No
                 return np.array(path, dtype=np.int64), "put-in towards take-out"
     length = s.extra.get("length_km") if s.extra else None
     if s.put_in and length:
-        a = idx.nearest(s.put_in, s.river)
+        a = idx.nearest(s.put_in, snap_river(s, "put_in"))
         if a >= 0:
             out, km, cur = [], 0.0, a
             L = f["length_m"].to_numpy()
@@ -284,7 +293,7 @@ def map_section(f: pd.DataFrame, s: Section, idx: _Index, info: dict | None = No
                 cur = idx.down[cur]
             return np.array(out, dtype=np.int64), "put-in + length"
     if s.outlet and s.upstream_km:
-        a = idx.nearest(s.outlet, s.river)
+        a = idx.nearest(s.outlet, snap_river(s, "outlet"))
         if a >= 0:
             out, km, cur = [], 0.0, a
             L = f["length_m"].to_numpy()
