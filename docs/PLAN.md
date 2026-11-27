@@ -342,6 +342,16 @@ serves no raw binary) and four images (≤ 4000 px, the iOS canvas limit). Run s
 regional zoom. `nz viewer --page-only` re-renders only the page after a template change.
 The three 5 m reference areas stay available in the same drop-down.
 
+Since the UI redesign (epic rf-aq6) the site is the web app (`src/river_finder/web/`, `river-finder web build`; its
+README), which reads these same region files. The Leaflet pages (`data/viewer_nz/index.html` and the reference
+areas' `data/viewer/viewer.html`, from `assets/viewer_template.html`) are legacy, kept until the web app also has
+what only they still show (rf-aq6.18, checked 2026-11-27): ranking runs by Pareto layer, weighted score, similarity
+or one's own feature weights, with the flow-vs-gradient scatter of runs; every reach coloured by its score; the 3D
+separation by label status and grade, with runs as points and several regions at once; the Models view's
+per-region table and per-river size-matched, style-matched and best percentiles; the reference areas' REC2
+agreement table and reference-river areas (model vs REC2). The NIWA REC2 line overlay is replaced by the LINZ river
+lines by design.
+
 ## Model versions and the guide research (2026-11-13)
 
 `labels/guide_research.json`: 339 sections of grade 2 and up compiled from the NZ RiverGuide API
