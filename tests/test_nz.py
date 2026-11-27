@@ -84,3 +84,22 @@ def test_pack_segments_round_trip():
     assert np.allclose(last, S["c"][1][-1], atol=1e-5)
     z = np.frombuffer(blob, np.int8, 4, head["z"]["off"]).reshape(2, 2) * 0.1
     assert np.allclose(z, S["z"], atol=0.05)
+
+
+def test_viewer_build_writes_data_files_only(tmp_path):
+    """``nz viewer`` writes the web app's region data and ``regions_index.json``; the legacy Leaflet page and its
+    page-only paths are gone (rf-aq6.18)."""
+    import json
+
+    import pytest
+
+    from river_finder import cli, national, viewer_nz
+
+    out = tmp_path / "viewer_nz"
+    with national.using_root(tmp_path / "nz"):   # no scored region, no reference area
+        p = viewer_nz.build(out, refs=[])
+    assert p == out / "regions_index.json" and json.loads(p.read_text()) == []
+    assert [f.name for f in out.iterdir()] == ["regions_index.json"]
+    for argv in (["nz", "viewer", "--page-only"], ["viewer", "kaimai"]):
+        with pytest.raises(SystemExit):
+            cli.main(argv)

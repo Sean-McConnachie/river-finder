@@ -78,9 +78,10 @@ LINZ DEM (COG/STAC) ──► clip/mosaic/reproject (EPSG:2193)
 - `rasterio`, `numpy`, `numba` (the core algorithms), `pystac-client`/plain STAC JSON for tile
   discovery, `geopandas`/`shapely` (vectors), `pyproj`.
 - Validation: `pysheds` as a reference implementation in the tests; `pytest`.
-- Output: a self-contained **Leaflet HTML viewer** (browser first), plus a **GIS export** per
-  region: COG rasters with QGIS `.qml` styles and a GeoPackage of vectors.
-- CLI: `river-finder fetch|route|validate|export|viewer|run [regions...]`.
+- Output: the **web app** (`src/river_finder/web/`, `river-finder web build`; browser first) over per-region data
+  files (`river-finder nz viewer`), plus a **GIS export** per region: COG rasters with QGIS `.qml` styles and a
+  GeoPackage of vectors. (The first output, a self-contained Leaflet HTML viewer, was removed in rf-aq6.18.)
+- CLI: `river-finder fetch|route|validate|reaches|export|score|run [regions...]`.
 - Region definitions live in `regions/*.toml` (bbox, DEM collections, known runs).
 
 ## Resolution strategy
@@ -200,7 +201,7 @@ ranking does not depend on it.
 **Run finder (phase 7).** Segments that pass the gradient band, minimum flood flow and length
 are chained downstream into runs, allowing one-segment gaps. Optionally the minimum gradient is
 scaled by (MAF/20)^-0.5 so big rivers count at lower gradients. The same logic runs live in the
-viewer with sliders.
+web app's run finder (Models page) with sliders.
 
 **Not done yet:** the NZRCA guide as the "known" layer (needs the guide or your list), North Island
 scaling. Road/access distance: done on 2026-11-18, see "Waterfalls and access".
@@ -225,7 +226,8 @@ increasing ramp from the 10th to the 60th percentile of all reaches. The weighte
 the threshold (default 0.7). With the gate on, every parameter must also be above 0. Passing
 reaches chain into runs, and runs are put into Pareto layers by non-dominated sorting on
 (log flow, effective gradient, height-to-area). Layer 1 is the frontier. Everything is live in the
-viewer (bands, weights, threshold, measure), with a flow-vs-gradient scatter plot of all runs.
+web app's Models page (bands, weights, threshold, measure, ranking), with a flow-vs-gradient scatter plot of all runs
+(rf-aq6.33; first built in the legacy viewer).
 
 **What the data says**
 - Percentile of each known run's median among all reaches (Kaimai): Tuakopae 76th (Melton) /
@@ -249,7 +251,8 @@ finds the K Gorge as a run. Leaving it out of training, it still ranks at the 78
 
 ## 3D separation viewer (2026-11-11)
 
-The viewer has a "3D separation" tab. It plots any three of 11 measures (default: flood flow,
+The legacy viewer (removed in rf-aq6.18) had a "3D separation" tab; the web app's Models page keeps the
+separation AUCs and a 3D scatter of one region's reaches. The tab plotted any three of 11 measures (default: flood flow,
 gradient, height-to-area) for runs at the current run-finder settings, or for every reach over
 2 km², in one region or all three. Points are coloured by what we know:
 - runnable with a known grade: ordinal blue ramp, II-VI;
@@ -336,21 +339,24 @@ reaches in the top 10%. Leave-one-river-out medians 94-99.7. The national top ca
 well-known runs that are not yet labels (Whakapapa, Tongariro, Karangarua, Tutoko, Manganui), which
 is a good sign the reference signature transfers; rf-zmy.7 turns the guide research into labels.
 
-**Viewer.** `data/viewer_nz/`: `index.html` holds only an index; picking a region fetches its
+**Viewer data.** `data/viewer_nz/`: `regions_index.json` lists the regions; picking a region fetches its
 JSON, packed binary segments (~85 bytes each, shipped as base64 text because the artifact host
-serves no raw binary) and four images (≤ 4000 px, the iOS canvas limit). Run strokes thin out at
-regional zoom. `nz viewer --page-only` re-renders only the page after a template change.
-The three 5 m reference areas stay available in the same drop-down.
+serves no raw binary) and four images (≤ 4000 px, the iOS canvas limit). The three 5 m reference areas are
+in the same index (`<id>.json`, the full payload with images as data URIs).
 
 Since the UI redesign (epic rf-aq6) the site is the web app (`src/river_finder/web/`, `river-finder web build`; its
-README), which reads these same region files. The Leaflet pages (`data/viewer_nz/index.html` and the reference
-areas' `data/viewer/viewer.html`, from `assets/viewer_template.html`) are legacy, kept until the web app also has
-what only they still show (rf-aq6.18, checked 2026-11-27): ranking runs by Pareto layer, weighted score, similarity
-or one's own feature weights, with the flow-vs-gradient scatter of runs; every reach coloured by its score; the 3D
-separation by label status and grade, with runs as points and several regions at once; the Models view's
-per-region table and per-river size-matched, style-matched and best percentiles; the reference areas' REC2
-agreement table and reference-river areas (model vs REC2). The NIWA REC2 line overlay is replaced by the LINZ river
-lines by design.
+README), which reads these region files. The Leaflet pages (`data/viewer_nz/index.html` and the reference areas'
+`data/viewer/viewer.html`, from `assets/viewer_template.html`) were removed on 2026-11-27 (rf-aq6.18), with
+`viewer.build`, `viewer_nz.write_page`, `nz viewer --page-only`, the `river-finder viewer` command and the page
+re-render of `models viewer` and of the `nz1m finish` `scores` step. The parity check that day found what only they
+showed; Sean's decision: the web app rebuilt the ranking of runs by Pareto layer, weighted score, similarity or
+one's own feature weights, with the flow-vs-gradient scatter of runs (rf-aq6.33), and the layer that colours every
+reach by its score (rf-aq6.34). Dropped: the 3D separation by label status and grade with runs as points and several
+regions at once, the Models view's per-region table and per-river size-matched, style-matched and best percentiles,
+the reference areas' REC2 agreement table and reference-river areas (model vs REC2), the NZTM of a tapped point, the
+region build line and the `#region/model` deep link. The NIWA REC2 line overlay is replaced by the LINZ river lines
+by design. Data folders written before then still hold a stale `index.html` / `index_fragment.html`; `web build`
+never copies them.
 
 ## Model versions and the guide research (2026-11-13)
 
@@ -409,7 +415,8 @@ the background); precision cannot be measured without labelled not-runnable reac
 **Viewer.** Model picker (URL hash `#<region>/<model>`), per-model score files
 `<region>_m_<model>.txt` (base64: uint16 national percentile x 100, then uint8 flags: bits 0-1
 trained on / test river, bit 2 on a guide section) so adding a model needs no region rebuild:
-`river-finder models viewer` writes them for every card and re-renders the page. Top runs carry
+`river-finder models viewer` writes them for every card (until rf-aq6.18 it also re-rendered the legacy page;
+the web app reads the registry at `web build`). Top runs carry
 Training river / Test river / Prediction and In guides pills that follow the selected model; the
 Models tab shows every model on each test set, per-river and per-region tables and coefficients.
 The packed reaches' label status, grade and held-out flag (`sta`, `gr`, `lho`) come from the same placed
@@ -417,7 +424,8 @@ sections, research included (`viewer_nz.national_labels`, rf-7km; before, known_
 separation colours research runs by their grade.
 
 Workflow for a new model: `models train --name v3 --split guides-v1 [--variant sourced]`, then
-`models evaluate`, then `models viewer`, then publish the new `*_m_v3.txt` files and the page.
+`models evaluate`, then `models viewer`, then `web build` and publish the site (the new `*_m_v3.txt` files and the
+page).
 
 ## Waterfalls and access (2026-11-18)
 

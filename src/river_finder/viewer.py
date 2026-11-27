@@ -1,11 +1,15 @@
-"""Build a self-contained browser viewer (one HTML file) for one or more processed regions.
+"""Region data for the web app: the 5 m reference regions' payloads (``region_payload``, written as ``<id>.json`` by
+``river-finder nz viewer``) and the columnar reach table of every region pack (``_segments``, also used by
+``viewer_nz`` for the river-guide regions).
 
-Each region is warped to Web Mercator (so Leaflet can place it as one image overlay) and stored as:
+Each reference region is warped to Web Mercator (so the map can place it as one image) and stored as:
 - a JPEG hillshade,
 - an 8-bit PNG of log10(catchment area) codes (max-pooled when downsampling, so 1-cell-wide
   channels survive),
 - a PNG mask of cells whose upstream area touches the box edge.
 The page colours the heat map in the browser, so the threshold and opacity can be changed live.
+
+The single-file Leaflet page this module once built (``data/viewer/viewer.html``) was removed in rf-aq6.18.
 """
 
 from __future__ import annotations
@@ -15,7 +19,6 @@ import io
 import json
 import math
 from dataclasses import dataclass, field
-from importlib import resources
 from pathlib import Path
 
 import numpy as np
@@ -264,29 +267,3 @@ def region_payload(region: Region, max_px: int = 1800, rec2_min_order: int = 3) 
         "catch": _catchment_labels(region, (h, w), max_px),
     }
 
-
-def build(regions: list[Region], out_dir: Path, max_px: int = 1800) -> tuple[Path, Path]:
-    """Write ``viewer.html`` (standalone document) and ``viewer_fragment.html`` (body-only, for
-    publishing as a claude.ai artifact, which supplies its own document skeleton)."""
-    tpl = resources.files("river_finder").joinpath("assets/viewer_template.html").read_text()
-    css = resources.files("river_finder").joinpath("assets/leaflet-1.9.4.css").read_text()
-    payload = {"regions": [region_payload(r, max_px) for r in regions], "model": None}
-    model_path = regions[0].data_dir().parent / "model.json"
-    if model_path.exists():
-        m = json.loads(model_path.read_text())
-        from .scoring import FEATURES
-
-        payload["model"] = {"coef": m["coef"], "holdout": m["holdout"], "lorocv": m["lorocv"],
-                            "run_params": m["run_params"], "descriptions": m["feature_descriptions"],
-                            "default_weights": {k: v[1] for k, v in FEATURES.items()},
-                            "ha_defaults": m.get("ha_defaults", {})}
-    data = json.dumps(payload, separators=(",", ":")).replace("</", "<\\/")
-    page = tpl.replace("/*%%LEAFLET_CSS%%*/", css).replace("%%DATA%%", data)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    frag = out_dir / "viewer_fragment.html"
-    frag.write_text(page)
-    full = out_dir / "viewer.html"
-    full.write_text("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
-                    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\">\n"
-                    "</head>\n<body>\n" + page + "\n</body>\n</html>\n")
-    return full, frag

@@ -96,7 +96,7 @@ def _nz(args):
     else:
         from .viewer_nz import build
 
-        log(f"viewer -> {build(args.out, page_only=args.page_only)}")
+        log(f"viewer data -> {build(args.out)}")
 
 
 def _relink(args, log):
@@ -137,10 +137,8 @@ def _models(args):
         print(json.dumps(summary(load_research(args.labels)), indent=1, ensure_ascii=False))
         return
     if args.step == "viewer":   # reference regions need no national table (write_viewer_scores loads it if needed)
-        from .viewer_nz import build
-
-        M.write_viewer_scores(args.out, log=log)
-        log(f"viewer page -> {build(args.out, page_only=True)}")
+        cards = M.write_viewer_scores(args.out, log=log)
+        log(f"scores of {', '.join(c['id'] for c in cards) or 'no card'} -> {args.out}")
         return
     table = M.national_table(rebuild=args.step == "table", log=log)
     if args.step == "table":
@@ -324,7 +322,7 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="river-finder", description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
     for name in [*STEPS, "score", "run"]:
-        p = sub.add_parser(name, help="all steps + score + viewer" if name == "run" else f"{name} step")
+        p = sub.add_parser(name, help="all steps + score" if name == "run" else f"{name} step")
         p.add_argument("regions", nargs="*", help=f"region names (default: all of {list_regions()})")
     pn = sub.add_parser("nz", help="national run: fetch | tiles | score | export | viewer | relink "
                                    "(see docs/PLAN.md)")
@@ -335,8 +333,8 @@ def main(argv: list[str] | None = None) -> None:
                          "data/nz/xsec.pkl (src/river_finder/xsec.py, docs/cross-sections.md)")
     pn.add_argument("tiles", nargs="*", help="tile ids such as x11y16 (default: every land tile)")
     pn.add_argument("-o", "--out", type=Path, default=None,
-                    help="viewer: output directory (default: data/viewer_nz for data/nz, else <root>/viewer_nz)")
-    pn.add_argument("--page-only", action="store_true", help="viewer: re-render only the page, keep the region files")
+                    help="viewer: output directory for the web app's region data files (default: data/viewer_nz "
+                         "for data/nz, else <root>/viewer_nz)")
     pn.add_argument("--data", type=Path, default=None,
                     help="relink: national data directory with tiles/, rec2.gpkg and segments_table.pkl "
                          "(default data/nz)")
@@ -567,10 +565,6 @@ def main(argv: list[str] | None = None) -> None:
                     help="tiles: keep the stored profiles (<tile>_prof.npz) of these tiles")
     p1.add_argument("--threads", type=int, default=32, help="tiles: read threads")
     p1.add_argument("--repeats", type=int, default=10, help="study: CV repeats")
-    pv = sub.add_parser("viewer", help="build the browser viewer for the given regions")
-    pv.add_argument("regions", nargs="*")
-    pv.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer")
-    pv.add_argument("--max-px", type=int, default=1800)
     for name, p in sub.choices.items():
         if name in ("score", "run", "nz", "models", "ml"):
             p.add_argument("--maf-correction", choices=["on", "off"], default=None,
@@ -726,12 +720,6 @@ def main(argv: list[str] | None = None) -> None:
             for dem in (("8m", "5m") if args.dem == "both" else (args.dem,)):
                 xsec.run_region(r, dem=dem, out_dir=args.xsec_dir)
         return
-    if args.cmd == "viewer":
-        from .viewer import build
-
-        full, _ = build(regions, args.out, args.max_px)
-        print(f"viewer -> {full} ({full.stat().st_size / 1e6:.1f} MB)")
-        return
     if args.cmd == "score":
         _score(regions, args)
         return
@@ -739,9 +727,8 @@ def main(argv: list[str] | None = None) -> None:
     for r in regions:
         for s in steps:
             STEPS[s](r, args)
-    if args.cmd == "run":
+    if args.cmd == "run":   # the web app's data files for these regions: river-finder nz viewer
         _score(regions, args)
-        main(["viewer", *[r.name for r in regions]])
 
 
 if __name__ == "__main__":

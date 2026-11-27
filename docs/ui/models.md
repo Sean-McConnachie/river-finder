@@ -18,7 +18,8 @@ The interface to the runnability models. A user should be able to:
   minimum length) with `RF.setRunParams({...})`, and see the effect;
 - inspect feature weights and how well features separate runnable from unknown reaches (the legacy
   viewer's "3D separation" view and Models view did this: `src/river_finder/assets/viewer_template.html`,
-  functions `drawPerf`, `drawSeparation`, `buildWeights`).
+  functions `drawPerf`, `drawSeparation`, `buildWeights`; removed in rf-aq6.18, read it in git history before that
+  commit).
 
 Key finding to surface honestly (from `.beads/memories.jsonl`, `model-registry`): v1 is at chance on
 held-out guide rivers (AUC 0.53); flood size alone gets 0.92, so the size-matched AUC matters

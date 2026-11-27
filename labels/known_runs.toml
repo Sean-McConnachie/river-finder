@@ -1,5 +1,5 @@
-# Known runnability labels for reaches. Edit freely: this file feeds the 3D separation viewer
-# (and later, model training). One [[section]] per known section.
+# Known runnability labels for reaches. Edit freely: this file feeds the web app's sections and separation
+# views, and model training. One [[section]] per known section.
 #
 # status   = "runnable" | "not_runnable"
 # grade    = optional, international/NZ grade as written in guides: "3", "4-4+", "5", "III+", ...
@@ -10,7 +10,7 @@
 #   (neither)             -> the steep reaches (>= 10 m/km, >= 2 km2) of the named river, on one downstream
 #                            path: pieces that join down the river are kept together, same-name reaches in
 #                            other valleys or up another fork are dropped (labels.one_path); APPROXIMATE
-# river must match the REC2 name (see the viewer's river tooltips).
+# river must match the REC2 name (the river name a reach shows in the web app).
 # put_in_river / take_out_river / outlet_river = optional: the name that point snaps to on the national tables
 #   (models.map_section), e.g. the main river a take-out sits on, or "" for the nearest reach whatever its name
 

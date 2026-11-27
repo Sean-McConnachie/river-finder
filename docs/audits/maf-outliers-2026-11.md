@@ -409,7 +409,8 @@ does not get worse, and the simpler models get better. Per-river results are in
 4. a new LightGBM card, for example
    `models train --kind gbm --recipe gbm_terrain --name v4`. v3 is frozen and its `pool_quantiles` were
    fitted on raw MAF. Then run `models evaluate` and `ml audit --model v4`;
-5. `uv run river-finder score kaimai karangahake tutamoe` (the reference areas) and `viewer`;
+5. `uv run river-finder score kaimai karangahake tutamoe` (the reference areas; their web app data come from
+   `nz viewer` in step 6, since rf-aq6.18 removed the `viewer` page command);
 6. `nz viewer`, `models viewer`, `external attach`, `web data`, `web build`, and
    `rain totals --rebuild-network`. The rain network is read from `segments_table.pkl`.
 

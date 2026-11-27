@@ -90,7 +90,7 @@ uv sync                                   # install (Python 3.12+)
 uv run pytest -q                          # unit tests (synthetic DEMs + pysheds cross-check)
 uv run ruff check src tests               # lint
 uv run river-finder run kaimai karangahake tutamoe  # fetch (8 m + 5 m LiDAR, REC2, geology, floods), route,
-                                          # validate, reaches, export, pooled score, viewer (~15 min)
+                                          # validate, reaches, export, pooled score (~15 min)
 uv run river-finder score kaimai karangahake tutamoe  # re-score only (regression is pooled across the regions given)
 uv run river-finder nz fetch|tiles|score|viewer   # national 8 m scan in 64 km tiles (data/nz/, ~4 h)
 uv run river-finder external fetch|attach   # OSM waterfalls/roads/tracks per reach via Overture S3 (~10 min)
@@ -139,12 +139,12 @@ uv run river-finder rain inputs --out DIR; rain publish --out DIR  # live rain (
 Web app: `src/river_finder/web/` (contract and ownership in `web/README.md`; page briefs in
 `docs/ui/`). Edit only the page folder you own; `core/` changes go through the core owner.
 
-National tiles peak at ~12 GB: never run another heavy job (reference viewer build, 5 m
+National tiles peak at ~12 GB: never run another heavy job (`nz viewer` with the reference areas, 5 m
 rasters) while `nz tiles` runs, or the OOM killer takes the tile run. It resumes where it
 stopped.
 
 Outputs go to `data/<region>/` (gitignored): `area_km2.tif`, `validation_summary.json`, `gis/`
-(COG + .qml + GeoPackage). The browser viewer is `data/viewer/viewer.html`.
+(COG + .qml + GeoPackage). The web app (`web build` -> `data/web/`) reads the region data files `nz viewer` writes.
 Code: `src/river_finder/`. `routing.py` holds the graph algorithms (Priority-Flood, D8, flat
 resolution, Kahn accumulation), `reaches.py` the channel network and reach metrics, `scoring.py`
 the run finder, signature, composite and regression, and `context.py` the geology and flood

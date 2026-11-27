@@ -50,7 +50,7 @@ skipped; a step that runs again resets the steps that need it.
 | `joins` | inputs | `joins.parquet`: `bed_hard`, `bed_rock`, `river_linz`, `linz_dist_m`, `linz_section_id`, `river` (REC2, else LINZ), `lidar_survey`, `lidar_year(_start)`, `sinuosity` | 5.7 / 0.4 | 6-15 min, < 1 GB (one tile at a time) |
 | `score` | joins | `regions/<slug>/segments_scored.gpkg` (every tile, merge and join field), `runs.geojson`, `candidates.csv`, `model.json` | 2.1 / 0.5 | 10-20 min, 5-7 GB |
 | `table` | score | `segments_table.pkl` with `models.FIELDS_1M` (58 more columns) | 0.5 / 0.5 | 2-4 min, 2-3 GB |
-| `viewer` | table | `viewer_nz/`: region files, page (no 5 m reference areas unless `--refs`) | 40 / 1.5 | 35-50 min, 3 GB |
+| `viewer` | table | `viewer_nz/`: region files, `regions_index.json` (no 5 m reference areas unless `--refs`) | 40 / 1.5 | 35-50 min, 3 GB |
 | `external` | viewer | `external.pkl`, `waterfall_check.json`, `<region>_x.txt`, `_falls.json` | 18 / 1.3 | 10-15 min, 3 GB |
 | `hydro` | table | `hydro.pkl`, `hydro_summary.json` | 0.1 / 1.1 | 1 min, 3 GB |
 | `lidar` | table | `analysis/lidar/`: coverage per reach and catchment, gap grid, summary | 5.3 / 1.5 | 8-12 min, 3 GB |
@@ -58,7 +58,7 @@ skipped; a step that runs again resets the steps that need it.
 | `cv` | ml | `models/cv-1m/results.json`, `explore.json`, `ml_oof.npz`, `viewer_nz/ml.html` | 29 / 1.1 | 20-40 min, 6-8 GB |
 | `v5` | ml | `models/v5.json` + `v5.lgb.txt` (`gbm_xsec` on `guides-v1`), `models/baseline-flow-1m.json`, `models/audits/v5_top_runs.csv` | 2.8 / 1.0 | 2-4 min, 6 GB |
 | `evaluate` | v5 | `models/evaluations-1m.json` (1 m cards only) | 2.5 / 1.0 | 3-6 min, 6 GB |
-| `scores` | v5, viewer | `viewer_nz/<region>_m_<card>.txt` for the 1 m cards, page | 1.6 / 1.0 | 3-6 min, 6 GB |
+| `scores` | v5, viewer | `viewer_nz/<region>_m_<card>.txt` for the 1 m cards | 1.6 / 1.0 | 3-6 min, 6 GB |
 | `web` | scores, external, hydro | web data (sections, access, gauges, LINZ, hydro, aerial, satellite) into `viewer_nz/`, then a preview site in `web/` (no Basemaps key, no live rain) | 52 / 1.2 | 20-40 min, 4 GB |
 | `rain` | viewer | `rain/weights_gsmap/ecmwf.npz`, `scaling_zones.npz`, `network.npz`; `rain-inputs/` (what the `rain-inputs` branch holds) | 2.8 / 1.0 | 5-8 min, 2-3 GB |
 | `export` | score | `gis/`: GeoPackage, VRTs, the truncation mask per tile, the local catchments of the tiles that hold a dropped gid (below) | 6.4 / 1.4 | 15-25 min, 4 GB, ~2 GB disk (+1.2 MB per tile with a dropped gid) |
@@ -172,6 +172,12 @@ for the 8 m scan and for older merges. The cells of a dropped gid count for the 
   Every other packed column is byte-identical, and the labelled reaches and their grades are exactly those of
   `<region>_sections.json` (`webdata.write_sections`). In the legacy viewer's 3D separation (Bay of Plenty, every
   reach) "Runnable, graded" goes from 11 to 366 points and "Runnable, grade unknown" from 23 to 1.
+- **Legacy page removed** (rf-aq6.18; `inputs` to `web` but `lidar`, `evaluate`, `rain`, `export`, `compare`,
+  `sections`, CV with one repeat, on the same re-merge into `data/nz1m_sample/finish_aq618/`, against the same
+  steps run with the code before the removal). `viewer` and `scores` no longer write `index.html` and
+  `index_fragment.html`; every region file, score file and web data file is byte-identical, and so are the ML page
+  and the built site but for v5's `created` time. `nz viewer`, `models viewer`, `external attach` and `web data` from the command
+  line (into `finish_aq618/viewer_cli/`, the 5 m reference areas included) give the same region files.
 - **CV and v5 on the sample** only prove the steps run (12 rivers, 411 positive reaches); their numbers say
   nothing about the national recipes.
 
@@ -200,7 +206,7 @@ for the 8 m scan and for older merges. The cells of a dropped gid count for the 
 
 ## Retired later (after the comparison, not yet)
 
-- The per-region 5 m pipeline: `river-finder run | score | viewer | xsec <region>`, `validate.py`, `export.py`,
+- The per-region 5 m pipeline: `river-finder run | score | xsec <region>`, `validate.py`, `export.py`,
   `data/kaimai/`, `data/karangahake/`, `data/tutamoe/`, `models.reference_frame` and the reference branches of
   `write_viewer_scores`, `webdata`, `hydro`, `external`.
 - The 8 m national path once the switch has held: `nz tiles`, `nz relink`, `relink.py`, `nz xsec` / `xsec.py`
@@ -231,5 +237,9 @@ uv run river-finder nz1m finish --root data/nz1m_sample/finish_lxa13 --merge dat
 uv run river-finder nz1m finish --root data/nz1m_sample/finish_rf7km --merge data/nz1m_sample/merge_x12y16_lxa12 \
     --tiles-dir data/nz1m_sample/tiles --inputs data/nz1m_sample/finish_full --models-dir <a copy of models/> \
     --steps inputs joins score table viewer
+# rf-aq6.18: the steps that write viewer data and the site, without the legacy page (input layers as for rf-7km)
+uv run river-finder nz1m finish --root data/nz1m_sample/finish_aq618 --merge data/nz1m_sample/merge_x12y16_lxa12 \
+    --tiles-dir data/nz1m_sample/tiles --inputs data/nz1m_sample/finish_full --models-dir <a copy of models/> \
+    --repeats 1 --steps inputs joins score table viewer external hydro ml cv v5 scores web
 uv run pytest -q tests/test_nz1mfinish.py
 ```

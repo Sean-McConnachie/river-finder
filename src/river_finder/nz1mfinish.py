@@ -297,10 +297,8 @@ def step_evaluate(ctx: Ctx) -> dict:
 
 def step_scores(ctx: Ctx) -> dict:
     from . import models as M
-    from .viewer_nz import build
 
     cards = M.write_viewer_scores(ctx.viewer, log=ctx.log)
-    build(ctx.viewer, page_only=True)
     return {"cards": [c["id"] for c in cards]}
 
 
@@ -386,7 +384,7 @@ STEPS = [
          "joins.parquet"),
     Step("score", step_score, ("joins",), "nz score: regions/*/segments_scored.gpkg, model.json, candidates.csv"),
     Step("table", step_table, ("score",), "models table: segments_table.pkl (with the 1 m fields)"),
-    Step("viewer", step_viewer, ("table",), "nz viewer: <root>/viewer_nz region files and page"),
+    Step("viewer", step_viewer, ("table",), "nz viewer: <root>/viewer_nz region files, regions_index.json"),
     Step("external", step_external, ("viewer",), "external attach: external.pkl, <region>_x.txt, _falls.json"),
     Step("hydro", step_hydro, ("table",), "hydro attach: hydro.pkl"),
     Step("lidar", step_lidar, ("table",), "lidar coverage on the 1 m tiles: <root>/analysis/lidar"),

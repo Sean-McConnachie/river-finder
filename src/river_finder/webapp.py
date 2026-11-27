@@ -43,12 +43,14 @@ PAGES = ("map", "top", "models", "info")
 # External scripts the page loads (artifact CSP: cdnjs and a few other CDNs only; exact versions).
 # Their stylesheets cannot load from a CDN there, so they are vendored in web/vendor/ and inlined.
 LIBS: tuple[str, ...] = ("https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.js",)
+# Never linked in from the data folder: this build's pages, and the legacy Leaflet page (index.html,
+# index_fragment.html) that data folders written before rf-aq6.18 still hold.
 PAGE_FILES = ("index.html", "artifact.html", "index_fragment.html")
 TARGETS = ("site", "artifact")
 # Live rain files (index.json, <region>.bin.gz) published hourly by .github/workflows/rain.yml.
 RAIN_BASE = "https://raw.githubusercontent.com/Sean-McConnachie/river-finder/rain/"
 RAIN_ENV = "RIVER_FINDER_RAIN_BASE"
-# Files only the artifact uses: page fragments (index, ML page) and the per-region satellite images
+# Files only the artifact uses: page fragments (the ML page's) and the per-region satellite images
 # (the site streams satellite tiles instead).
 ARTIFACT_ONLY = ("_sat.jpg", "_fragment.html")
 

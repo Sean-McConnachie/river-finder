@@ -1,11 +1,10 @@
-"""Multi-file browser viewer for the national run: one set of files per river-guide region.
-
-The page itself (``index.html``) only holds a small index. Choosing a region fetches:
+"""Region data files for the web app (``river-finder nz viewer``): one set of files per river-guide region, listed in
+``regions_index.json`` (which ``webapp.build`` embeds in the page; ``web/README.md``). Choosing a region on the map
+fetches:
 
 - ``<slug>.json``: region metadata, REC2 main rivers, reference markers, segment header;
 - ``<slug>_seg.txt``: the reach segments, packed (see ``pack_segments``) and base64-encoded (the
-  artifact host serves no raw binary), decoded in the browser
-  into the same columnar object the single-file viewer embeds;
+  artifact host serves no raw binary), decoded in the browser into the columnar ``Region.segments``;
 - ``<slug>_hs.jpg``, ``<slug>_area.png``, ``<slug>_trunc.png``, ``<slug>_catch.png``: hillshade,
   area code, truncation mask and local-catchment labels on one Web-Mercator grid.
 
@@ -18,8 +17,12 @@ The packed label status, grade and held-out flag (``sta``, ``gr``, ``lho``) come
 research included, placed on the national table (``models table``) as the web app's sections are
 (``national_labels``, rf-7km).
 
-The three 5 m reference regions are included as ``<id>.json`` files holding their full
-single-file payload (images as data URIs).
+The three 5 m reference regions are included as ``<id>.json`` files holding their ``viewer.region_payload``
+(images as data URIs).
+
+Per-model scores (``<slug>_m_<model>.txt``) come from ``models viewer``, the extras (sections, access, LINZ rivers, ...)
+from ``external attach`` and ``web data``. The Leaflet page this module once wrote next to them (``index.html``, from
+``assets/viewer_template.html``) was removed in rf-aq6.18.
 """
 
 from __future__ import annotations
@@ -28,7 +31,6 @@ import base64
 import io
 import json
 import math
-from importlib import resources
 from pathlib import Path
 
 import geopandas as gpd
@@ -362,13 +364,11 @@ def _rec2_lines(bounds, min_order: int = 4) -> list[dict]:
     return out
 
 
-def build(out_dir: Path, regions: list[str] | None = None, refs: list[str] | None = None, max_px: int = 4000,
-          page_only: bool = False):
-    """Write every region's files and the page. ``page_only`` re-renders just the page from the
-    saved region index (after a template change; the region files take half an hour)."""
+def build(out_dir: Path, regions: list[str] | None = None, refs: list[str] | None = None,
+          max_px: int = 4000) -> Path:
+    """Write every region's files and ``regions_index.json`` (returned). ``regions``: river-guide regions (default:
+    every scored one); ``refs``: 5 m reference regions (default: every one with ``segments_scored.gpkg``)."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    if page_only:
-        return write_page(out_dir, json.loads((out_dir / "regions_index.json").read_text()))
     index = []
     names = [n for n in regions or FILTER_ORDER if (region_dir(n) / "segments_scored.gpkg").exists()]
     labels = national_labels() if names else {}   # loads the national table once (freed before the rasters)
@@ -383,31 +383,6 @@ def build(out_dir: Path, regions: list[str] | None = None, refs: list[str] | Non
         (out_dir / f"{rid}.json").write_text(json.dumps(p, separators=(",", ":")))
         index.append({"id": rid, "title": p["title"], "group": "Reference areas (5 m LiDAR)", "src": f"{rid}.json",
                       "bounds": p["bounds"], "segments": len(p["segments"]["g"]) if p["segments"] else 0})
-    (out_dir / "regions_index.json").write_text(json.dumps(index))
-    return write_page(out_dir, index)
-
-
-def write_page(out_dir: Path, index: list[dict]) -> Path:
-    model = None
-    mp = nz_dir() / "model.json"
-    if mp.exists():
-        from .scoring import FEATURES
-
-        m = json.loads(mp.read_text())
-        model = {"coef": m["coef"], "holdout": m["holdout"], "lorocv": m["lorocv"], "run_params": m["run_params"],
-                 "descriptions": m["feature_descriptions"],
-                 "default_weights": {k: v[1] for k, v in FEATURES.items()}, "ha_defaults": m.get("ha_defaults", {})}
-    tpl = resources.files("river_finder").joinpath("assets/viewer_template.html").read_text()
-    css = resources.files("river_finder").joinpath("assets/leaflet-1.9.4.css").read_text()
-    from .models import list_cards, viewer_models
-
-    registry = viewer_models() if list_cards() else None
-    data = json.dumps({"regions": index, "model": model, "registry": registry},
-                      separators=(",", ":"), ensure_ascii=False).replace("</", "<\\/")
-    page = tpl.replace("/*%%LEAFLET_CSS%%*/", css).replace("%%DATA%%", data)
-    (out_dir / "index_fragment.html").write_text(page)  # for a claude.ai artifact (it adds the skeleton)
-    (out_dir / "index.html").write_text(
-        "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
-        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\">\n"
-        "</head>\n<body>\n" + page + "\n</body>\n</html>\n")
-    return out_dir / "index.html"
+    path = out_dir / "regions_index.json"
+    path.write_text(json.dumps(index))
+    return path
