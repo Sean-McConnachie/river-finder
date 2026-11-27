@@ -99,6 +99,9 @@ uv run river-finder lidar fetch|coverage   # 1 m LiDAR coverage from the nz-elev
                                           # catchment share, survey + year, gaps, summary -> data/analysis/lidar/ (~7 min; docs/lidar-coverage.md)
 uv run river-finder lidar bench stream|speed|route|compare|tiling|seam|lakes|report  # 1 m pipeline benchmark on tile
                                           # x05y07 (lidarpipe.py pieces, lidarbench.py) -> data/analysis/lidar-bench/ (docs/lidar-pipeline.md)
+uv run river-finder nz1m plan|tile <qid...>|check  # 1 m rebuild per 32 km tile (rf-lxa.6): 1 m -> 2 m, sea/lakes, fallback, route,
+                                          # reaches, 2 m + 1 m extraction -> data/nz1m/tiles/<qid>/ (~6 min, < 8 GB, ~50 MB per tile;
+                                          # docs/nz1m-tile-job.md). 378 land tiles, ~26 h national: never run all without the user's go-ahead
 uv run river-finder xsec1m tiles|check|study|select|spacing|storage|figure  # 1 m LiDAR cross-sections (rf-lxa.4): sections every
                                           # 25 m re-centred on the 1 m channel, channel-shape features, keep list, rf-lxa.3 storage
                                           # spec -> data/analysis/lidar-xsec/ (14 tiles ~25 min, < 6 GB; docs/cross-sections-1m.md)
