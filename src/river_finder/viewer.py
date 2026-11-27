@@ -104,6 +104,15 @@ def _section_info(s) -> dict:
             "source": source}
 
 
+ELEVATION_COLS = ("z_top", "z_bot")   # the reach's end elevations (m): a z_ name, not a standardised feature
+
+
+def feature_columns(columns) -> list[str]:
+    """The standardised feature columns (``z_<name>``) packed as ``S.features`` / ``z``, without the end
+    elevations ``z_top`` / ``z_bot``."""
+    return [c for c in columns if c.startswith("z_") and c not in ELEVATION_COLS]
+
+
 def _segments(region: Region, min_area_km2: float = 1.0, labels: ReachLabels | None = None) -> dict | None:
     """Columnar segment table for the run finder and score overlays (WGS84, simplified). ``labels``: the reaches'
     label status and grade (``viewer_nz.national_labels``: every known section, guide research included); without,
@@ -133,7 +142,7 @@ def _segments(region: Region, min_area_km2: float = 1.0, labels: ReachLabels | N
     g = g.to_crs(4326)
     rivers = sorted({r for r in g["river"] if r})
     rix = {r: i for i, r in enumerate(rivers)}
-    zcols = [c for c in g.columns if c.startswith("z_")]
+    zcols = feature_columns(g.columns)
     listed = {r.river for r in region.known_runs if r.status == "listed"}
     return {
         "rivers": rivers,

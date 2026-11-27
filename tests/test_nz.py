@@ -103,3 +103,11 @@ def test_viewer_build_writes_data_files_only(tmp_path):
     for argv in (["nz", "viewer", "--page-only"], ["viewer", "kaimai"]):
         with pytest.raises(SystemExit):
             cli.main(argv)
+
+
+def test_packed_features_leave_out_the_end_elevations():
+    """rf-aq6.35: z_top / z_bot (reach end elevations) share the z_ prefix of the standardised features."""
+    from river_finder.viewer import feature_columns
+
+    cols = ["seg_id", "z_top", "z_bot", "z_grad_s", "z_maf_m3s", "gorge_depth_m", "z_height_to_width"]
+    assert feature_columns(cols) == ["z_grad_s", "z_maf_m3s", "z_height_to_width"]
