@@ -466,7 +466,7 @@ on 1 m data), `bed` (the rest). Per reach: `steps_n` (bed steps >= 1 m), `drops_
 
 | file | res | dtype | kept | MB | content | used by |
 |---|---:|---|---|---:|---|---|
-| `segments_core.gpkg` | | vector | yes | ~7.5 | core reaches, every `1m` and `2m` field, line simplified at 1 m | merge, lidar, maf, xsec1m |
+| `segments_core.gpkg` | | vector | yes | ~7.5 | core reaches, every `1m` and `2m` field but the `x1_*` summaries (in `x1_reach.arrow`; `lidarspec.tile_columns`, rf-lxa.6), line simplified at 1 m | merge, lidar, maf, xsec1m |
 | `local_catchment_core.tif` | 10 m | int64 | yes | ~1.5 | gid of the reach each 10 m cell first drains into (its centre 2 m cell), over the cells the tile owns (core, and halo cells that drain to its core reaches), -1 elsewhere | rain weights, viewer `catch.png`, GIS, later catchment features |
 | `area_code.tif` | 10 m | uint8 | yes | ~5.5 | `areacode` of the in-tile 2 m accumulation, maximum per 10 m cell (keeps one-cell channels) | viewer `area.png`, rain land mask, GIS |
 | `hillshade_24m.tif` | 24 m | uint8 | yes | ~1.5 | hillshade of the 8 m block mean, averaged to 24 m (as today) | viewer, GIS |
