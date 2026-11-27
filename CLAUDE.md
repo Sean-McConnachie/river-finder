@@ -139,7 +139,9 @@ resolution, Kahn accumulation), `reaches.py` the channel network and reach metri
 the run finder, signature, composite and regression, and `context.py` the geology and flood
 fetchers. `ml.py` holds the CV evaluation (catchment folds, model zoo, metrics), `reachtype.py`
 the Montgomery & Buffington reach types used for style-matched AUC (spec: `docs/MB1997_reach_classification_spec.pdf`),
-`mlpage.py` the ML page (`data/viewer_nz/ml.html`) built from `models/cv/*.json`. An 80 M-cell (5 m) region routes in about 100 s on this 4-core, 15 GB machine.
+`mlpage.py` the ML page (`data/viewer_nz/ml.html`) built from `models/cv/*.json`. The 1 m LiDAR rebuild: `lidarpipe.py` (reader, lean router,
+lakes, seams, profiles), `xsec1m.py` (1 m sections) and `lidarspec.py` (the one-pass field list, stores and reach ids;
+`docs/lidar-extraction-spec.md`). An 80 M-cell (5 m) region routes in about 100 s on this 4-core, 15 GB machine.
 
 ## Conventions & Patterns
 
