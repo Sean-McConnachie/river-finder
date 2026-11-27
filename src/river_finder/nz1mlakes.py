@@ -31,6 +31,7 @@ Outputs: ``data/nz1m/lakes.gpkg`` (layer ``lakes``) and ``data/nz1m/lakes.json``
 from __future__ import annotations
 
 import json
+import resource
 import time
 from pathlib import Path
 
@@ -84,6 +85,7 @@ def survey_box(box, src=None, dem8=None, log=print, threads: int = 32) -> dict:
     flatw = (cnt1 > 0) & (2 * flat1 >= cnt1)
     _, _, lakes, tidal = N.label_lakes(flatw, nlake10, z10, holes, box)
     out = {"box": list(box), "lakes": lakes, "tidal": tidal, "seconds": round(time.time() - t0, 1),
+           "peak_gb": round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6, 2),
            "read_cells": int(st["cells"]),
            "holes_list": [{k: v for k, v in h.items() if k not in ("mask", "slice")} for h in holes
                           if h["filled"] or h["km2"] >= 0.01]}
