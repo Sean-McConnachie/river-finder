@@ -271,3 +271,21 @@ def test_synthetic_tile_contents(synth_tile):
     land = (SY.BOX[2] - SY.BOX[0]) * (SY.BOX[3] - SY.SEA_Y) / 1e6
     tot = loc.sum() + info["halo_owned_km2"] + info["lost_km2"]
     assert tot == pytest.approx(land, rel=0.01)
+
+
+def test_tile_with_no_core_reach_writes_empty_outputs(tmp_path):
+    """A tile whose core holds no reach (a sliver of land at a tile corner, like q21y40) finishes with empty stores
+    instead of failing in the 1 m pass."""
+    import pyarrow.feather as feather
+    import pyogrio
+
+    z1, _, z8, _ = SY.terrain()
+    core = (SY.X0 + 2280, SY.Y0 + 2480, SY.X0 + 2520, SY.Y0 + 2720)    # high ground in the north-east corner
+    od = tmp_path / "q00y00"
+    od.mkdir()
+    info = N.process(N.Tile32(0, 0), N.ArraySource(z1, SY.BOX), lambda: z8, None, None, od, threads=2,
+                     log=lambda *a: None, core=core, box=SY.BOX)
+    assert info["done"] and info["stations"] == 0 and info["sections"] == 0
+    assert len(pyogrio.read_dataframe(od / "segments_core.gpkg")) == 0
+    assert feather.read_table(od / "profiles.arrow").num_rows == 0
+    assert feather.read_table(od / "x1_reach.arrow").num_rows == 0

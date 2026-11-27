@@ -1410,7 +1410,7 @@ def encode_profiles(reach: np.ndarray, z: np.ndarray, w: np.ndarray) -> dict:
     four per byte). Heights are kept to 1 cm. Every station on a reach has a height (the 2 m grid's where no 1 m cell
     is near, code ``W_COARSE``); a missing one (NaN) repeats the height before it and is coded ``W_COARSE``."""
     reach = np.asarray(reach)
-    cut = np.flatnonzero(np.r_[True, reach[1:] != reach[:-1], True])
+    cut = np.flatnonzero(np.r_[True, reach[1:] != reach[:-1], True]) if len(reach) else np.zeros(1, np.int64)
     gid, n, z0, dz, w4 = [], [], [], [], []
     for a, b in zip(cut[:-1], cut[1:], strict=True):
         q = np.nan_to_num(_ffill(np.round(np.asarray(z[a:b], np.float64) * 100.0)), nan=0.0).astype(np.int64)

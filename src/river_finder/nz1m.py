@@ -1467,7 +1467,10 @@ def extract_1m(tid, src, links, R, zraw, wc, lake10, lakew10, seamd, box, tf, th
         sx.append(x)
         sy.append(y)
         sown.append(own)
-    sx, sy, sown = np.concatenate(sx), np.concatenate(sy), np.concatenate(sown)
+    if plinks:
+        sx, sy, sown = np.concatenate(sx), np.concatenate(sy), np.concatenate(sown)
+    else:   # no reach in the core (a sliver of land at a tile corner): an empty pass, empty stores
+        sx, sy, sown = np.zeros(0), np.zeros(0), np.zeros(0, np.int64)
     sec_rows = np.flatnonzero(inr & (R["area_tile_km2"].to_numpy() >= SEC_MIN_KM2))
     geoms = []
     for k in sec_rows:
@@ -1614,6 +1617,8 @@ def reach_profiles(R: pd.DataFrame, links, r1: dict) -> dict:
             rows[s] = row
     del order
     P_ = pd.DataFrame.from_dict(rows, orient="index").sort_index()
+    if P_.empty:   # no core reach: the profile columns, no rows
+        P_ = pd.DataFrame(columns=[*PROFILE_FIELDS, "x1_rough", "x1_dropconc", "lake_mode", "n_stations", "st0"])
     core_rows = np.flatnonzero(inr)
     P_ = P_.reindex(core_rows)
     # x1 section summaries of the section reaches, then every core reach
