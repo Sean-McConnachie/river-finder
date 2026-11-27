@@ -199,3 +199,55 @@ Waima and the Mangakahia: in both, a 0.7 km piece of the big river 12.5 km below
 near the Waima's mouth). As separate sections they would label lowland river as runs, so the name rule
 still keeps one path. The Waima's other dropped piece (11.7 km) is another Waima that drains to the
 Northern Wairoa. The extents of these reference runs still need the user.
+
+## Follow-up: side streams at confluences (rf-kfe, 2026-11-27)
+
+The "24 reaches up Orautoha Stream" (v3 audit) was the packraftingtrips.nz Manganui-a-te-ao section,
+Ruatiti Domain to Pipiriki. Its put-in, a rounded guess for Ruatiti Domain, lay 5 km up the Orautoha
+Stream, and no reach was called "Manganui-a-te-ao" (REC2 writes "Manganui-o-te-ao"). So the put-in snapped
+to a side creek and the walk ran down the Orautoha to the river. The riverguide section had the same guess
+as its take-out. The Mohaka "Glenfalls to Everetts" had the same fault: its put-in, a rounded point 3 km
+off the Mohaka, snapped to a 9.6 km2 creek and the path ran 5.3 km down the Inangatahi Stream; its
+take-out lay above Glenfalls.
+
+**Code.** `RIVER_ALIASES` maps "Manganui-a-te-ao" to REC2's "Manganui-o-te-ao". "put-in + length" and
+"put-in towards take-out" walk down from the put-in. When the put-in snapped off the river (none of its
+reaches within 3 km) and the walk joins the river by a side stream (not the river's main upstream
+reach), the walk now starts at that confluence (`models._from_river`; `info["side_km"]`; the method ends
+"(from the confluence: the put-in snapped to a side stream)"). Not when the stream is the bigger feeder
+(the river's own upper course, which REC2 may leave unnamed or misname), and not when the label sets
+`put_in_river`. "put-in to take-out" paths are not cut: both points are trusted (Hope to Hanmer starts on
+the Hope). Test: `tests/test_models.py::test_put_in_on_a_side_stream_starts_at_the_confluence`.
+
+**Labels.** 4 sections in `guide_research.json` (data_notes "rf-kfe"):
+
+| River | Section | Changed | Source | Before (km) | After (km) | Stated km |
+|---|---|---|---|---|---|---|
+| Manganui-a-te-ao | Manganui-a-te-ao | take-out: Ruatiti Domain bridge | riverguide text, OSM bridge way | put-in + length 8.7 | path 8.2 | 8.5 |
+| Manganui-a-te-ao | Ruatiti Domain to Pipiriki | put-in: the same bridge; `take_out_river` "Whanganui River" | as above | towards 58.5 (6.0 on the Orautoha) | path 47.4 | 58 |
+| Makatote | SH4 to Upper Manganui Valley bridge | take-out: Hoihenga bridge; `take_out_river` | riverguide text ("see directions for Manganui-a-te-ao put-in") | towards 18.8 | path 21.1 | 25 |
+| Mohaka | Glenfalls to Everetts | put-in, take-out | DOC campsite grid ref; wildthings.club (Everetts) | path 7.1 (5.3 on the Inangatahi) | path 11.3 | |
+
+The Ruatiti Domain bridge is OSM way 178493649, an 89 m road segment across the Manganui-o-te-ao where
+Ruatiti Road ends, 3.9 km from the Orautoha road junction (riverguide: "just over four kilometres to the
+bridge at the Ruatiti domain"). The Makatote's exit, "Upper Manganui Valley bridge", could instead be the
+Manganui Valley Road bridge 7.4 km higher (13.7 km); the guide's take-out text and its 25 km point to the
+Hoihenga bridge. Web pages could not be opened from this session (the hosts tried were not allowed), so
+the DOC grid reference, the council's text and the wildthings.club point come from web search results that
+quote those pages. Worth a check by eye.
+
+**Result.** 8 m table, all 346 sections, before rf-r4a and after both issues, scored with the new names:
+
+| Count | Before | After |
+|---|---|---|
+| placed put-in to take-out | 271 | 275 |
+| under half the km on the section's river | 44 | 43 |
+| pieces or branches dropped | 17 | 16 |
+| no reach / fallback / length off by more than 50 % | 1 / 18 / 34 | 1 / 18 / 34 |
+
+7 sections change: the 4 above (better), and the 3 of rf-r4a (same reaches). None got worse. The side
+stream rule fires on none of today's sections once the labels are fixed (before the label fix, it cut the
+6.8 km of side stream from Ruatiti to Pipiriki). The 1 m sample does not change. River keys: the two
+Manganui-a-te-ao sections now share the Makatote's (the Makatote ends at the Manganui put-in), and the
+riverguide "Upper Stony" joins "Hangatuha (Stony River)" in Taranaki (same river), so the next split must be
+new (as above).

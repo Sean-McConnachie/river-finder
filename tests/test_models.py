@@ -190,6 +190,44 @@ def test_map_section_keeps_the_named_fork():
     assert M.section_side(s, "take_out") == "south" and M.section_side(s, "put_in") == "north"
 
 
+def _side_stream(side_area: float):
+    """'Alpha River' (rows 0-5, 250 m reaches, then rows 9-18, 1 km reaches, draining east) joined at row 3 by a
+    creek from 5 km north (rows 6-8, 1 km reaches)."""
+    x0, y0 = 1_850_000.0, 5_800_000.0
+    xs = [x0 + 250 * i for i in range(6)] + [x0 + 750] * 3 + [x0 + 2250 + 1000 * i for i in range(10)]
+    ys = [y0] * 6 + [y0 + 5000, y0 + 4000, y0 + 3000] + [y0] * 10
+    f = pd.DataFrame({"river": ["Alpha River"] * 6 + ["Side Creek"] * 3 + ["Alpha River"] * 10,
+                      "area_km2": [10, 11, 12, 13, 14, 15] + [side_area] * 3 + list(range(16, 26)),
+                      "length_m": [250.0] * 6 + [1000.0] * 13, "grad_s": 30.0,
+                      "down": [1, 2, 3, 4, 5, 9, 7, 8, 3] + list(range(10, 19)) + [-1], "guide_region": "Waikato"})
+    return M._finish(f, np.array(xs), np.array(ys)), xs, ys
+
+
+def test_put_in_on_a_side_stream_starts_at_the_confluence():
+    """A put-in 5 km up a side creek (no 'Alpha' reach within 3 km): 'put-in + length' and 'put-in towards take-out'
+    start where the creek joins the river, unless the creek is the river's main upstream reach (its own unnamed or
+    misnamed upper course) or the label names the put-in's river."""
+    f, xs, ys = _side_stream(2.0)
+    idx = M._Index(f)
+    pi = _LL.transform(xs[6], ys[6] + 50)
+    s = Section("Waikato", "Alpha River", "runnable", put_in=pi, extra={"length_km": 0.4})
+    info = {}
+    rows, how = M.map_section(f, s, idx, info)
+    assert list(rows) == [3, 4] and how.startswith("put-in + length (from the confluence")
+    assert info["side_km"] == 3.0
+    s = Section("Waikato", "Alpha River", "runnable", put_in=pi, take_out=_LL.transform(xs[18], ys[18] - 3100))
+    rows, how = M.map_section(f, s, idx)                           # take-out 3.1 km off: no path, walk towards it
+    assert list(rows) == [3, 4, 5, *range(9, 19)] and how.startswith("put-in towards take-out (from the confluence")
+    s = Section("Waikato", "Alpha River", "runnable", put_in=pi, extra={"length_km": 0.4, "put_in_river": ""})
+    assert list(M.map_section(f, s, idx)[0]) == [6]                      # the label says: whatever reach is there
+    f, xs, ys = _side_stream(20.0)                                       # the creek is the bigger feeder of row 3
+    rows, how = M.map_section(f, Section("Waikato", "Alpha River", "runnable", put_in=pi, extra={"length_km": 0.4}),
+                              M._Index(f))
+    assert list(rows) == [6] and how == "put-in + length"
+    # the guides' Manganui-a-te-ao is REC2's Manganui-o-te-ao River
+    assert M.norm_river("Manganui-a-te-ao") == M.norm_river("Manganui-o-te-ao River")
+
+
 def test_split_keeps_rivers_whole():
     f, xs, ys = _frame()
     secs = [Section("Waikato", "Alpha River", "runnable", put_in=_LL.transform(xs[0], ys[0]),

@@ -71,6 +71,7 @@ _KIND = r"river|stream|creek|burn|r|str|ck|awa|the"
 _SIDE = ("north", "south", "east", "west", "left", "right", "middle")   # words that tell a river's forks apart
 # guide spellings that REC2 writes differently (normalised guide name -> normalised REC2 name)
 RIVER_ALIASES = {
+    "manganui a te ao": "manganui o te ao",   # riverguide, packraftingtrips.nz / REC2 "Manganui-o-te-ao River"
     "routeburn": "route",                     # "Routeburn River" / "Route Burn"
     "tauwharenikau": "tauherenikau",          # packraftingtrips.nz / REC2 "Tauherenikau River"
     "hangatuha": "stony",                     # "Hangatuha (Stony River)" / REC2 "Stony River"
@@ -332,13 +333,34 @@ def _snap(idx: _Index, s: Section, point: str) -> int:
     return idx.nearest(getattr(s, point), snap_river(s, point), side=section_side(s, point))
 
 
+def _from_river(idx: _Index, path: list[int], s: Section) -> tuple[list[int], float]:
+    """A walk down from a put-in that snapped off the section's river (none of its reaches within 3 km), cut to start
+    where it joins the river, when it comes in by a side stream (not the river's main upstream reach): the reaches
+    above that confluence are on the side stream, not on the section. Returns the path and the km left out (0 when
+    unchanged: the put-in is on the river, the walk never meets it, it meets it down the river's own unnamed upper
+    course, or the label names the put-in's river with ``put_in_river``)."""
+    base = norm_river(s.river)
+    if len(path) < 2 or not base or "put_in_river" in (s.extra or {}):
+        return path, 0.0
+    p = np.asarray(path, dtype=np.int64)
+    on = (idx.rnorm[p] == base) & same_side(section_side(s, "put_in"), idx.side[p])
+    if on[0] or not on.any():
+        return path, 0.0
+    k = int(np.argmax(on))
+    if idx.up[p[k]] == p[k - 1]:
+        return path, 0.0
+    return path[k:], float(idx.f["length_m"].to_numpy()[p[:k]].sum()) / 1000.0
+
+
 def map_section(f: pd.DataFrame, s: Section, idx: _Index, info: dict | None = None) -> tuple[np.ndarray, str]:
     """The frame rows a section covers and how they were placed. Put-in and take-out (or outlet and
     length) follow the network; without a path, the name rule takes the steep reaches with the river's
     name and keeps one downstream path of them (``labels.one_path``: "name (1 of 3 pieces)"). ``info``,
     if given, receives what the name rule dropped (pieces, branches, dropped reaches and km). Points snap
     to the nearest reach with the river's name within 3 km, or to another name (``snap_river``); a name with
-    fork words matches its fork and the main stem only (``section_side``)."""
+    fork words matches its fork and the main stem only (``section_side``). A walk down from a put-in that
+    snapped to a side stream starts where the stream joins the river (``_from_river``; ``info["side_km"]``)."""
+    side_note = " (from the confluence: the put-in snapped to a side stream)"
     if s.put_in and s.take_out:
         a, b = _snap(idx, s, "put_in"), _snap(idx, s, "take_out")
         length = s.extra.get("length_km") if s.extra else None
@@ -349,21 +371,33 @@ def map_section(f: pd.DataFrame, s: Section, idx: _Index, info: dict | None = No
             x0, y0 = _TO_NZTM.transform(*s.put_in)
             x1, y1 = _TO_NZTM.transform(*s.take_out)
             tol = max(1500.0, 0.35 * float(np.hypot(x1 - x0, y1 - y0)))
-            path = (idx.walk_towards(a, s.take_out, tol) if a >= 0 else []) or (
-                idx.walk_towards(b, s.put_in, tol) if b >= 0 else [])
+            path = idx.walk_towards(a, s.take_out, tol) if a >= 0 else []
+            path, side_km = _from_river(idx, path, s)
+            if not path and b >= 0:
+                path = idx.walk_towards(b, s.put_in, tol)
             if path:
-                return np.array(path, dtype=np.int64), "put-in towards take-out"
+                if info is not None and side_km:
+                    info["side_km"] = round(side_km, 2)
+                return np.array(path, dtype=np.int64), "put-in towards take-out" + (side_note if side_km else "")
     length = s.extra.get("length_km") if s.extra else None
     if s.put_in and length:
         a = _snap(idx, s, "put_in")
         if a >= 0:
-            out, km, cur = [], 0.0, a
-            L = f["length_m"].to_numpy()
-            while cur >= 0 and km < float(length):
-                out.append(cur)
-                km += L[cur] / 1000.0
+            ahead, cur = [], a
+            while cur >= 0 and len(ahead) < 4000:
+                ahead.append(cur)
                 cur = idx.down[cur]
-            return np.array(out, dtype=np.int64), "put-in + length"
+            ahead, side_km = _from_river(idx, ahead, s)
+            out, km = [], 0.0
+            L = f["length_m"].to_numpy()
+            for r in ahead:
+                if km >= float(length):
+                    break
+                out.append(r)
+                km += L[r] / 1000.0
+            if info is not None and side_km:
+                info["side_km"] = round(side_km, 2)
+            return np.array(out, dtype=np.int64), "put-in + length" + (side_note if side_km else "")
     if s.outlet and s.upstream_km:
         a = _snap(idx, s, "outlet")
         if a >= 0:

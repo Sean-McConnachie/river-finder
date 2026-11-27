@@ -52,7 +52,8 @@
    "popularity": "'classic' = well-known, frequently paddled; 'niche' = rarely paddled, exploratory, or packraft-focused; 'standard' = everything else.",
    "packraftingtrips grades": "Packraft grades, which can differ from hardshell grades.",
    "put_in_river / take_out_river": "Optional. The river name a point snaps to when it is not the section's river: e.g. a take-out on the main river below a confluence, or REC2's spelling ('Windon Burn'). '' = the nearest reach whatever its name (REC2 leaves the reach unnamed). Read by models.map_section (snap_river).",
-   "rf-bl3": "2026-11-27: 45 sections re-placed (data_notes 'rf-bl3'); points from the riverguide API and its descriptions, DOC hut and campsite grid references, LINZ river lines and waterfall points, and OSM road/track crossings on the 8 m reach network. See docs/audits/sections-bl3-2026-11.md."
+   "rf-bl3": "2026-11-27: 45 sections re-placed (data_notes 'rf-bl3'); points from the riverguide API and its descriptions, DOC hut and campsite grid references, LINZ river lines and waterfall points, and OSM road/track crossings on the 8 m reach network. See docs/audits/sections-bl3-2026-11.md.",
+   "rf-kfe": "2026-11-27: 4 sections re-placed (data_notes 'rf-kfe'): the Manganui-a-te-ao (2) and Makatote points that sat on the Orautoha Stream, and the Mohaka Glenfalls to Everetts points. See docs/audits/sections-bl3-2026-11.md."
   },
   "safety_disclaimer": "River features, wood and access change after every flood. This is a planning aid compiled from public sources, not current beta. Check recent local information, flows and land access before paddling.",
   "unattached_incidents": [
@@ -1755,20 +1756,20 @@
    "time": null,
    "put_in_description": "Glenfalls DOC campsite (Waitara Rd off SH5)",
    "put_in_coords": [
-    -39.235,
-    176.585
+    -39.14136,
+    176.67344
    ],
    "inferred_put_in_coords": true,
-   "put_in_coord_source": "inferred from the written access description and geography",
-   "put_in_coord_accuracy": "low",
+   "put_in_coord_source": "DOC Glenfalls Campsite, NZTM2000 E1917500 N5661107 (DOC page, as quoted by a web search)",
+   "put_in_coord_accuracy": "high",
    "take_out_description": "Everetts (Mohaka)",
    "take_out_coords": [
-    -39.2,
-    176.62
+    -39.08391,
+    176.70599
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from the written access description and geography",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "Everetts Campsite -39.08391, 176.70599 (wildthings.club listing, as quoted by a web search; DOC gives no grid reference: park at Everetts Ford, the campsite is 1.5 km along the forestry road)",
+   "take_out_coord_accuracy": "medium",
    "gauge": null,
    "flow_notes": "Consistent flow year-round.",
    "description": "Step up from the class I-II Mohaka Farm / McVicars to Glenfalls run; commercially rafted as a grade 2 trip.",
@@ -1789,14 +1790,24 @@
     {
      "title": "packraftingtrips.nz: Mohaka - Glenfalls to Everetts",
      "url": "https://packraftingtrips.nz/tag/class-ii/page/2"
+    },
+    {
+     "title": "DOC: Glenfalls Campsite",
+     "url": "https://www.doc.govt.nz/parks-and-recreation/places-to-go/hawkes-bay/places/mohaka-river-area/things-to-do/glenfalls-campsite"
+    },
+    {
+     "title": "wildthings.club: Everetts Campsite",
+     "url": "https://www.wildthings.club/huts/hawkes-bay/everetts-campsite/"
     }
    ],
    "primary_source": "packraftingtrips.nz",
    "attribution": "Summarised in our own words from packraftingtrips.nz; see link for the original.",
    "licence": "Summary only; original content remains under its own copyright",
-   "data_notes": null,
+   "data_notes": [
+    "rf-kfe (2026-11-27): both points were rounded guesses: the put-in on a 9.6 km2 creek of the Inangatahi Stream, 3 km off the Mohaka (the section ran 5.3 km down the Inangatahi), the take-out above Glenfalls; now the Glenfalls and Everetts campsites: 11.3 km down the Mohaka."
+   ],
    "grading_note": "Packrafting grade; hardshell kayak grade may differ.",
-   "straight_line_km": 4.92,
+   "straight_line_km": 6.98,
    "distance_check": "no stated length to compare"
   },
   {
@@ -3057,12 +3068,12 @@
    "put_in_coord_accuracy": "as published",
    "take_out_description": "Upper Manganui Valley bridge",
    "take_out_coords": [
-    -39.35,
-    175.3
+    -39.3135,
+    175.2575
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from directions and geography: Upper Manganui Valley bridge",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: riverguide's take-out text 'See directions for Manganui-a-teo put-in', i.e. the Hoihenga bridge (the Manganui-a-te-ao section's published point; OSM (Overture, data/nz/access.gpkg) Hoihenga Road crosses the Manganui-o-te-ao there). The exit name 'Upper Manganui Valley bridge' could also be the Manganui Valley Road bridge 7.4 km higher (13.7 km)",
+   "take_out_coord_accuracy": "medium",
    "gauge": null,
    "flow_notes": null,
    "description": "Stunning run: rocky chutes, then a narrow twisting gorge with 50m walls and many rapids. Boat scouting needed. Strainers shift after floods.",
@@ -3093,9 +3104,12 @@
    "primary_source": "riverguide",
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
-   "data_notes": null,
-   "straight_line_km": 12.74,
-   "distance_check": "ok"
+   "data_notes": [
+    "rf-kfe (2026-11-27): the take-out was a rounded guess on the Orautoha Stream; now the Hoihenga bridge on the Manganui-o-te-ao (take_out_river): 21.1 km vs the guide's 25 km (was 18.8 km, walked towards the guess)."
+   ],
+   "straight_line_km": 13.32,
+   "distance_check": "ok",
+   "take_out_river": "Manganui-o-te-ao River"
   },
   {
    "id": "riverguide:5d16ba7b7b83b60017c66885",
@@ -3307,12 +3321,12 @@
    "put_in_coord_accuracy": "as published",
    "take_out_description": "Ruatiti Domain",
    "take_out_coords": [
-    -39.36,
-    175.25
+    -39.31018,
+    175.20607
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from directions and geography: Ruatiti Domain bridge",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: the bridge at Ruatiti Domain. riverguide: 'follow Ohura Road for just over four kilometres to the bridge at the Ruatiti domain'; OSM (Overture, data/nz/access.gpkg): Ruatiti Road reaches the Manganui-o-te-ao 3.9 km from the Orautoha road junction and way 178493649 (Makino Road, 89 m) crosses it there; this is that way's midpoint. Ruapehu District Council: the Domain is 800 m past the river bridge, where the Ruatiti Stream joins (as quoted by a web search)",
+   "take_out_coord_accuracy": "high",
    "gauge": null,
    "flow_notes": null,
    "description": "Top Gorge is the crux with large waves and hydraulics, excellent in flood, class IV at very high flows. Below Myers bridge eases to II-III; wilderness class II continues to the Whanganui.",
@@ -3344,8 +3358,10 @@
    "primary_source": "riverguide",
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
-   "data_notes": null,
-   "straight_line_km": 5.21,
+   "data_notes": [
+    "rf-kfe (2026-11-27): the take-out was a rounded guess on the Orautoha Stream, 5 km off the river (the section fell back to 'put-in + length'); now the Ruatiti Domain bridge: 8.2 km down the river vs the guide's 8.5 km."
+   ],
+   "straight_line_km": 4.44,
    "distance_check": "ok"
   },
   {
@@ -3364,12 +3380,12 @@
    "time": "3 days",
    "put_in_description": "Ruatiti Domain bridge (II+), or Hoihenga Bridge (III) for a harder start.",
    "put_in_coords": [
-    -39.36,
-    175.25
+    -39.31018,
+    175.20607
    ],
    "inferred_put_in_coords": true,
-   "put_in_coord_source": "inferred from the written access description and geography",
-   "put_in_coord_accuracy": "low",
+   "put_in_coord_source": "inferred: the guide's 'Ruatiti Domain bridge'. riverguide: 'follow Ohura Road for just over four kilometres to the bridge at the Ruatiti domain'; OSM (Overture, data/nz/access.gpkg): Ruatiti Road reaches the Manganui-o-te-ao 3.9 km from the Orautoha road junction and way 178493649 (Makino Road, 89 m) crosses it there; this is that way's midpoint. Ruapehu District Council: the Domain is 800 m past the river bridge, where the Ruatiti Stream joins (as quoted by a web search)",
+   "put_in_coord_accuracy": "high",
    "take_out_description": "Pipiriki, via the Whanganui confluence and Ngaporo campsite",
    "take_out_coords": [
     -39.4795,
@@ -3406,10 +3422,13 @@
    "primary_source": "packraftingtrips.nz",
    "attribution": "Summarised in our own words from packraftingtrips.nz; see link for the original.",
    "licence": "Summary only; original content remains under its own copyright",
-   "data_notes": null,
+   "data_notes": [
+    "rf-kfe (2026-11-27): the put-in was a rounded guess on the Orautoha Stream (the section ran 24 reaches down that side stream); now the Ruatiti Domain bridge. The take-out (Pipiriki) is on the Whanganui, so it snaps to the Whanganui (take_out_river): 47.4 km vs the guide's 58 km."
+   ],
    "grading_note": "Packrafting grade; hardshell kayak grade may differ.",
-   "straight_line_km": 21.31,
-   "distance_check": "ok"
+   "straight_line_km": 22.82,
+   "distance_check": "ok",
+   "take_out_river": "Whanganui River"
   },
   {
    "id": "packraftingtrips:ohau-gorge",
