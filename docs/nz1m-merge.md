@@ -57,6 +57,19 @@ uv run river-finder nz1m merge [qid ...] [--out DIR]   # all done tiles by defau
      unlinked.
 3. **Cycle guard**: a topological sort; a cycle is reported in `merge.json` and cut at its weakest link (highest
    `stitch` code, then smallest area).
+   - **Zero-length reaches** (rf-lxa.12) then leave the network. The tile job gives a channel link of 3-6 path cells
+     (its cells and the confluence cell below) one reach whose 20 m-smoothed length is 0: the moving average
+     (+-5 cells, shrinking at the ends) puts every vertex on the path's centroid. Such a reach has one profile
+     station and no profile. In practice it is a stream that reaches the 0.5 km2 threshold 2-5 cells above a
+     confluence, or two confluences 2-5 cells apart. Everything that drains into it now drains into the first reach
+     of non-zero length below it (`stitch`: the weakest link on the way). That reach takes its `local_km2` and
+     other `local_*` sums (`local_z_mean_m` weighted by area, `local_z_max_m` the higher), so its area and all areas
+     below stay the same. A reach whose `down_seg` named it takes its `down_seg` and `exits_core`. If the path ends at
+     an outlet first, the reaches above become outlets of that kind and the biggest takes the sums; a lone reach
+     (head and outlet) is dropped with its area (`lost_km2`). Lake outlets move to the reach that took them.
+     The reaches leave `network.parquet`, `reaches.parquet`, `x1.arrow` and `steps.arrow`. `merge.json`
+     `zero_length.merged` lists `[dropped gid, gid that took it]`, for readers of the tiles'
+     `local_catchment_core.tif`, whose cells still name the dropped gid.
 4. **Accumulate** `local_km2` and the other `local_*` sums down the network: `area_km2`, `area_mid_km2`,
    `area_check`, `head_m`, `relief_m`, `melton`, `ksn`, `knick_ratio`, `upstream_*_frac`, `catch_lidar_share`,
    `karst_up_frac`, `sinuosity_1km`.
@@ -95,10 +108,17 @@ core (337 s, 7.3 GB). Checks: `data/nz1m/analysis/merge_x12y16.json` (scripts in
 | links across the internal edges | **78 of 78**: 75 on the same 2 m cell, 3 to the next tile's first reach (10-26 m on), no REC2 relink, none left |
 | lake links | 6, in three lakes with no surface outlet (by level and size probably Okataina, Tikitapu and Rotomahana) |
 | cycles | 0 |
+| zero-length reaches (rf-lxa.12) | 12 dropped, all into the reach below: 9 heads of 0.50-0.80 km2, 3 links between two confluences; 3 on flattened lakes. 21,149 reaches are left |
 | outlets | 23 sea, 90 box edge (all where a river leaves x12y16), 0 at an internal edge |
 | truncated | 945 reaches (392 of 10 km2 or more) below 61 open entries; 57 entries lie within 3.5 km of x12y16's outer edge (rivers from tiles not merged); 4 are interior streams of 0.6-1.4 km2 with 0.25-0.34 km2 of in-tile area that their local sums do not hold |
 | merge time, memory | 3.3 s, 0.5 GB |
 
+- **Zero-length reaches** (re-merge with rf-lxa.12 into `merge_x12y16_lxa12/` of the sample, against the merge
+  before). Every other reach keeps its gid, line and network area (bit for bit). The local sums, the km and every
+  count in `merge.json` stay the same, except `links.in_tile` (12 fewer). What changes: `down_gid` of the 6 reaches
+  that drained into a dropped one, and their `knick_ratio` (NaN before). `sinuosity_1km` changes on 3 reaches whose
+  biggest upstream branch was a zero-length head. The median MAF that fills unmatched reaches changes too (0.4722
+  -> 0.4727).
 - **No gaps, no duplicates.** Points every 10 m on the reference's lines within 1 km of an internal edge: 99.95 % lie
   on exactly one merged line, none on none, 0.05 % on two (at confluences). Farther from the edges: 99.86 %, 0.11 %,
   0.02 %.
@@ -222,6 +242,8 @@ index and the REC layers; `x1.arrow` is concatenated in memory, ~1 GB). Outputs:
   hole-lake reaches with at most half of their stations on 1 m data (380 reaches in `q25y32`).
 - **`lake`** in the national table is False on tidal water (the older tiles counted flattened water below 1 m as a
   lake).
+- **Zero-length reaches are not in the national files** (rf-lxa.12; above). The tiles still hold them.
+  `merge.json` `zero_length` gives their count, the area moved and `merged` (dropped gid -> gid).
 - **The stitch accepts an exact cell match whatever the areas.** The spec's area ratio (0.7-3) refused the Waiomou's
   crossing on the Mamaku plateau, where the receiving tile's REC2 inflow (30 km2) was far below the real 43 km2.
 - **Files**: `reaches.parquet` (the national reach table) and `merge.json` are added to `lidarspec.NATIONAL_FILES`;

@@ -158,6 +158,71 @@ def test_lake_nodes_redirect_to_the_one_outlet_without_cycles():
     assert summ[0]["redirected"] == 1 and summ[0]["enders"] == 1 and len(M.kahn(down)) == len(T)
 
 
+def test_zero_length_reaches_merge_into_the_reach_below():
+    """rf-lxa.12: 0, 1 -> Z2 -> Z3 -> 4 <- Z5 (a zero-length head); 4 -> 6 -> sea; 11 (tile b) -> Z12 -> 6 across the
+    edge; 7, 8 -> Z9 (a zero-length sea outlet); Z10 alone (head and outlet)."""
+    B = S.SEG_BASE
+    spec = [  # tile, length, local, down (row), down_seg (row, in-tile), exits, stitch
+        ("a", 250, 1.0, 2, 2, False, 0), ("a", 250, 2.0, 2, 2, False, 0), ("a", 0, 0.01, 3, 3, False, 0),
+        ("a", 0, 0.02, 4, 4, False, 0), ("a", 250, 0.5, 6, 6, False, 0), ("a", 0, 0.6, 4, 4, False, 0),
+        ("a", 250, 0.3, -1, -1, False, 0), ("a", 250, 1.5, 9, 9, False, 0), ("a", 250, 0.7, 9, 9, False, 0),
+        ("a", 0, 0.05, -1, -1, False, 0), ("a", 0, 0.4, -1, -1, False, 0), ("b", 250, 3.0, 12, 99, True, 1),
+        ("a", 0, 0.2, 6, 6, False, 0)]
+    T = pd.DataFrame({"gid": [(1 if t == "a" else 2) * B + i for i, (t, *_) in enumerate(spec)],
+                      "tile": pd.Categorical([s[0] for s in spec]), "seg_id": np.arange(len(spec)),
+                      "length_m": [float(s[1]) for s in spec], "local_km2": [s[2] for s in spec],
+                      "down_seg": [s[4] for s in spec], "exits_core": [s[5] for s in spec]})
+    down = np.array([s[3] for s in spec], np.int64)
+    stitch = np.array([s[6] for s in spec], np.uint8)
+    rng = np.random.default_rng(1)
+    T["local_z_mean_m"] = rng.uniform(100, 200, len(T))
+    T["local_z_max_m"] = T["local_z_mean_m"] + rng.uniform(1, 50, len(T))
+    for c in M.LOCAL_SUMS:
+        T[c] = T["local_km2"] * rng.uniform(0, 1, len(T))
+    order = M.kahn(down)
+    full = M.acc_sum(order, down, T["local_km2"].to_numpy())
+    T["area_tile_km2"] = T["area_tile_mid_km2"] = full
+    T["z_top"], T["z_bot"], T["gradient_m_per_km"] = 10.0, 9.0, 4.0
+    okind = np.where(down >= 0, M.OUT_NONE, M.OUT_SEA).astype(np.uint8)
+    missing = np.zeros(len(T))
+    missing[5] = 0.3
+    pos = pd.Index(T["gid"])
+    T2, d, st, ok, lid, miss, row_map, fix, info = M.drop_zero_length(T, pos, down, stitch, okind, np.full(len(T), -1),
+                                                                       missing, log=lambda *a: None)
+    keep = [0, 1, 4, 6, 7, 8, 11]
+    assert T2["gid"].tolist() == T["gid"].to_numpy()[keep].tolist()              # the other gids stay
+    assert d.tolist() == [2, 2, 3, -1, -1, -1, 3] and len(M.kahn(d)) == len(T2)   # rerouted, no cycle
+    assert st[6] == M.STITCH_EDGE and ok[4] == ok[5] == M.OUT_SEA
+    loc = T2["local_km2"].to_numpy()
+    assert loc[2] == pytest.approx(0.5 + 0.01 + 0.02 + 0.6) and loc[3] == pytest.approx(0.3 + 0.2)
+    assert loc[4] == pytest.approx(1.5 + 0.05) and loc.sum() == pytest.approx(T["local_km2"].sum() - 0.4)
+    assert info["n"] == 6 and info["into_reach"] == 4 and info["at_outlet"] == 2 and info["rerouted"] == 5
+    assert info["new_outlets"] == 2 and info["lost"] == 1 and info["lost_km2"] == pytest.approx(0.4)
+    g = T["gid"].to_numpy()
+    assert info["merged"] == [[g[2], g[4]], [g[3], g[4]], [g[5], g[4]], [g[9], g[7]], [g[10], -1], [g[12], g[6]]]
+    assert row_map.tolist() == [0, 1, 2, 2, 2, 2, 3, 4, 5, 4, -1, 6, 3]
+    assert miss[2] == pytest.approx(0.3)
+    # the local elevation: area-weighted mean and the higher maximum of the reaches merged
+    zm, zx, lk = T["local_z_mean_m"].to_numpy(), T["local_z_max_m"].to_numpy(), T["local_km2"].to_numpy()
+    r = [4, 2, 3, 5]
+    assert T2["local_z_mean_m"].iat[2] == pytest.approx((zm[r] * lk[r]).sum() / lk[r].sum())
+    assert T2["local_z_max_m"].iat[2] == zx[r].max()
+    # tile links: 0, 1 named Z2 (-> Z3 -> 4 in the tile) and now name 4; 7, 8 named the outlet Z9: the sea
+    assert T2["down_seg"].tolist() == [4, 4, 6, -1, -1, -1, 99] and not T2["exits_core"].iloc[:6].any()
+    assert set(fix.index) == set(g[[0, 1, 4, 6, 7, 8]]) and set(M.ZERO_FIX_COLS) <= set(fix.columns)
+    # the network areas: those of the full network (but where an outlet took a zero-length outlet's local area)
+    F = M.network_fields(T2, d, M.kahn(d))
+    F0 = M.network_fields(T, down, order)
+    want = full[keep] + np.array([0, 0, 0, 0, 0.05, 0, 0])
+    assert np.allclose(F["area_km2"], want)
+    assert np.allclose(F["head_m"][[0, 1, 2, 3, 6]], F0["head_m"][[0, 1, 4, 6, 11]])
+    # nothing of zero length: the inputs back
+    T3 = T[T["length_m"] > 0].reset_index(drop=True)
+    res = M.drop_zero_length(T3, pd.Index(T3["gid"]), np.full(len(T3), -1), np.zeros(len(T3), np.uint8),
+                             np.zeros(len(T3), np.uint8), np.full(len(T3), -1), np.zeros(len(T3)))
+    assert res[0] is T3 and res[-1]["n"] == 0 and res[6].tolist() == list(range(len(T3)))
+
+
 # ---------------------------------------------------------------------------------------------- two synthetic tiles
 def _run(tile, z1, z8, core, box, root):
     od = root / "tiles" / tile.id
@@ -258,6 +323,75 @@ def test_the_lake_across_the_edge_is_one_node(two_tiles):
     assert net.set_index("gid").loc[o, "area_km2"] == pytest.approx(a_ref, rel=0.01)
     assert json.loads((out / "merge.json").read_text())["lakes"]["by_kind"]["hole"] == 1
     assert (out / "lakes.gpkg").exists() and (out / "x1.arrow").exists() and (out / "steps.arrow").exists()
+
+
+def test_merge_drops_zero_length_reaches(two_tiles, tmp_path):
+    """rf-lxa.12 on the two tiles: three reaches made zero-length in a copy (a reach two reaches drain into, a head
+    reach and the lake's outlet reach) leave every national file; what drained into them drains into the reach
+    below, which takes their local sums; every other reach keeps its gid and its network area."""
+    import shutil
+
+    import geopandas as gpd
+    import pyarrow.feather as feather
+    import pyogrio
+
+    root, out, res, *_ = two_tiles
+    net0 = pd.read_parquet(out / "network.parquet").set_index("gid")
+    g0 = gpd.read_parquet(out / "reaches.parquet").set_index("gid")
+    lakes = res["lakes"]
+    o = int(lakes.loc[lakes["kind"] == "hole", "outlet_gid"].iloc[0])
+    nup = net0.groupby("down_gid").size()
+    tile_of = g0["tile"].astype(str)
+    conf = [x for x in nup[nup >= 2].index if x >= 0 and x != o and net0.loc[x, "down_gid"] >= 0
+            and (tile_of[net0.index[net0["down_gid"] == x]] == tile_of[x]).all()][0]
+    head = [x for x in net0.index[~net0.index.isin(nup.index) & (net0["down_gid"] >= 0)]
+            if net0.loc[x, "lake_id"] < 0 and x not in (o, conf) and net0.loc[x, "down_gid"] not in (o, conf)][0]
+    zero = [conf, head, o]
+    assert net0.loc[o, "down_gid"] >= 0
+    root2 = tmp_path / "nz1m"
+    for t in ("q00y00", "q00y01"):
+        shutil.copytree(root / "tiles" / t, root2 / "tiles" / t)
+        p = root2 / "tiles" / t / "segments_core.gpkg"
+        g = pyogrio.read_dataframe(p)
+        g.loc[g["gid"].isin(zero), "length_m"] = 0.0
+        p.unlink()
+        pyogrio.write_dataframe(g, p, layer="segments", driver="GPKG")
+    out2 = root2 / "merged"
+    r2 = M.merge(["q00y00", "q00y01"], root=root2, out=out2, rec2=None, flood=None, regions=False, geology=False,
+                 log=lambda *a: None)
+    zl = r2["summary"]["zero_length"]
+    assert zl["n"] == 3 and zl["into_reach"] == 3 and zl["lost"] == 0
+    assert sorted(m[0] for m in zl["merged"]) == sorted(zero)
+    assert all(m[1] == net0.loc[m[0], "down_gid"] for m in zl["merged"])
+    net = pd.read_parquet(out2 / "network.parquet").set_index("gid")
+    g = gpd.read_parquet(out2 / "reaches.parquet").set_index("gid")
+    x1 = feather.read_table(out2 / "x1.arrow").to_pandas()
+    assert set(net.index) == set(g.index) == set(x1["gid"]) == set(net0.index) - set(zero)
+    assert (g["length_m"] > 0).all() and len(M.kahn(r2["down"])) == len(net)
+    # what drained into them drains into the reach below
+    for z in zero:
+        for u in net0.index[net0["down_gid"] == z]:
+            assert net.loc[u, "down_gid"] == net0.loc[z, "down_gid"]
+    # every other reach keeps its network area; the local sums move into the reach below, the totals stay
+    assert np.allclose(net["area_km2"], net0.loc[net.index, "area_km2"], rtol=1e-6)
+    for c in ("local_km2", "local_lidar_km2", "local_lake_km2"):
+        assert g[c].astype(float).sum() == pytest.approx(g0[c].astype(float).sum(), rel=1e-6)
+    for z in zero:
+        d = net0.loc[z, "down_gid"]
+        add = g0.loc[[x for x in zero if net0.loc[x, "down_gid"] == d], "local_km2"].sum()
+        assert g.loc[d, "local_km2"] == pytest.approx(g0.loc[d, "local_km2"] + add, rel=1e-5)
+    # the lake's outlet is now the reach below the old one; its members drain to it
+    lk = r2["lakes"]
+    o2 = int(lk.loc[lk["kind"] == "hole", "outlet_gid"].iloc[0])
+    assert o2 == net0.loc[o, "down_gid"]
+    lid = int(lk.loc[lk["kind"] == "hole", "lake_id"].iloc[0])
+    for x in net.index[(net["lake_id"] == lid) & (net.index != o2)]:
+        n = 0
+        while x != o2 and x >= 0 and n < 1000:
+            x, n = int(net.loc[x, "down_gid"]), n + 1
+        assert x == o2
+    js = json.loads((out2 / "merge.json").read_text())
+    assert js["reaches"] == len(net0) - 3 and js["zero_length"]["n"] == 3
 
 
 def test_single_tile_merge_flags_truncation(two_tiles):

@@ -13,7 +13,8 @@ every reach's area from the network, not from the tile:
    ending in the lake, links to the lake's outlet reach); 3 REC2 relink (``relink.relink_outlets``, the fallback of
    the 8 m merge, for exits into a merged tile); 4 none.
 3. **Cycle guard**: a topological sort over ``down_gid``; a cycle is reported and cut at its weakest link (the
-   highest ``stitch`` code, then the smallest area).
+   highest ``stitch`` code, then the smallest area). Then the **zero-length reaches** go (``drop_zero_length``,
+   rf-lxa.12): what drains into one drains into the reach below it, which takes its local sums.
 4. **Network accumulation** of ``local_km2`` and the other ``local_*`` sums (each box cell is counted once, by the
    tile whose core holds its first reach): ``area_km2`` and the other ``merge`` fields of ``lidarspec``.
 5. **Joins** that need the final areas: REC2 matched along the network (``rec2_match``: area ratio and line
@@ -62,6 +63,8 @@ READ_COLS = ["gid", "tile", "seg_id", "down_seg", "end_x", "end_y", "exits_core"
              "lidar_share", "lake", "lake_share"]
 LOCAL_SUMS = {"local_flat_km2": "upstream_flat_frac", "local_hard_km2": "upstream_hard_frac",
               "local_lake_km2": "upstream_lake_frac", "local_lidar_km2": "catch_lidar_share"}
+# the tile fields a zero-length reach changes in the reaches around it (drop_zero_length; reaches.parquet)
+ZERO_FIX_COLS = ("local_km2", "local_z_mean_m", "local_z_max_m", *LOCAL_SUMS, "down_seg", "exits_core")
 
 
 def _rss_gb() -> float:
@@ -493,6 +496,143 @@ def relink_rec2(T: pd.DataFrame, edge: dict, down: np.ndarray, stitch: np.ndarra
     return st
 
 
+def drop_zero_length(T: pd.DataFrame, pos: pd.Index, down: np.ndarray, stitch: np.ndarray, okind: np.ndarray,
+                     lake_id: np.ndarray, missing: np.ndarray, log=print):
+    """Take the reaches of zero length out of the network (rf-lxa.12). The tile job makes one from a channel link of
+    3-6 path cells (its cells and the confluence cell below: a stream that reaches the channel threshold a few cells
+    above a confluence, or two confluences a few cells apart): the 20 m moving average puts every vertex of such a
+    path on its centroid, so the reach has a smoothed length of 0, one profile station and no profile. On the
+    network (after the links and the cycle guard), for each zero-length reach Z:
+
+    - every reach that drains into Z drains into Z's target, the first reach of non-zero length down its path, with
+      the weakest ``stitch`` code of the links between them. The target takes Z's local sums (``local_km2`` and the
+      other ``local_*``, ``local_z_mean_m`` area-weighted, ``local_z_max_m`` the higher; and ``missing``, the area
+      missing at an open entry), so the network areas of the target and below do not change;
+    - when Z's path ends (sea, box edge, lake sink) before a reach of non-zero length, the reaches that drain into
+      it become outlets of that kind (``okind`` and ``stitch`` of the last one), and the biggest of them takes the
+      local sums; a zero-length reach with nothing above it there is dropped with its local area (``lost_km2``);
+    - a reach whose tile link (``down_seg``, in-tile) names Z takes Z's tile link (``down_seg``, ``exits_core``).
+
+    Contracting paths keeps the network free of cycles; the other reaches keep their gids. Returns the reduced
+    ``T`` (new frame), ``down``, ``stitch``, ``okind``, ``lake_id``, ``missing``, ``row_map`` (per old row: its new
+    row, or for a dropped one the new row of the reach that took its sums, -1 none), ``fix`` (the changed tile fields
+    ``ZERO_FIX_COLS`` by gid) and a summary (``merged``: [dropped gid, gid that took it, -1 none])."""
+    n = len(T)
+    zero = ~(T["length_m"].to_numpy(np.float64) > 0)
+    info = {"n": int(zero.sum()), "into_reach": 0, "at_outlet": 0, "rerouted": 0, "new_outlets": 0, "lost": 0,
+            "local_km2": 0.0, "lost_km2": 0.0, "merged": []}
+    if not zero.any():
+        return (T, down, stitch, okind, lake_id, missing, np.arange(n), pd.DataFrame(columns=list(ZERO_FIX_COLS)),
+                info)
+    gid = T["gid"].to_numpy(np.int64)
+    # the target of every zero-length reach: the first reach of non-zero length down its path (-1: the path ends at
+    # ``end``, a zero-length outlet, first), and the weakest link on the way
+    tgt = np.where(zero, -2, np.arange(n)).astype(np.int64)
+    end = np.full(n, -1, np.int64)
+    weak = np.zeros(n, np.uint8)
+    for z in np.flatnonzero(zero):
+        if tgt[z] != -2:
+            continue
+        path, x = [], int(z)
+        while zero[x] and tgt[x] == -2:
+            path.append(x)
+            if down[x] < 0:
+                break
+            x = int(down[x])
+        if not zero[x]:
+            t, e, w = x, -1, 0
+        elif tgt[x] != -2:                      # joins a path resolved before
+            t, e, w = int(tgt[x]), int(end[x]), int(weak[x])
+        else:                                   # x (the last of the path) is an outlet
+            t, e, w = -1, x, 0
+        for p in reversed(path):
+            if t >= 0:
+                w = max(w, int(stitch[p]))
+            tgt[p], end[p], weak[p] = t, e, w
+    zr = np.flatnonzero(zero)
+    # the reaches that drain into a zero-length one: to its target, or outlets of its path's kind
+    rows = np.flatnonzero(~zero & (down >= 0))
+    hit = rows[zero[down[rows]]]
+    zh = down[hit]
+    down2, stitch2, okind2 = down.copy(), stitch.copy(), okind.copy()
+    into = tgt[zh] >= 0
+    a, za = hit[into], zh[into]
+    down2[a], stitch2[a] = tgt[za], np.maximum(stitch[a], weak[za])
+    o, e = hit[~into], end[zh[~into]]
+    down2[o], okind2[o], stitch2[o] = -1, okind[e], stitch[e]
+    # who takes the local sums: the target, else the biggest reach (network area) that now ends at the path's outlet
+    recv = np.where(tgt >= 0, tgt, -1)
+    if len(o):
+        area = acc_sum(kahn(down), down, T["local_km2"].to_numpy(np.float64))
+        best: dict[int, int] = {}
+        for u, ee in zip(o.tolist(), e.tolist(), strict=True):
+            if ee not in best or area[u] > area[best[ee]]:
+                best[ee] = u
+        for z in zr[tgt[zr] < 0]:
+            recv[z] = best.get(int(end[z]), -1)
+    give = zr[recv[zr] >= 0]
+    r = recv[give]
+    cols = {}
+    loc = T["local_km2"].to_numpy(np.float64)
+    zm = T["local_z_mean_m"].to_numpy(np.float64)
+    zs = np.where(loc > 0, np.nan_to_num(zm) * loc, 0.0)    # as network_fields weighs it
+    for c in ("local_km2", *LOCAL_SUMS):
+        v = T[c].to_numpy(np.float64).copy()
+        np.add.at(v, r, v[give])
+        cols[c] = v
+    np.add.at(zs, r, zs[give])
+    ur = np.unique(r)
+    zm2 = zm.copy()
+    zm2[ur] = np.where(cols["local_km2"][ur] > 0, zs[ur] / np.where(cols["local_km2"][ur] > 0,
+                                                                   cols["local_km2"][ur], 1.0), zm[ur])
+    cols["local_z_mean_m"] = zm2
+    zx = T["local_z_max_m"].to_numpy(np.float64).copy()
+    np.fmax.at(zx, r, zx[give])
+    cols["local_z_max_m"] = zx
+    miss2 = np.asarray(missing, np.float64).copy()
+    np.add.at(miss2, r, miss2[give])
+    # tile links that name a zero-length reach: take its tile link (through any zero-length reaches below it)
+    ds = T["down_seg"].to_numpy(np.int64)
+    ex = T["exits_core"].to_numpy(bool)
+    seg = T["seg_id"].to_numpy(np.int64)
+    inner = ~ex & (ds >= 0)
+    tdn = np.full(n, -1, np.int64)
+    tdn[inner] = pos.get_indexer((gid[inner] // S.SEG_BASE) * S.SEG_BASE + ds[inner])
+    ds2, ex2 = ds.copy(), ex.copy()
+    tu = np.flatnonzero(~zero & inner)
+    tu = tu[zero[tdn[tu]]]
+    for u in tu.tolist():
+        x = int(tdn[u])
+        while zero[x] and inner[x]:
+            x = int(tdn[x])
+        ds2[u], ex2[u] = (int(ds[x]), bool(ex[x])) if zero[x] else (int(seg[x]), False)
+    # the reduced network
+    keep = ~zero
+    new = np.full(n, -1, np.int64)
+    new[keep] = np.arange(int(keep.sum()))
+    d = down2[keep]
+    if (zero[d[d >= 0]]).any():
+        raise RuntimeError("a reach still drains into a zero-length reach")
+    d = np.where(d >= 0, new[np.maximum(d, 0)], -1)
+    T2 = T[keep].reset_index(drop=True)
+    for c, v in cols.items():
+        T2[c] = v[keep]                     # float64: the network sums stay those of the full network
+    T2["down_seg"] = ds2[keep].astype(T["down_seg"].dtype)
+    T2["exits_core"] = ex2[keep]
+    row_map = new.copy()
+    row_map[zr] = np.where(recv[zr] >= 0, new[np.maximum(recv[zr], 0)], -1)
+    changed = np.unique(np.r_[r, tu]).astype(np.int64)
+    fix = T2.iloc[new[changed]][["gid", *ZERO_FIX_COLS]].set_index("gid")
+    lost = zr[recv[zr] < 0]
+    info.update(into_reach=int((tgt[zr] >= 0).sum()), at_outlet=int((tgt[zr] < 0).sum()), rerouted=int(len(hit)),
+                new_outlets=int(len(o)), lost=int(len(lost)), local_km2=round(float(loc[zr].sum()), 4),
+                lost_km2=round(float(loc[lost].sum()), 4),
+                merged=[[int(gid[z]), int(gid[recv[z]]) if recv[z] >= 0 else -1] for z in zr.tolist()])
+    log(f"merge: {len(zr)} zero-length reaches dropped ({info['into_reach']} into the reach below, "
+        f"{info['at_outlet']} at an outlet, {info['lost']} lost with {info['lost_km2']} km2)")
+    return T2, d, stitch2[keep], okind2[keep], lake_id[keep], miss2[keep], row_map, fix, info
+
+
 # ---------------------------------------------------------------------------------------------- fields
 def network_fields(T: pd.DataFrame, down: np.ndarray, order: np.ndarray) -> dict:
     """The area and catchment fields of ``lidarspec`` (stage ``merge``) by network accumulation."""
@@ -522,14 +662,26 @@ def network_fields(T: pd.DataFrame, down: np.ndarray, order: np.ndarray) -> dict
     return out
 
 
-def truncation(T: pd.DataFrame, pos: pd.Index, down: np.ndarray, order: np.ndarray, area: np.ndarray):
+def truncation(T: pd.DataFrame, pos: pd.Index, down: np.ndarray, order: np.ndarray, area: np.ndarray,
+               missing: np.ndarray | None = None):
     """``truncated`` and the area missing upstream of each reach. A reach takes in area from outside its tile's core
     (``ext_in``: its in-tile area less its local area and its in-tile core upstream reaches' in-tile areas; the
     halo reaches above it and the REC2 inflows). That area must come from another tile's reaches linked into it; when
-    none is, the reach is an open entry and ``ext_in`` is missing. Missing areas are summed down the network; a reach
-    is truncated when the missing area is over ``TRUNC_MIN_KM2`` and over ``TRUNC_TOL`` of the true area (network area
-    + missing). The in-tile areas only say *that* area enters, not how much: a linked entry is complete whatever the
+    none is, the reach is an open entry and ``ext_in`` is missing (``open_entries``; ``missing`` gives it, as the
+    merge does after the zero-length reaches went). Missing areas are summed down the network; a reach is truncated
+    when the missing area is over ``TRUNC_MIN_KM2`` and over ``TRUNC_TOL`` of the true area (network area +
+    missing). The in-tile areas only say *that* area enters, not how much: a linked entry is complete whatever the
     receiving tile's REC2 inflow said (on plateau divides REC2 and the LiDAR disagree)."""
+    if missing is None:
+        missing = open_entries(T, pos, down)
+    miss = acc_sum(order, down, missing)
+    trunc = (miss > TRUNC_MIN_KM2) & (miss > TRUNC_TOL * (area + miss))
+    return trunc, miss, missing > 0
+
+
+def open_entries(T: pd.DataFrame, pos: pd.Index, down: np.ndarray) -> np.ndarray:
+    """Per reach, the area missing where it enters its tile's core (``truncation``): ``ext_in`` when that is
+    ``TRUNC_MIN_KM2`` or more and no reach of another tile links in, else 0."""
     gid = T["gid"].to_numpy(np.int64)
     ds = T["down_seg"].to_numpy(np.int64)
     inner = ~T["exits_core"].to_numpy(bool) & (ds >= 0)
@@ -543,10 +695,7 @@ def truncation(T: pd.DataFrame, pos: pd.Index, down: np.ndarray, order: np.ndarr
     cross = ok & (tcode != tcode[np.maximum(down, 0)])
     linked = np.zeros(len(T), bool)
     linked[down[cross]] = True
-    missing = np.where(~linked & (ext_in >= TRUNC_MIN_KM2), ext_in, 0.0)
-    miss = acc_sum(order, down, missing)
-    trunc = (miss > TRUNC_MIN_KM2) & (miss > TRUNC_TOL * (area + miss))
-    return trunc, miss, missing > 0
+    return np.where(~linked & (ext_in >= TRUNC_MIN_KM2), ext_in, 0.0)
 
 
 def sinuosity_1km(T: pd.DataFrame, down: np.ndarray, area: np.ndarray, half_m: float = 500.0) -> np.ndarray:
@@ -776,25 +925,36 @@ def merge(tiles: list[str] | None = None, root: Path | None = None, out: Path | 
         st_rel = relink_rec2(T, edge, down, stitch, Rec2Graph.from_frame(rec2f), cores, log)
     t = lap("relink", t)
     cycles = break_cycles(down, stitch, T["area_tile_km2"].to_numpy(float), log)
+    # outlets and open entries on the tiles' links, then the zero-length reaches go (rf-lxa.12)
+    exits = T["exits_core"].to_numpy(bool)
+    ok = down >= 0
+    sea = ~exits & (T["down_seg"].to_numpy() < 0)
+    okind = np.where(ok, OUT_NONE, np.where(sea, OUT_SEA, OUT_EDGE))
+    sink = {lid for lid, s in lake_sum.items() if s["outlet_row"] < 0 and not s["outlet_outside"]}
+    okind = np.where(~ok & exits & np.isin(lake_id, list(sink)), OUT_SINK, okind).astype(np.uint8)
+    stitch = np.where(~ok & sea, STITCH_IN, stitch).astype(np.uint8)
+    missing = open_entries(T, pos, down)
+    T, down, stitch, okind, lake_id, missing, row_map, zfix, zero = drop_zero_length(T, pos, down, stitch, okind,
+                                                                                      lake_id, missing, log)
+    pos = pd.Index(T["gid"].to_numpy(np.int64))
+    for s in lake_sum.values():                     # a zero-length outlet reach: the reach that took it
+        if s["outlet_row"] >= 0:
+            s["outlet_row"] = int(row_map[s["outlet_row"]])
+            s["outlet_gid"] = int(T["gid"].iat[s["outlet_row"]]) if s["outlet_row"] >= 0 else -1
     order = kahn(down)
     assert len(order) == len(T)
     t = lap("cycles", t)
     F = network_fields(T, down, order)
     t = lap("accumulate", t)
     gid = T["gid"].to_numpy(np.int64)
-    exits = T["exits_core"].to_numpy(bool)
     ok = down >= 0
-    okind = np.where(ok, OUT_NONE, np.where(~exits & (T["down_seg"].to_numpy() < 0), OUT_SEA, OUT_EDGE))
-    sink = {lid for lid, s in lake_sum.items() if s["outlet_row"] < 0 and not s["outlet_outside"]}
-    okind = np.where(~ok & exits & np.isin(lake_id, list(sink)), OUT_SINK, okind).astype(np.uint8)
-    stitch = np.where(~ok & ~exits & (T["down_seg"].to_numpy() < 0), STITCH_IN, stitch).astype(np.uint8)
     kind = dict(zip(L["lake_id"], L["kind"], strict=True))
     net = pd.DataFrame({"gid": gid, "down_gid": np.where(ok, gid[np.maximum(down, 0)], -1).astype(np.int64),
                         "stitch": stitch, "outlet_kind": okind, "lake_id": lake_id.astype(np.int32)})
     for k in ("area_km2", "area_mid_km2", "area_check", "ksn", "knick_ratio", "head_m", "relief_m", "melton",
               "upstream_flat_frac", "upstream_hard_frac", "upstream_lake_frac", "catch_lidar_share"):
         net[k] = F[k].astype(np.float32)
-    trunc, miss, open_ = truncation(T, pos, down, order, F["area_km2"])
+    trunc, miss, open_ = truncation(T, pos, down, order, F["area_km2"], missing)
     net["truncated"] = trunc
     net["missing_up_km2"] = miss.astype(np.float32)
     net["sinuosity_1km"] = sinuosity_1km(T, down, F["area_km2"]).astype(np.float32)
@@ -844,9 +1004,11 @@ def merge(tiles: list[str] | None = None, root: Path | None = None, out: Path | 
     summary = _summary(T, net, tiles, st_edge, st_rel, lake_sum, cycles, rerun, L, cores)
     summary["open_entries"] = int(open_.sum())
     summary["open_entries_gt_10km2"] = int((open_ & (T["area_tile_km2"].to_numpy() > 10)).sum())
+    summary["zero_length"] = zero
     if write:
         tw = time.time()
-        files = write_outputs(out, tiles, root, net, L, summary)
+        files = write_outputs(out, tiles, root, net, L, summary, fix=zfix,
+                              drop=np.array([m[0] for m in zero["merged"]], np.int64))
         tim["write"] = round(time.time() - tw, 1)
         summary["files"] = files
     tim["total"] = round(time.time() - t0, 1)
@@ -893,11 +1055,16 @@ def _summary(T, net, tiles, st_edge, st_rel, lake_sum, cycles, rerun, L, cores) 
     }
 
 
-def _concat_arrow(paths: list[Path], dest: Path) -> int:
+def _concat_arrow(paths: list[Path], dest: Path, drop: np.ndarray | None = None) -> int:
+    """The tiles' tables in one file, without the rows of the gids in ``drop``."""
     import pyarrow as pa
+    import pyarrow.compute as pc
     import pyarrow.feather as feather
 
     tabs = [feather.read_table(p) for p in paths if p.exists()]
+    if drop is not None and len(drop):
+        gone = pa.array(np.asarray(drop, np.int64))
+        tabs = [t.filter(pc.invert(pc.is_in(t["gid"], value_set=gone))) if t.num_rows else t for t in tabs]
     tabs = [t for t in tabs if t.num_rows]
     if not tabs:
         return 0
@@ -906,9 +1073,12 @@ def _concat_arrow(paths: list[Path], dest: Path) -> int:
     return dest.stat().st_size
 
 
-def write_outputs(out: Path, tiles: list[str], root: Path, net: pd.DataFrame, L, summary: dict) -> dict:
+def write_outputs(out: Path, tiles: list[str], root: Path, net: pd.DataFrame, L, summary: dict,
+                  fix: pd.DataFrame | None = None, drop: np.ndarray | None = None) -> dict:
     """``network.parquet``, ``reaches.parquet`` (streamed tile by tile: every tile column, the merge fields, the
-    line as WKB with GeoParquet metadata), ``x1.arrow``, ``steps.arrow``, ``lakes.gpkg``."""
+    line as WKB with GeoParquet metadata), ``x1.arrow``, ``steps.arrow``, ``lakes.gpkg``. The reaches of ``net``
+    only (``drop``: the zero-length reaches, left out of every file); ``fix``: tile fields that the merge changed,
+    by gid (``drop_zero_length``)."""
     import geopandas as gpd
     import pyarrow.parquet as pq
     import pyogrio
@@ -924,6 +1094,16 @@ def write_outputs(out: Path, tiles: list[str], root: Path, net: pd.DataFrame, L,
     try:
         for tid in tiles:
             g = pyogrio.read_dataframe(N.tile_dir(tid, root) / "segments_core.gpkg")
+            if drop is not None and len(drop):
+                g = g[~np.isin(g["gid"].to_numpy(np.int64), drop)].reset_index(drop=True)
+            if fix is not None and len(fix):
+                hit = np.isin(g["gid"].to_numpy(np.int64), fix.index.to_numpy(np.int64))
+                if hit.any():
+                    f = fix.loc[g["gid"].to_numpy(np.int64)[hit]]
+                    for c in fix.columns:
+                        v = g[c].to_numpy().copy()
+                        v[hit] = f[c].to_numpy().astype(v.dtype)
+                        g[c] = v
             j = nn.loc[g["gid"].to_numpy()]
             for c in over:
                 g[c] = j[c].to_numpy()
@@ -940,8 +1120,10 @@ def write_outputs(out: Path, tiles: list[str], root: Path, net: pd.DataFrame, L,
         if writer is not None:
             writer.close()
     files = {"network.parquet": (out / "network.parquet").stat().st_size, "reaches.parquet": p.stat().st_size}
-    files["x1.arrow"] = _concat_arrow([N.tile_dir(t, root) / "x1_reach.arrow" for t in tiles], out / "x1.arrow")
-    files["steps.arrow"] = _concat_arrow([N.tile_dir(t, root) / "steps.arrow" for t in tiles], out / "steps.arrow")
+    files["x1.arrow"] = _concat_arrow([N.tile_dir(t, root) / "x1_reach.arrow" for t in tiles], out / "x1.arrow",
+                                      drop)
+    files["steps.arrow"] = _concat_arrow([N.tile_dir(t, root) / "steps.arrow" for t in tiles], out / "steps.arrow",
+                                         drop)
     lp = out / "lakes.gpkg"
     lp.unlink(missing_ok=True)
     L.to_file(lp, layer="lakes", driver="GPKG")
