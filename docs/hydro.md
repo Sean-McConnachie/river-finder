@@ -30,8 +30,10 @@ Per reach also `hydro_scheme` and `hydro_point` (the scheme and point that contr
 The schemes, their layout and the operators come from the operator and agency pages listed per scheme in
 `config/hydro.toml` (`sources`), and for all of them:
 
-- Electricity Authority, *Hydrological Modelling Dataset, Report 4: Hydro power scheme background and descriptions*
-  (2022), [emi.ea.govt.nz](https://www.emi.ea.govt.nz/Environment/Datasets/HydrologicalModellingDataset/1_InfrastructureAndHydroConstraintAttributes/HMD_Report4_HydroPowerSchemeBackgroundAndDescriptions_2022.pdf);
+- Electricity Authority, *Hydrological Modelling Dataset, HMD Report 4 - Hydro-power Schemes Background and
+  Descriptions* (EMI file of 30 Oct 2025),
+  [emi.ea.govt.nz](https://www.emi.ea.govt.nz/Environment/Datasets/HydrologicalModellingDataset/1_InfrastructureAndHydroConstraintAttributes/HMD%20Report%204%20-%20Hydro-power%20Schemes%20Background%20and%20Descriptions.pdf)
+  (a general reference: no value in the config is read from it, see below);
 - Te Ara, [Hydroelectricity](https://teara.govt.nz/mi/hydroelectricity/print);
   Wikipedia, [Hydroelectric power in New Zealand](https://en.wikipedia.org/wiki/Hydroelectric_power_in_New_Zealand)
   and [List of power stations in New Zealand](https://en.wikipedia.org/wiki/List_of_power_stations_in_New_Zealand);
@@ -55,6 +57,18 @@ fast-track pages (outside its network allowlist), so:
   Values taken from them are cross-checked where possible: the Opuiaki Weir's consent map reference (N67:483343, NZGD49
   North Island Grid) lands 60 m from where the LiDAR DEM has the river at the weir's crest level with the catchment
   Tonkin & Taylor give.
+- **Electricity Authority Report 4: not read.** A second check (2026-11-27, with www.emi.ea.govt.nz allowed) found
+  the report in the EMI folder listing (`1_InfrastructureAndHydroConstraintAttributes`, the 30 Oct 2025 file; the
+  `_2022.pdf` link of rf-8x2 answers 404), but EMI serves the file, the archived 2017-2021 editions and the
+  attributes CSV by a redirect to `emidatasets.blob.core.windows.net`, which the session cannot reach. Web-search
+  excerpts of the report gave no scheme values. The fast-track PDFs were skipped (a Cloudflare challenge refuses
+  scripts). No value was confirmed or changed.
+
+**Unconfirmed (as of rf-6u2):** the Kaimai intake rates, residual flows, crest levels, catchments and the
+Mangakarengorengo spill days (search excerpts of the fast-track documents); the Ngatuhoa and Mangakarengorengo weir
+positions (approx, ±100-200 m); the partial takes of Wilberforce (0.85), the Rangitata Diversion Race (0.25), the
+Kawarau gates (0.3) and Piriaka (0.6, and its weir position); the Taurewa and Tawhitikuri intakes (not modelled).
+Each keeps its `approx`, estimate or excerpt mark in the config.
 
 Positions: dams, weirs and power stations mapped in OpenStreetMap, read from the Overture Maps release
 `2026-10-21.0` (`base/infrastructure`: `water/dam`, `water/weir`, `power/plant`, `power/generator` with a hydro
