@@ -140,10 +140,24 @@ def render(data: dict) -> str:
     return shell
 
 
+ICON_FILES = ("favicon.svg", "favicon-32.png", "apple-touch-icon.png")   # web/icons: the logo (core/rf.js ICONS.logo)
+
+
 def document(body: str) -> str:
+    """The standalone site's document skeleton, with the logo as its tab and home-screen icon (``ICON_FILES``)."""
     return ("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
             "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\">\n"
+            "<link rel=\"icon\" href=\"favicon.svg\" type=\"image/svg+xml\">\n"
+            "<link rel=\"icon\" href=\"favicon-32.png\" type=\"image/png\" sizes=\"32x32\">\n"
+            "<link rel=\"apple-touch-icon\" href=\"apple-touch-icon.png\">\n"
             "</head>\n<body>\n" + body + "\n</body>\n</html>\n")
+
+
+def write_icons(out_dir: Path) -> int:
+    """Copy the site icons (``web/icons``) next to ``index.html``."""
+    for name in ICON_FILES:
+        shutil.copy2(web_root() / "icons" / name, out_dir / name)
+    return len(ICON_FILES)
 
 
 def write_static(out_dir: Path) -> int:
@@ -190,6 +204,7 @@ def build(out_dir: Path, data_dir: Path | None = None, basemaps_key: str | None 
         if data_dir.resolve() != out_dir.resolve():
             files = _link_data(data_dir, out_dir)
     write_static(out_dir)
+    write_icons(out_dir)
     key = basemaps_key if basemaps_key is not None else os.environ.get("LINZ_BASEMAPS_KEY", "")
     site = out_dir / "index.html"
     site.write_text(document(render(payload(index, "site", key, rain_base(rain)))), encoding="utf-8")

@@ -64,6 +64,20 @@ def test_build_writes_site_and_artifact_and_links_data(tmp_path):
     assert '"basemapsKey":"k123"' in site and "k123" not in art  # keys only in the standalone site
 
 
+def test_build_gives_the_site_the_logo_icon(tmp_path):
+    res = webapp.build(tmp_path / "web", None, basemaps_key="")
+    site, art = res["site"].read_text(), res["artifact"].read_text()
+    for name in webapp.ICON_FILES:
+        assert (tmp_path / "web" / name).stat().st_size > 0
+    assert '<link rel="icon" href="favicon.svg" type="image/svg+xml">' in site
+    assert '<link rel="apple-touch-icon" href="apple-touch-icon.png">' in site
+    assert "favicon" not in art   # the artifact host gives its own icon
+    svg = (tmp_path / "web" / "favicon.svg").read_text()
+    logo = re.search(r"logo: '(.*?)',", (webapp.web_root() / "core" / "rf.js").read_text()).group(1)
+    for d in re.findall(r'd="([^"]+)"', logo):   # the icon draws the header logo's paths
+        assert f'd="{d}"' in svg
+
+
 def test_stage_pages_keeps_only_the_site(tmp_path):
     out = tmp_path / "web"
     (out / "glyphs").mkdir(parents=True)

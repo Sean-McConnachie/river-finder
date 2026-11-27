@@ -17,7 +17,7 @@ issue under epic `rf-aq6`) for any change to `core/`, `shell.html` or `webapp.py
 
 | Path | Owner | Beads |
 |---|---|---|
-| `core/`, `shell.html`, `vendor/`, `../webapp.py` | core (map agent) | rf-aq6.1 |
+| `core/`, `shell.html`, `vendor/`, `icons/`, `../webapp.py` | core (map agent) | rf-aq6.1 |
 | `pages/map/` | map agent | rf-aq6.7 to rf-aq6.14 |
 | `pages/info/` | map agent | rf-aq6.6 |
 | `pages/models/` | Models agent | rf-aq6.4, brief `docs/ui/models.md` |
@@ -60,8 +60,8 @@ Publishing:
 - Standalone site (GitHub Pages): https://sean-mcconnachie.github.io/river-finder/ (public repository,
   Settings → Pages → Deploy from a branch → `gh-pages` / root). Deploy from a machine with the data:
   `uv run river-finder models viewer` (per-model scores), `web build`, then `web pages --push`. That
-  stages `data/web_pages/` (`index.html`, data files, glyphs, `.nojekyll`; not the artifact files or
-  `<region>_sat.jpg`) as a single orphan commit and force-pushes it to `gh-pages`, which only ever
+  stages `data/web_pages/` (`index.html`, data files, glyphs, the logo icons from `icons/`, `.nojekyll`; not the
+  artifact files or `<region>_sat.jpg`) as a single orphan commit and force-pushes it to `gh-pages`, which only ever
   holds the latest build. The satellite base map is Sentinel-2 cloudless 2025 (EOX, CC BY-NC-SA 4.0):
   live tiles on the site, `<region>_sat.jpg` (from `web data`) on the artifact. The topographic and
   the Aerial base maps need a LINZ Basemaps API key at build time (`--basemaps-key` or
