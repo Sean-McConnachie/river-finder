@@ -7,10 +7,13 @@ windows with many threads in parallel (the reads are latency bound: 16-48 thread
 
 Pieces:
 
-- **Streaming** (``sheet_windows``, ``stream``): every 1 m window of the mosaic inside a box, read by a pool of
-  threads (one dataset handle per thread and sheet), handed to a consumer in the calling thread.
+- **Streaming** (``sheet_windows``, ``window_reader``, ``stream``): every 1 m window of the mosaic inside a box, read
+  by a pool of threads (one dataset handle per thread and sheet), handed to a consumer in the calling thread, or, with
+  ``in_reader``, consumed in the reader thread (rf-lxa.7).
 - **Aggregation** (``Agg``): block mean, block minimum and valid-cell count onto a coarser grid aligned to the box,
   plus the share of each coarse cell that is hydro-flattened or interpolated water (``water_flags``).
+  ``agg2_into``: the 2 m block mean and a one-byte code of the valid, flattened and planar 1 m cells, written by the
+  reader threads straight into the tile's arrays (the 1 m rebuild, ``nz1m.py``).
 - **Lean routing** (``route_lean``): the algorithm of ``routing.py`` (Priority-Flood with FIFO pits, D8, flat
   resolution of Barnes et al. 2014b, Kahn accumulation) with the same receivers, on a float32 DEM filled in place,
   uint8 direction codes and no n-sized int64 arrays: about 11-15 bytes per cell instead of ~66, so a 64 km tile with
@@ -122,6 +125,82 @@ def water_flags(z, flat_tol=0.002, planar_tol=0.01):
     return out
 
 
+@njit(cache=True, nogil=True)
+def _wflag(z, r, c, flat_tol, planar_tol):
+    """``water_flags`` at one finite cell (0 on the window border)."""
+    nr, nc = z.shape
+    if r < 1 or c < 1 or r >= nr - 1 or c >= nc - 1:
+        return 0
+    v = z[r, c]
+    ok = True
+    for dr in range(-1, 2):
+        for dc in range(-1, 2):
+            w = z[r + dr, c + dc]
+            if not np.isfinite(w) or abs(w - v) >= flat_tol:
+                ok = False
+    if ok:
+        return 1
+    l4 = z[r - 1, c] + z[r + 1, c] + z[r, c - 1] + z[r, c + 1] - 4 * v
+    lx = z[r - 1, c - 1] + z[r + 1, c + 1] + z[r - 1, c + 1] + z[r + 1, c - 1] - 4 * v
+    if np.isfinite(l4) and np.isfinite(lx) and abs(l4) < planar_tol and abs(lx) < planar_tol:
+        return 2
+    return 0
+
+
+# The 2 m grid's companion code (``agg2_into``): ``cnt * 25 + nflat * 5 + nplanar`` for the 1 m cells of the 2 x 2
+# block (valid cells, hydro-flattened, planar; 0..124), or what the tile job put in a no-data cell.
+W2_LAKE = np.uint8(250)       # lake hole filled at the rim's water level
+W2_FALLBACK = np.uint8(251)   # 8 m fallback (seam-corrected)
+
+
+@njit(cache=True, nogil=True)
+def agg2_into(z, br, bc, zo, wo, flat_tol=0.002, planar_tol=0.01):
+    """2 m block mean of a 1 m window ``z`` whose top-left 1 m cell is box row/col ``br, bc`` (both even, and an even
+    window shape, so no 2 x 2 block is split between windows: Topo50 sheets and the tile boxes are on whole
+    kilometres) written straight into ``zo`` (float32; NaN where fewer than 2 of the 4 cells are valid, as
+    ``Agg.mean``) and ``wo`` (uint8 code ``cnt * 25 + nflat * 5 + nplanar``, the ``water_flags`` of the cells). The
+    blocks of different windows are disjoint, so reader threads can call it at once (rf-lxa.7)."""
+    nr, nc = z.shape
+    R, C = zo.shape
+    r0 = br // 2
+    c0 = bc // 2
+    for i in range(nr // 2):
+        R2 = r0 + i
+        if R2 < 0 or R2 >= R:
+            continue
+        for j in range(nc // 2):
+            C2 = c0 + j
+            if C2 < 0 or C2 >= C:
+                continue
+            s = 0.0
+            k = 0
+            nf = 0
+            npl = 0
+            for dr in range(2):
+                for dc in range(2):
+                    r = 2 * i + dr
+                    c = 2 * j + dc
+                    v = z[r, c]
+                    if not np.isfinite(v):
+                        continue
+                    s += v
+                    k += 1
+                    g = _wflag(z, r, c, flat_tol, planar_tol)
+                    if g == 1:
+                        nf += 1
+                    elif g == 2:
+                        npl += 1
+            zo[R2, C2] = s / k if k >= 2 else np.nan
+            wo[R2, C2] = k * 25 + nf * 5 + npl
+
+
+def w2_counts(w: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """(valid, flattened, planar) 1 m cell counts of ``agg2_into`` codes (0 for the tile job's codes >= 125)."""
+    w = np.asarray(w)
+    m = w < 125
+    return (np.where(m, w // 25, 0), np.where(m, (w % 25) // 5, 0), np.where(m, w % 5, 0))
+
+
 class Agg:
     """Coarse grid of factor ``f`` (cell ``f`` m) over a box of ``shape1`` 1 m cells: block sum (float64), count,
     minimum, and counts of flattened / planar 1 m cells (when ``water``)."""
@@ -193,11 +272,10 @@ class _Handles(threading.local):
         self.env = None
 
 
-def stream(jobs: list[tuple], consume, threads: int = 24, ahead: int = 2, gdal_env: dict | None = None,
-           log=None, every: int = 200) -> dict:
-    """Read every job of ``sheet_windows`` with ``threads`` threads and call ``consume(z, box_row0, box_col0)`` in
-    the calling thread (``z`` float32 with NaN for nodata), in job order. At most ``ahead * threads`` windows are in
-    memory at once. Returns timing counters."""
+def window_reader(gdal_env: dict | None = None, tries: int = 3):
+    """``read(job) -> (z, box_row0, box_col0)`` for the jobs of ``sheet_windows``: one rasterio handle per thread and
+    sheet, ``z`` float32 with NaN for nodata. A failed read is retried ``tries`` times (GDAL retries HTTP errors
+    itself; this catches dropped connections)."""
     import rasterio
     from rasterio.windows import Window
 
@@ -213,14 +291,59 @@ def stream(jobs: list[tuple], consume, threads: int = 24, ahead: int = 2, gdal_e
         if tl.env is None:
             tl.env = rasterio.Env(**env)
             tl.env.__enter__()
-        ds = tl.ds.get(href)
-        if ds is None:
-            ds = tl.ds[href] = rasterio.open(href if href.startswith("/vsi") else "/vsicurl/" + href)
-        z = ds.read(1, window=Window(c, r, w, h))
+        for k in range(tries):
+            try:
+                ds = tl.ds.get(href)
+                if ds is None:
+                    ds = tl.ds[href] = rasterio.open(href if href.startswith("/vsi") else "/vsicurl/" + href)
+                z = ds.read(1, window=Window(c, r, w, h))
+                break
+            except rasterio.errors.RasterioIOError:
+                tl.ds.pop(href, None)
+                if k == tries - 1:
+                    raise
+                time.sleep(2.0 * (k + 1))
         z[z <= NODATA_Z + 1] = np.nan
         return z, br, bc
 
+    return read
+
+
+def stream(jobs: list[tuple], consume, threads: int = 24, ahead: int = 2, gdal_env: dict | None = None,
+           log=None, every: int = 200, in_reader: bool = False, read=None, executor=None) -> dict:
+    """Read every job of ``sheet_windows`` with ``threads`` threads and call ``consume(z, box_row0, box_col0)``
+    (``z`` float32 with NaN for nodata). By default ``consume`` runs in the calling thread, in job order, with at most
+    ``ahead * threads`` windows in memory. With ``in_reader`` it runs in the reader thread right after the read
+    (rf-lxa.7: reading and aggregating overlap; ``consume`` must be thread-safe, e.g. a numba ``nogil`` kernel writing
+    disjoint parts of an array), so at most ``threads`` windows are in memory. ``read`` replaces the mosaic reader
+    (``window_reader``), e.g. for tests. ``executor``: a thread pool to reuse across calls (its threads keep their
+    open datasets, so many small reads do not reopen every sheet; ``in_reader`` only). Returns timing counters."""
+    read = read or window_reader(gdal_env)
     t0 = time.time()
+    if in_reader:
+        def work(job):
+            z, br, bc = read(job)
+            t = time.time()
+            consume(z, br, bc)
+            return z.size, time.time() - t
+
+        cells, t_consume = 0, 0.0
+        ex = executor or ThreadPoolExecutor(threads)
+        try:
+            for k, (n, dt) in enumerate(ex.map(work, jobs), start=1):
+                cells += n
+                t_consume += dt
+                if log and k % every == 0:
+                    el = time.time() - t0
+                    log(f"  stream: {k}/{len(jobs)} windows, {cells / 1e6:.0f} M cells, {cells / el / 1e6:.1f} M "
+                        f"cells/s")
+        finally:
+            if executor is None:
+                ex.shutdown()
+        dt = time.time() - t0
+        return {"windows": len(jobs), "cells": int(cells), "seconds": round(dt, 1),
+                "mcells_s": round(cells / max(dt, 1e-9) / 1e6, 1), "consume_seconds": round(t_consume, 1),
+                "threads": threads, "in_reader": True}
     t_consume = 0.0
     cells = 0
     with ThreadPoolExecutor(threads) as ex:

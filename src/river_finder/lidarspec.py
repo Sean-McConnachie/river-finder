@@ -431,7 +431,8 @@ CONSUMERS: dict[str, tuple[str, ...]] = {
 # the 2 m grid is not kept). mb = per full 32 km tile, compressed.
 TILE_FILES: list[dict] = [
     {"name": "segments_core.gpkg", "res_m": None, "dtype": "vector", "kept": "yes", "mb": 7.5,
-     "what": "core reaches: every stage-1m/2m field, line simplified at 1 m (``FIELDS``)",
+     "what": "core reaches: every stage-1m/2m field but the x1_* section summaries (in x1_reach.arrow), line "
+             "simplified at 1 m (``FIELDS``, ``tile_columns``)",
      "used_by": "merge, lidar, maf, xsec1m"},
     {"name": "local_catchment_core.tif", "res_m": 10.0, "dtype": "int64", "kept": "yes", "mb": 1.5,
      "what": "gid of the reach each 10 m cell first drains into (centre 2 m cell), over the box cells the tile "
@@ -559,6 +560,15 @@ def gid(ix: int, iy: int, local: int) -> int:
 def tile_of(g: int) -> tuple[int, int]:
     k = g // SEG_BASE - TILE_INDEX0
     return k % 100, k // 100
+
+
+def tile_columns() -> dict[str, list[str]]:
+    """The reach columns the tile job (rf-lxa.6, ``nz1m.py``) writes: ``segments_core.gpkg`` holds every stage
+    ``1m`` / ``2m`` field except the cross-section summaries (the line is its geometry), ``x1_reach.arrow`` holds
+    ``gid`` and every ``x1_*`` field of stage ``1m`` (one row per core reach; NaN, x1_n = 0, without sections)."""
+    seg = [f.name for f in FIELDS if f.stage in ("1m", "2m") and f.group != "xsec" and f.name != "geometry"]
+    x1 = ["gid"] + [f.name for f in FIELDS if f.stage == "1m" and f.group == "xsec"]
+    return {"segments_core.gpkg": seg, "x1_reach.arrow": x1}
 
 
 # --- checks and the doc tables

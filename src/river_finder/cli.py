@@ -389,6 +389,16 @@ def main(argv: list[str] | None = None) -> None:
     pli.add_argument("--threads", type=int, default=32, help="bench stream: read threads")
     pli.add_argument("--out", type=Path, default=None, help="output directory (default data/analysis/lidar)")
     pli.add_argument("--refresh", action="store_true", help="fetch the STAC tables and footprints again and recompute")
+    pq = sub.add_parser("nz1m", help="national 1 m LiDAR rebuild, per tile (rf-lxa.6): plan (the 32 km land tiles "
+                                     "-> data/nz1m/plan.json) | tile (the tile job: stream 1 m -> 2 m, lakes, "
+                                     "fallback, route, reaches, 2 m and 1 m extraction -> data/nz1m/tiles/<qid>/, "
+                                     "resumable) | check (benchmark, OSM waterfall and riser checks of done tiles) "
+                                     "(src/river_finder/nz1m.py, docs/nz1m-tile-job.md)")
+    pq.add_argument("step", choices=["plan", "tile", "check"])
+    pq.add_argument("tiles", nargs="*", help="32 km tile ids such as q11y15 (a quarter of x05y07)")
+    pq.add_argument("--threads", type=int, default=32, help="tile: 1 m read threads")
+    pq.add_argument("--force", action="store_true", help="tile: run again even when done")
+    pq.add_argument("--root", type=Path, default=None, help="output root (default data/nz1m)")
     pw = sub.add_parser("web", help="web app (Map, Top rivers, Models, Info): build | serve (see web/README.md)")
     pw.add_argument("step", choices=["data", "build", "serve", "pages"],
                     help="data: per-region extras (sections, roads, tracks, gauges, LINZ rivers, satellite, hydro, "
@@ -559,6 +569,20 @@ def main(argv: list[str] | None = None) -> None:
             lidar.fetch(args.out, refresh=args.refresh)
         else:
             lidar.run(args.out, refresh=args.refresh)
+        return
+    if args.cmd == "nz1m":
+        from . import nz1m
+
+        if args.step == "plan":
+            nz1m.plan(args.root)
+        elif args.step == "tile":
+            if not args.tiles:
+                ap.error("nz1m tile: give the tile ids (no national run from here)")
+            nz1m.run_tiles(args.tiles, args.root, threads=args.threads, force=args.force)
+        else:
+            from . import nz1mcheck
+
+            nz1mcheck.run(args.tiles, args.root)
         return
     if args.cmd == "hydro":
         _hydro(args)

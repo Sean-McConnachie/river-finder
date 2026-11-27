@@ -762,16 +762,34 @@ def corridor_jobs(sheets: list[dict], box, px: np.ndarray, py: np.ndarray, radiu
                   block: int = BLOCK, cell: int = 64) -> list[tuple]:
     """Read jobs (as ``lidarpipe.sheet_windows``) for the 1 m blocks within ``radius`` of the points ``px, py``
     inside ``box``: per 2048 window of a sheet, the bounding rectangle of its needed 512 blocks."""
+    return mask_jobs(sheets, box, corridor_mask(box, [(px, py, radius)], cell), win, block, cell)
+
+
+def corridor_mask(box, groups, cell: int = 64) -> np.ndarray:
+    """Cells of a ``cell`` m grid over ``box`` (rows from the top) within ``radius`` (+ one cell) of any point of the
+    groups ``[(px, py, radius), ...]``."""
     from scipy import ndimage
 
     bx0, by0, bx1, by1 = (int(round(v)) for v in box)
     H, W = math.ceil((by1 - by0) / cell), math.ceil((bx1 - bx0) / cell)
-    m = np.zeros((H, W), bool)
-    r = ((by1 - py) // cell).astype(np.int64)
-    c = ((px - bx0) // cell).astype(np.int64)
-    k = (r >= 0) & (r < H) & (c >= 0) & (c < W)
-    m[r[k], c[k]] = True
-    need = ndimage.distance_transform_edt(~m) * cell <= radius + cell
+    need = np.zeros((H, W), bool)
+    for px, py, radius in groups:
+        if not len(px):
+            continue
+        m = np.zeros((H, W), bool)
+        r = ((by1 - np.asarray(py)) // cell).astype(np.int64)
+        c = ((np.asarray(px) - bx0) // cell).astype(np.int64)
+        k = (r >= 0) & (r < H) & (c >= 0) & (c < W)
+        m[r[k], c[k]] = True
+        need |= ndimage.distance_transform_edt(~m) * cell <= radius + cell
+    return need
+
+
+def mask_jobs(sheets: list[dict], box, need: np.ndarray, win: int = 2048, block: int = BLOCK,
+              cell: int = 64) -> list[tuple]:
+    """Read jobs (as ``lidarpipe.sheet_windows``) for the 1 m blocks of ``box`` that touch a ``need`` cell
+    (``corridor_mask``): per 2048 window of a sheet, the bounding rectangle of its needed 512 blocks."""
+    bx0, by0, bx1, by1 = (int(round(v)) for v in box)
     jobs = []
     for sh in sheets:
         sx0, sy0, sx1, sy1 = (int(round(v)) for v in sh["bounds"])
