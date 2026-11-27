@@ -80,6 +80,12 @@ def read_tile(tid: str, root: Path | None = None) -> tuple[pd.DataFrame, dict]:
 
     od = N.tile_dir(tid, root)
     g = pyogrio.read_dataframe(od / "segments_core.gpkg", columns=READ_COLS)
+    core = json.loads((od / "tile.json").read_text())["core"]
+    if not len(g):   # a tile with no reach in its core (a sliver of land, a small island)
+        T = pd.DataFrame(g.drop(columns="geometry"))
+        for c in ("start_x", "start_y", "mid_x", "mid_y"):
+            T[c] = np.zeros(0)
+        return T, {"xy": np.zeros((0, 2)), "k": np.zeros(0, np.int64), "last": np.zeros(0, bool), "core": core}
     geoms = g.geometry.to_numpy()
     xy, ix = shapely.get_coordinates(geoms, return_index=True)
     first = np.r_[0, np.flatnonzero(np.diff(ix)) + 1]
@@ -88,7 +94,6 @@ def read_tile(tid: str, root: Path | None = None) -> tuple[pd.DataFrame, dict]:
     T["start_x"], T["start_y"] = xy[first, 0], xy[first, 1]
     mid = shapely.get_coordinates(shapely.line_interpolate_point(geoms, 0.5, normalized=True))
     T["mid_x"], T["mid_y"] = mid[:, 0], mid[:, 1]
-    core = json.loads((od / "tile.json").read_text())["core"]
     b = shapely.bounds(geoms)
     inner = ((b[:, 0] > core[0] + EDGE_BAND_M) & (b[:, 2] < core[2] - EDGE_BAND_M)
              & (b[:, 1] > core[1] + EDGE_BAND_M) & (b[:, 3] < core[3] - EDGE_BAND_M))

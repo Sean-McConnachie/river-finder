@@ -269,3 +269,26 @@ def test_single_tile_merge_flags_truncation(two_tiles):
     assert s["links"]["edge"] == 0 and net["truncated"].any()
     big = net["area_km2"].idxmax()
     assert net.loc[big, "truncated"] and net.loc[big, "area_check"] > 1.1
+
+
+def test_merge_takes_a_tile_with_no_reach(two_tiles):
+    """A tile with no channel (a small island, like q24y38) merges as an empty tile: same network as without it."""
+    root, *_ = two_tiles
+    z1, _, z8, _ = SY.terrain()
+    n = z1.shape[0]
+    island = np.zeros(z1.shape, bool)
+    island[n // 2 - 60:n // 2 + 60, n // 2 - 60:n // 2 + 60] = True
+    zi = np.where(island, np.float32(5.0), np.nan).astype(np.float32)
+    z8i = np.where(island.reshape(n // 8, 8, n // 8, 8).any(axis=(1, 3)), np.float32(6.0), np.nan).astype(np.float32)
+    info = N.process(N.Tile32(5, 0), N.ArraySource(zi, SY.BOX), lambda: z8i, None, None, root / "tiles" / "q05y00",
+                     threads=2, log=lambda *a: None, core=SY.CORE, box=SY.BOX)
+    assert info["reaches_box"] == 0
+    kw = dict(root=root, write=False, rec2=None, flood=None, regions=False, geology=False, log=lambda *a: None)
+    with_island = M.merge(["q00y00", "q05y00"], **kw)["net"]
+    without = M.merge(["q00y00"], **kw)["net"]
+    assert len(with_island) == len(without)
+    assert np.allclose(with_island["area_km2"].to_numpy(), without["area_km2"].to_numpy())
+    out = root / "merged_island"                             # and the written national files
+    M.merge(["q00y00", "q05y00"], root=root, out=out, rec2=None, flood=None, regions=False, geology=False,
+            log=lambda *a: None)
+    assert (out / "network.parquet").exists() and (out / "merge.json").exists()
