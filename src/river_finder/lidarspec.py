@@ -563,7 +563,7 @@ SEG_BASE = 1_000_000
 
 def tile_id(ix: int, iy: int) -> str:
     """Id of the 32 km tile at column ``ix``, row ``iy`` of the national grid (``nz.X0``, ``nz.Y0``): ``q10y14`` is
-    a quarter of the 64 km tile ``x05y07``; ``nz.Tile.parse`` reads it as (10, 14)."""
+    a quarter of the 64 km tile ``x05y07``; ``nz.Tile.parse`` reads it as the 32 km tile (10, 14)."""
     return f"q{ix:02d}y{iy:02d}"
 
 

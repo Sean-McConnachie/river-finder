@@ -17,10 +17,13 @@ offset paging on layers with ~600k features.
 from __future__ import annotations
 
 import json
+import os
 import time
+import tomllib
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from pathlib import Path
 
 import geopandas as gpd
@@ -42,10 +45,71 @@ REC2_FIELDS = ("nzsegment,HydroID,NextDownID,CUM_AREA,CATAREA,StreamOrde,upElev,
                "upcoordX,upcoordY,downcoordX,downcoordY,LENGTHDOWN")
 
 
+NZ_ENV = "RIVER_FINDER_NZ"                       # overrides the national data root for one process
+ROOT_CONFIG = REPO_ROOT / "config" / "national.toml"   # [data] root = "data/nz" (the 8 m scan) until the switch
+DEFAULT_ROOT = "data/nz"
+VIEWER_8M = REPO_ROOT / "data" / "viewer_nz"     # the 8 m scan's viewer data (the live site today)
+
+
+def _resolve(p: str | Path) -> Path:
+    p = Path(p)
+    return p if p.is_absolute() else REPO_ROOT / p
+
+
+def root_setting() -> tuple[Path, str]:
+    """The national data root and where it was set: ``$RIVER_FINDER_NZ``, ``config/national.toml`` or the default."""
+    env = os.environ.get(NZ_ENV)
+    if env:
+        return _resolve(env), NZ_ENV
+    if ROOT_CONFIG.exists():
+        with open(ROOT_CONFIG, "rb") as fh:
+            root = tomllib.load(fh).get("data", {}).get("root")
+        if root:
+            return _resolve(root), str(ROOT_CONFIG)
+    return _resolve(DEFAULT_ROOT), "default"
+
+
 def nz_dir() -> Path:
-    d = REPO_ROOT / "data" / "nz"
+    """The national data root: ``data/nz`` (the 8 m scan) until ``river-finder nz1m switch`` points
+    ``config/national.toml`` at ``data/nz1m`` (the 1 m LiDAR rebuild); ``$RIVER_FINDER_NZ`` overrides both."""
+    d = root_setting()[0]
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def is_1m(d: Path | None = None) -> bool:
+    """Whether a national root holds the 1 m LiDAR rebuild (the merge's ``network.parquet``), not the 8 m scan."""
+    return ((d or nz_dir()) / "network.parquet").exists()
+
+
+def data_kind(d: Path | None = None) -> str:
+    """``"1m"`` for the 1 m LiDAR rebuild, ``"8m"`` for the 8 m scan (model cards and CV results carry it)."""
+    return "1m" if is_1m(d) else "8m"
+
+
+def viewer_dir_for(d: Path) -> Path:
+    """Viewer data files of a national root: ``data/viewer_nz`` for the 8 m scan in ``data/nz``, else
+    ``<root>/viewer_nz`` (so a 1 m build never writes over the live site's files before the switch)."""
+    return VIEWER_8M if Path(d).resolve() == _resolve(DEFAULT_ROOT).resolve() else Path(d) / "viewer_nz"
+
+
+def viewer_dir() -> Path:
+    """``viewer_dir_for`` the current root."""
+    return viewer_dir_for(root_setting()[0])
+
+
+@contextmanager
+def using_root(d: Path):
+    """Point ``nz_dir()`` at ``d`` for the duration (sets ``$RIVER_FINDER_NZ`` in this process)."""
+    old = os.environ.get(NZ_ENV)
+    os.environ[NZ_ENV] = str(Path(d).resolve())
+    try:
+        yield Path(d)
+    finally:
+        if old is None:
+            os.environ.pop(NZ_ENV, None)
+        else:
+            os.environ[NZ_ENV] = old
 
 
 def _post(url: str, params: dict, tries: int = 5) -> dict:

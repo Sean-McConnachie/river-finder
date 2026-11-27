@@ -9,6 +9,11 @@ The page itself (``index.html``) only holds a small index. Choosing a region fet
 - ``<slug>_hs.jpg``, ``<slug>_area.png``, ``<slug>_trunc.png``, ``<slug>_catch.png``: hillshade,
   area code, truncation mask and local-catchment labels on one Web-Mercator grid.
 
+The same files come from the 8 m scan (64 km tiles ``x05y07``, ``truncated_core.tif``) and from the 1 m LiDAR rebuild
+(32 km tiles ``q10y14``, 10 m local catchments and area code over each tile's box; the truncation mask is painted from
+the reaches' ``truncated`` through the local catchments). On the 1 m rebuild the packed reaches also carry
+``PACK_1M`` (steps, steepest 100 m, lake, DEM source, LiDAR year).
+
 The three 5 m reference regions are included as ``<id>.json`` files holding their full
 single-file payload (images as data URIs).
 """
@@ -35,7 +40,7 @@ from rasterio.warp import reproject
 from . import viewer
 from .areacode import CODE_LOG_MIN, CODE_STEP  # shared with nz.encode_area
 from .labels import load_sections
-from .national import FILTER_ORDER, nz_dir, region_filters
+from .national import FILTER_ORDER, is_1m, nz_dir, region_filters
 from .nz import Tile
 from .nzscore import region_dir, slug
 from .regions import KnownRun, Region, list_regions, load_region
@@ -55,6 +60,14 @@ PACK = {
     "gr": ("u16null", 0.01, 0.0),
     "hard": ("u8",), "sta": ("u8",), "lho": ("u8",), "lab": ("u8",), "ho": ("u8",),
 }
+# 1 m rebuild only (packed when the segment dict has them; web/README.md): steepest 100 m m/km, bed steps of 1 m or
+# more, tallest step m, steps of 5 m or more (waterfall candidates), on a lake, DEM source (0 lidar, 1 mixed, 2 8 m
+# fallback, 3 lake fill), LiDAR survey end year (null: none)
+PACK_1M = {
+    "s100": ("u16", 0.1, 0.0), "stp": ("u16", 1.0, 0.0), "smax": ("u16", 0.1, 0.0), "f1m": ("u16", 1.0, 0.0),
+    "lake": ("u8",), "dsrc": ("u8",), "ly": ("u16null", 1.0, 0.0),
+}
+DEM_SOURCES = ("lidar", "mixed", "8m", "lake")
 
 
 def pack_segments(S: dict) -> tuple[bytes, dict]:
@@ -70,7 +83,7 @@ def pack_segments(S: dict) -> tuple[bytes, dict]:
         buf.write(np.ascontiguousarray(arr).tobytes())
         return off
 
-    for k, spec in PACK.items():
+    for k, spec in (PACK | {k: v for k, v in PACK_1M.items() if k in S}).items():
         v = S[k]
         kind = spec[0]
         if kind == "i32":
@@ -116,11 +129,15 @@ def _grid(bounds_nztm, max_px: int):
 
 
 def _tiles_for(bounds) -> list[Tile]:
+    """Tiles (64 km ``x`` or 32 km ``q``) whose box overlaps ``bounds`` and that have their rasters."""
     root = nz_dir() / "tiles"
     out = []
     for p in sorted(root.glob("*/tile.json")):
-        t = Tile.parse(p.parent.name)
-        x0, y0, x1, y1 = t.core
+        try:
+            t = Tile.parse(p.parent.name)
+        except ValueError:
+            continue
+        x0, y0, x1, y1 = t.box if t.prefix == "q" else t.core   # 1 m rasters (local catchments) span the box
         overlaps = x1 > bounds[0] and x0 < bounds[2] and y1 > bounds[1] and y0 < bounds[3]
         if overlaps and (p.parent / "area_code.tif").exists():
             out.append(t)
@@ -164,7 +181,7 @@ def national_region(name: str) -> Region:
         for k in r.known_runs:
             if all(map(math.isfinite, k.outlet_wgs84)) and poly.contains(Point(*to_nztm.transform(*k.outlet_wgs84))):
                 runs.append(KnownRun(k.river, k.status, k.outlet_wgs84, k.rec2_cum_area_km2))
-    return Region(name=name, description=f"{name}: national 8 m scan", role="search",
+    return Region(name=name, description=f"{name}: {build_label()}", role="search",
                   bbox_wgs84=(0, 0, 0, 0), dem_coarse="", known_runs=runs, root=region_dir(name))
 
 
@@ -187,12 +204,49 @@ def national_sections(name: str):
     return out
 
 
+def build_label() -> str:
+    return "national 1 m LiDAR rebuild" if is_1m() else "national 8 m scan"
+
+
+def gid_lookup(gids: np.ndarray, values: np.ndarray):
+    """A raster transform for ``_mosaic``: each cell's gid (local catchment raster) -> ``values`` of that gid, 0
+    where the gid is not in ``gids`` (or no data); ``None`` for a tile with no hit."""
+    order = np.argsort(gids)
+    gid_s, val_s = np.asarray(gids)[order], np.asarray(values)[order]
+
+    def fn(t, src):
+        src = src.astype(np.int64)
+        if not len(gid_s):
+            return None
+        k = np.clip(np.searchsorted(gid_s, src), 0, len(gid_s) - 1)
+        hit = (src >= 0) & (gid_s[k] == src)
+        out = np.where(hit, val_s[k], 0).astype(val_s.dtype)
+        return out if out.any() else None
+
+    return fn
+
+
+def _tile_stats(stats: list[dict]) -> dict:
+    """``valid_cells`` and ``routing_seconds`` of the tiles (8 m ``tile.json``, or the 1 m tile job's)."""
+    if stats and "valid_cells" in stats[0]:
+        return {"valid_cells": sum(s["valid_cells"] for s in stats), "cellsize_m": 8.0,
+                "routing_seconds": round(sum(s["routing_seconds"] for s in stats))}
+    return {"valid_cells": int(sum(s.get("cells", 0) - s.get("nodata_cells", 0) for s in stats)),
+            "cellsize_m": float(stats[0].get("cell_m", 2.0)) if stats else 2.0,
+            "routing_seconds": round(sum(v for s in stats for k, v in s.get("routing", {}).items()
+                                         if k.endswith("_s")))}
+
+
 def region_files(name: str, out_dir: Path, max_px: int = 4000, min_area_km2: float = 2.0) -> dict:
     sl = slug(name)
     reg = national_region(name)
     d = region_dir(name)
     S = viewer._segments(reg, min_area_km2=min_area_km2, sections=national_sections(name))
-    g = gpd.read_file(d / "segments_scored.gpkg", columns=["gid", "down_seg", "area_km2"])
+    import pyogrio
+
+    have = set(pyogrio.read_info(d / "segments_scored.gpkg")["fields"])
+    g = gpd.read_file(d / "segments_scored.gpkg", columns=["gid", "down_seg", "area_km2"]
+                      + (["truncated"] if "truncated" in have else []))
     b = g.total_bounds
     bounds = (b[0] - 2000, b[1] - 2000, b[2] + 2000, b[3] + 2000)
     tiles = _tiles_for(bounds)
@@ -205,8 +259,14 @@ def region_files(name: str, out_dir: Path, max_px: int = 4000, min_area_km2: flo
             code = ds.read(1)
         return np.where(src == 1, code, 0).astype(np.uint8)
 
-    tcode = _mosaic(tiles, "truncated_core.tif", tr, w, h, Resampling.max, np.uint8, transform_fn=trunc_code)
-    trunc = ((tcode > 0) & (tcode >= area)).astype(np.uint8) * 255
+    if tiles and all((t.dir() / "truncated_core.tif").exists() for t in tiles):   # the 8 m scan
+        tcode = _mosaic(tiles, "truncated_core.tif", tr, w, h, Resampling.max, np.uint8, transform_fn=trunc_code)
+        trunc = ((tcode > 0) & (tcode >= area)).astype(np.uint8) * 255
+    else:   # the 1 m rebuild: the local catchments of the reaches the merge marks truncated
+        tg = g["gid"].to_numpy(np.int64)[g["truncated"].fillna(False).astype(bool).to_numpy()] if "truncated" in g \
+            else np.zeros(0, np.int64)
+        trunc = _mosaic(tiles, "local_catchment_core.tif", tr, w, h, Resampling.nearest, np.uint8, combine="set",
+                        transform_fn=gid_lookup(tg, np.full(len(tg), 255, np.uint8)))
     hs = _mosaic(tiles, "hillshade_24m.tif", tr, w, h, Resampling.average, np.uint8, combine="set")
 
     # catchment labels: global segment id -> viewer index (+1), small segments folded downstream
@@ -249,9 +309,11 @@ def region_files(name: str, out_dir: Path, max_px: int = 4000, min_area_km2: flo
     lon1, lat1 = to_ll.transform(merc[2], merc[3])
     stats = [json.loads((t.dir() / "tile.json").read_text()) for t in tiles]
     rec2 = _rec2_lines(bounds)
+    one = is_1m()
     meta = {
         "id": sl, "title": name,
-        "description": f"{name}: national scan on the LINZ 8 m DEM, {len(tiles)} tiles of 64 km",
+        "description": (f"{name}: national rebuild on the LINZ 1 m LiDAR DEM (routed at 2 m), {len(tiles)} tiles of "
+                        f"32 km" if one else f"{name}: national scan on the LINZ 8 m DEM, {len(tiles)} tiles of 64 km"),
         "bounds": [[lat0, lon0], [lat1, lon1]], "merc": list(merc), "width": w, "height": h,
         "pixel_m": round(tr.a, 1),
         "hillshade": f"{sl}_hs.jpg", "area": f"{sl}_area.png", "trunc": f"{sl}_trunc.png", "catch": f"{sl}_catch.png",
@@ -259,14 +321,14 @@ def region_files(name: str, out_dir: Path, max_px: int = 4000, min_area_km2: flo
         "rec2": rec2,
         "runs": [{"river": r.river, "status": r.status, "lon": r.outlet_wgs84[0], "lat": r.outlet_wgs84[1],
                   "rec2_km2": r.rec2_cum_area_km2, "model_km2": None} for r in reg.known_runs],
-        "stats": {"valid_cells": sum(s["valid_cells"] for s in stats), "cellsize_m": 8.0,
-                  "routing_seconds": round(sum(s["routing_seconds"] for s in stats))},
+        "stats": _tile_stats(stats),
         "validation": None,
         "segB64": f"{sl}_seg.txt", "segHead": head,
         "segInfo": {k: S[k] for k in ("rivers", "listed", "features", "sections")},
     }
     (out_dir / f"{sl}.json").write_text(json.dumps(meta, separators=(",", ":")))
-    return {"id": sl, "title": name, "group": "River-guide regions (8 m national scan)", "src": f"{sl}.json",
+    group = "River-guide regions (1 m LiDAR)" if one else "River-guide regions (8 m national scan)"
+    return {"id": sl, "title": name, "group": group, "src": f"{sl}.json",
             "bounds": meta["bounds"], "segments": head["n"]}
 
 

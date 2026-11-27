@@ -58,6 +58,7 @@ from scipy.spatial import cKDTree
 
 from . import reachtype as RT
 from . import xsec as XS
+from . import xsec1m as X1
 from .models import (
     MODELS_DIR,
     Mapped,
@@ -71,10 +72,48 @@ from .models import (
     save_card,
     section_dict,
 )
-from .national import nz_dir
+from .national import data_kind, is_1m, nz_dir
 from .scoring import FEATURES, _standardise, logistic_fit
 
-CV_DIR = MODELS_DIR / "cv"
+CV_DIR = MODELS_DIR / "cv"          # CV results on the 8 m scan
+CV1M_DIR = MODELS_DIR / "cv-1m"     # on the 1 m LiDAR rebuild (the 8 m results stay as they are)
+
+
+def cv_dir() -> Path:
+    """Where ``run`` and the ML page keep the CV results of the current national build (``data_kind``)."""
+    return CV1M_DIR if data_kind() == "1m" else CV_DIR
+
+
+def x1_path(root: Path | None = None) -> Path:
+    """The 1 m rebuild's section summaries per reach (``x1.arrow``, the merge; key ``gid``)."""
+    return (root or nz_dir()) / "x1.arrow"
+
+
+def join_x1(t: pd.DataFrame, path: Path | None = None, log=print) -> pd.DataFrame | None:
+    """``t`` with every ``x1_*`` column of ``x1.arrow`` joined by ``gid`` (``x1_n`` 0 where a reach has none) and the
+    flood hydraulics derived (``xsec1m.derive``: MAF, ``grad_s``); None when there is no table (``t`` unchanged)."""
+    import pyarrow.feather as pf
+
+    path = Path(path or x1_path())
+    if "gid" not in t or not path.exists():
+        return None
+    x = pf.read_table(path).to_pandas()
+    cols = [c for c in x.columns if c.startswith("x1_")]
+    j = x.drop_duplicates("gid").set_index("gid")[cols].reindex(t["gid"].to_numpy())
+    j = j.astype({c: np.float32 for c in cols if j[c].dtype.kind == "f"})
+    j.index = t.index
+    f = pd.concat([t.drop(columns=[c for c in t.columns if c.startswith("x1_")]), j], axis=1)
+    f["x1_n"] = f["x1_n"].fillna(0).astype(np.int16)
+    h = {}
+    for est, suf in ((False, ""), (True, "_est")):   # xsec1m.derive, without growing the frame column by column
+        r = X1.hydraulics(f, estimate=est)
+        for c, k in (("xs_h_q", "h_q"), ("xs_w_q", "w_q"), ("xs_v_q", "v_q"), ("xs_omega_q", "omega_q")):
+            h[f"x1_{k}{suf}"] = r[c].to_numpy(dtype=np.float32)
+        if est:
+            h["x1_d_u"] = r["xs_d_u"].to_numpy(dtype=np.float32)
+    f = pd.concat([f.drop(columns=[c for c in h if c in f]), pd.DataFrame(h, index=f.index)], axis=1)
+    log(f"x1: {int((f['x1_n'] > 0).sum())} of {len(f)} reaches have 1 m sections ({path})")
+    return f
 DOMAIN_KM2 = 2.0
 FOLDS = 5
 REPEATS = 5
@@ -188,7 +227,13 @@ def ml_table(rebuild: bool = False, log=print) -> pd.DataFrame:
             t[c] = np.nan
     rt = RT.classify_frame(t)
     t = pd.concat([t, rt], axis=1)
-    if not XS.join(t, log=log):
+    if is_1m():
+        j = join_x1(t, log=log)
+        if j is None:
+            log(f"ml: no {x1_path()}; the 1 m section features (x1_*) are left out")
+        else:
+            t = j
+    elif not XS.join(t, log=log):
         log(f"ml: no {XS.national_table_path()}; the cross-section features (xs_*) are left out")
     t.to_pickle(cache)
     log(f"ml: table {len(t)} reaches -> {cache}")
@@ -198,9 +243,14 @@ def ml_table(rebuild: bool = False, log=print) -> pd.DataFrame:
 def sync_xsec(t: pd.DataFrame, log=print) -> pd.DataFrame:
     """Cross-section columns of a cached table: joined when the table predates ``data/nz/xsec.pkl``, and the
     derived ones (constriction, stream power, flood hydraulics) recomputed, because they read the MAF that
-    ``sync_maf`` may have changed. In place; returns ``t``."""
-    if "xs_n" in t.columns:
+    ``sync_maf`` may have changed. The 1 m rebuild's ``x1_*`` (``x1.arrow``) the same way. In place; returns ``t``."""
+    if "x1_n" in t.columns:
+        X1.derive(t)
+    elif "xs_n" in t.columns:
         XS.derive(t)
+    elif is_1m():
+        j = join_x1(t, log=log)
+        return t if j is None else j
     elif XS.national_table_path().exists():
         XS.join(t, log=log)
     return t
@@ -258,7 +308,8 @@ def add_geology(t: pd.DataFrame) -> pd.DataFrame:
         t[c] = j[c].fillna("unknown").astype(str).str.strip().str.lower().to_numpy()
     t["rock_age_ma"] = pd.to_numeric(j["absmin_ma"], errors="coerce").to_numpy()
     t["karst_bed"] = t["mainrock"].isin(KARST_ROCKS).astype(np.int8)
-    la = local_area(t.assign(down=down))
+    # the 1 m rebuild's own local catchment areas (local_km2), else area minus the areas above
+    la = t["local_km2"].to_numpy(float) if "local_km2" in t else local_area(t.assign(down=down))
     kacc = _accumulate(down, order, la * t["karst_bed"].to_numpy())
     aacc = _accumulate(down, order, la)
     t["karst_up_frac"] = np.where(aacc > 0, kacc / np.maximum(aacc, 1e-9), 0.0).clip(0, 1)
@@ -273,22 +324,34 @@ def enrich(f: pd.DataFrame, xsec: bool = False) -> pd.DataFrame:
     from ``ml_table`` (whole-NZ network) rather than from a cut-out region.
 
     With ``xsec``, a frame without the cross-section columns gets them from the stored table (``xsec.join``:
-    national reaches by ``gid``, a reference area from its ``xsec_8m.pkl``); a frame with them keeps them."""
+    national reaches by ``gid``, a reference area from its ``xsec_8m.pkl``); a frame with them keeps them.
+    ``xsec="1m"``: the 1 m rebuild's ``x1_*`` (``x1.arrow``, by ``gid``)."""
     need_geo = any(c not in f for c in GEO_COLS)
     need_rt = "confinement_ratio" not in f or "style" not in f
-    need_xs = xsec and "xs_n" not in f
-    if not need_geo and not need_rt and not need_xs:
+    need_xs = xsec in (True, "8m") and "xs_n" not in f
+    need_x1 = xsec == "1m" and "x1_n" not in f
+    if not need_geo and not need_rt and not need_xs and not need_x1:
         return f
     f = f.copy()
     if need_xs and not XS.join(f):
         raise KeyError("no cross-section table for this frame: run `river-finder nz xsec` (national) or "
                        "`river-finder xsec <region>` (docs/cross-sections.md)")
+    if need_x1:
+        j = join_x1(f)
+        if j is None:
+            raise KeyError(f"no 1 m section table for this frame (national reaches by gid, {x1_path()}): the x1_* "
+                           "features exist on the 1 m rebuild only")
+        f = j
     if need_geo:
         add_geology(f)
     if need_rt:
         rt = RT.classify_frame(f)
         f = pd.concat([f.drop(columns=[c for c in rt.columns if c in f]), rt.set_index(f.index)], axis=1)
     return f
+
+
+def _log10(s, lo, hi, fill):
+    return np.log10(s.fillna(fill).clip(lo, hi))
 
 
 # name -> (builder, description, group)
@@ -331,6 +394,29 @@ EXTRA: dict[str, tuple] = {
                "below what the 8 m DEM resolves), log10 m/s", "xsec"),
     "xs_omega_q": (lambda g: np.log10(g["xs_omega_q"].fillna(0.1).clip(0.1, 1e5)),
                    "Unit stream power at the mean annual flood over the Manning flood width, log10 W/m2", "xsec"),
+    # 1 m LiDAR sections of the rebuild (x1.arrow; the rf-lxa.4 keep list, docs/cross-sections-1m.md). Fills: what a
+    # reach without kept sections (under 1 km2, all dropped) reads, as in xsec1mstudy
+    "x1_w10": (lambda g: _log10(g["x1_w10_med"], 2, 1000, 1000), "Width at the 10 m stage (2 m DEM beyond 150 m), "
+               "log10 m", "x1"),
+    "x1_w20": (lambda g: _log10(g["x1_w20_med"], 2, 1000, 1000), "Width at the 20 m stage, log10 m", "x1"),
+    "x1_wall": (lambda g: g["x1_wall_lo_med"].fillna(0).clip(0, 300), "Lower side's highest ground within 150 m, m",
+                "x1"),
+    "x1_vf": (lambda g: _log10(g["x1_vf_med"], 0.001, 100, 1), "Valley floor width-to-height: 2 w(2 m) / (left + "
+              "right highest ground within 500 m), log10", "x1"),
+    "x1_b": (lambda g: g["x1_b_med"].fillna(0.5).clip(-0.5, 3), "Shape exponent b of w ~ h^b over 0.2-2 m (1 V, "
+             "0.5 parabola, 0 box), median of sections", "x1"),
+    "x1_ffbf": (lambda g: g["x1_ffbf_med"].fillna(0.7).clip(0, 1.2), "Form factor at the bankfull stage", "x1"),
+    "x1_bank": (lambda g: g["x1_ang_med"].fillna(20).clip(0, 90), "Bank angle from the water edge to bankfull, mean "
+                "of both sides, deg", "x1"),
+    "x1_steep": (lambda g: g["x1_steep_med"].fillna(0).clip(0, 1), "Share of the bank rise (0.25-5 m) in 1 m steps "
+                 "steeper than 60 deg (bedrock walls)", "x1"),
+    "x1_rough": (lambda g: _log10(g["x1_rough"], 0.01, 20, 0.3), "Bed roughness: robust spread of the linear-"
+                 "detrended 1 m long profile, log10 m", "x1"),
+    "x1_dropconc": (lambda g: g["x1_dropconc"].fillna(0.3).clip(0, 1), "Share of the reach drop in its steepest 10 % "
+                    "of length (1 m long profile)", "x1"),
+    "x1_vel": (lambda g: _log10(g["x1_v_q"], 0.05, 20, 0.1),
+               "Mean velocity at the mean annual flood, Q / A on the median 1 m section (Manning stage from the water "
+               "surface, area above it only), log10 m/s", "x1"),
     "x_km": (lambda g: g["x"] / 1000.0, "NZTM easting, km", "xy"),
     "y_km": (lambda g: g["y"] / 1000.0, "NZTM northing, km", "xy"),
 }
@@ -338,14 +424,27 @@ CATEGORICAL = {"rockclass": "GNS rock class at the reach midpoint", "rockgroup":
 BASE = list(FEATURES)
 TERRAIN = ["valley_w", "confine", "karst_bed", "karst_up", "rock_age"]
 OSM = ["falls", "falls_h", "rapids"]
-XSEC = ["xs_w10", "xs_w20", "xs_wall", "xs_h2a", "xs_pinch", "xs_omega10"]   # what the 8 m DEM resolves
-XSEC_HYD = ["xs_vel", "xs_omega_q"]    # Manning flood hydraulics; in the registry, not in a recipe (see the doc)
-XSEC_ALL = XSEC + XSEC_HYD
+XSEC8 = ["xs_w10", "xs_w20", "xs_wall", "xs_h2a", "xs_pinch", "xs_omega10"]   # what the 8 m DEM resolves
+XSEC8_HYD = ["xs_vel", "xs_omega_q"]   # Manning flood hydraulics; in the registry, not in a recipe (see the doc)
+XSEC8_ALL = XSEC8 + XSEC8_HYD
+# the 1 m rebuild's keep list (docs/cross-sections-1m.md, "Verdict and keep list"): valley, shape, banks, roughness
+XSEC = ["x1_w10", "x1_w20", "x1_wall", "x1_vf", "x1_b", "x1_ffbf", "x1_bank", "x1_steep", "x1_rough", "x1_dropconc"]
+XSEC_HYD = ["x1_vel"]                  # in the registry, not in a recipe
+XSEC1M_ALL = XSEC + XSEC_HYD
+XSEC_ALL = XSEC8_ALL + XSEC1M_ALL      # every section feature, either build
+
+
+def sections_of(features) -> str | bool:
+    """Which stored sections a feature list reads: ``"1m"`` (``x1_*``), ``"8m"`` (``xs_*``) or False."""
+    if any(f in XSEC1M_ALL for f in features):
+        return "1m"
+    return "8m" if any(f in XSEC8_ALL for f in features) else False
 
 
 def available(t: pd.DataFrame, spec) -> bool:
-    """Whether ``t`` has what ``spec``'s features read (cross-section features need the ``xs_*`` columns)."""
-    return not any(f in XSEC_ALL for f in spec.features) or "xs_n" in t.columns
+    """Whether ``t`` has what ``spec``'s features read: the 8 m ``xs_*`` or the 1 m ``x1_*`` section columns."""
+    need = sections_of(spec.features)
+    return not need or ("x1_n" if need == "1m" else "xs_n") in t.columns
 
 
 def describe(name: str) -> str:
@@ -404,14 +503,23 @@ ZOO = [
     Spec("gbm_osm", "gbm", "LightGBM, terrain + geology + OSM", BASE + TERRAIN + OSM, ["rockclass", "rockgroup"],
          description="gbm_terrain + OSM waterfalls and rapids. OSM rapids are often mapped by paddlers on known "
                      "runs, so a gain here can be documentation rather than terrain."),
-    Spec("gbm_xsec", "gbm", "LightGBM, terrain + geology + cross-sections", BASE + TERRAIN + XSEC,
+    Spec("gbm_xsec", "gbm", "LightGBM, terrain + geology + 1 m sections", BASE + TERRAIN + XSEC,
+         ["rockclass", "rockgroup"],
+         description="gbm_terrain + the 1 m LiDAR sections of the rebuild (rf-lxa.4 keep list): widths at the 10 and "
+                     "20 m stages, lower wall, valley floor width-to-height, channel shape exponent and bankfull form "
+                     "factor, bank angle and bedrock-step share, bed roughness and drop concentration."),
+    Spec("logit_xsec", "logistic", "Logistic, all features + 1 m sections", BASE + TERRAIN + OSM + ROCK_ONEHOT + XSEC,
+         description="logit_plus + the gbm_xsec 1 m section features. A linear model cannot form width-to-flood "
+                     "or wall-to-width ratios itself, so explicit section features help it more than LightGBM."),
+    Spec("gbm_xsec8", "gbm", "LightGBM, terrain + geology + 8 m cross-sections", BASE + TERRAIN + XSEC8,
          ["rockclass", "rockgroup"],
          description="gbm_terrain + 8 m DEM cross-sections: width at 10 and 20 m stages, lower wall height, "
                      "cross-sectional height-to-area, constriction (pinch points) and unit stream power over the "
-                     "10 m-stage width."),
-    Spec("logit_xsec", "logistic", "Logistic, all features + cross-sections", BASE + TERRAIN + OSM + ROCK_ONEHOT + XSEC,
-         description="logit_plus + the gbm_xsec cross-section features. A linear model cannot form width-to-flood "
-                     "or wall-to-width ratios itself, so explicit section features help it more than LightGBM."),
+                     "10 m-stage width. The 8 m scan only (gbm_xsec before the 1 m rebuild)."),
+    Spec("logit_xsec8", "logistic", "Logistic, all features + 8 m cross-sections",
+         BASE + TERRAIN + OSM + ROCK_ONEHOT + XSEC8,
+         description="logit_plus + the gbm_xsec8 cross-section features. The 8 m scan only (logit_xsec before the "
+                     "1 m rebuild)."),
     Spec("gbm_xy", "gbm", "LightGBM, all + coordinates", BASE + TERRAIN + OSM + ["x_km", "y_km"],
          ["rockclass", "rockgroup"],
          description="gbm_osm + NZTM coordinates. Here to show how much location alone inflates CV; compare its "
@@ -746,7 +854,8 @@ def run(log=print, specs: list[Spec] = ZOO, repeats: int = REPEATS) -> dict:
     t = ml_table(log=log)
     skip = [s.id for s in specs if not available(t, s)]
     if skip:
-        log(f"cv: {', '.join(skip)} left out: no cross-section columns (run `river-finder nz xsec`, then `ml table`)")
+        log(f"cv: {', '.join(skip)} left out: no section columns for them (8 m: `river-finder nz xsec`, then "
+            f"`ml table`; the x1_* exist on the 1 m rebuild only)")
         specs = [s for s in specs if s.id not in skip]
     L = labels(t)
     log(f"labels: {int(L.pos.sum())} positive reaches ({len(set(L.river[L.pos]))} rivers), "
@@ -754,11 +863,12 @@ def run(log=print, specs: list[Spec] = ZOO, repeats: int = REPEATS) -> dict:
     cv = run_cv(t, L, specs, repeats=repeats, log=log)
     loro = run_loro(t, L, specs, log=log)
     res = summarise(t, L, cv, loro, specs)
-    CV_DIR.mkdir(parents=True, exist_ok=True)
-    (CV_DIR / "results.json").write_text(json.dumps(res, ensure_ascii=False, separators=(",", ":")) + "\n")
+    cd = cv_dir()
+    cd.mkdir(parents=True, exist_ok=True)
+    (cd / "results.json").write_text(json.dumps(res, ensure_ascii=False, separators=(",", ":")) + "\n")
     np.savez_compressed(nz_dir() / "ml_oof.npz", **{f"cv_{k}": v for k, v in cv["oof"].items()},
                         **{f"loro_{k}": v for k, v in loro["scores"].items()})
-    log(f"ml: results -> {CV_DIR / 'results.json'}")
+    log(f"ml: results -> {cd / 'results.json'}")
     return res
 
 
@@ -780,7 +890,7 @@ def train_card(t: pd.DataFrame, mapped: list[Mapped], split: dict, mid: str, tit
 
     ``t`` is the national table with the ML columns (``ml_table``); ``mapped`` its section mapping."""
     spec = spec_by_id(spec_id)
-    t = enrich(t, xsec=any(f in XSEC_ALL for f in spec.features))
+    t = enrich(t, xsec=sections_of(spec.features))
     n = len(t)
     domain = (t["area_km2"] >= DOMAIN_KM2).to_numpy()
     train_keys, test_keys = set(split["train"]), set(split["test"])
@@ -848,7 +958,7 @@ def booster(card: dict):
 
 def gbm_logits(card: dict, f: pd.DataFrame) -> np.ndarray:
     """Raw score (log-odds) of a "gbm" card for every reach of ``f`` (any reach frame; see ``enrich``)."""
-    f = enrich(f, xsec=any(n in XSEC_ALL for n in card["features"]))
+    f = enrich(f, xsec=sections_of(card["features"]))
     X = matrix(f, card["features"])
     df = pd.DataFrame(X, columns=card["features"])
     for c in card["categorical"]:

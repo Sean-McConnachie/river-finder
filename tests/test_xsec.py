@@ -160,14 +160,15 @@ def test_attach_and_registry():
     f = pd.DataFrame({"gid": [9, 7, 8]})
     XS.attach(f, xs, "gid")
     assert list(f["xs_n"]) == [2, 3, 0] and np.isnan(f.loc[2, "xs_w10_med"])
-    spec = ml.spec_by_id("gbm_xsec")
-    assert spec.features == ml.BASE + ml.TERRAIN + ml.XSEC
-    assert ml.spec_by_id("logit_xsec").features == ml.spec_by_id("logit_plus").features + ml.XSEC
+    spec = ml.spec_by_id("gbm_xsec8")                                     # the 8 m sections' recipes
+    assert spec.features == ml.BASE + ml.TERRAIN + ml.XSEC8
+    assert ml.spec_by_id("logit_xsec8").features == ml.spec_by_id("logit_plus").features + ml.XSEC8
     assert ml.spec_by_id("gbm_terrain").features == ml.BASE + ml.TERRAIN     # existing recipes unchanged
     assert not set(ml.XSEC_ALL) & {f for s in ml.ZOO if "xsec" not in s.id for f in s.features}
     assert not ml.available(pd.DataFrame({"x": [1]}), spec) and ml.available(f, spec)
+    assert not ml.available(f, ml.spec_by_id("gbm_xsec"))                 # the 1 m recipe needs x1_*
     assert ml.available(pd.DataFrame({"x": [1]}), ml.spec_by_id("gbm_terrain"))
-    for name in ml.XSEC_ALL:
+    for name in ml.XSEC8_ALL:
         assert name in ml.EXTRA and ml.EXTRA[name][2] == "xsec" and ml.describe(name)
 
 
@@ -208,8 +209,8 @@ def test_gbm_xsec_card_cv_and_page(tmp_path, monkeypatch):
         monkeypatch.setattr(mod, "MODELS_DIR", tmp_path)
     monkeypatch.setattr(ml, "CV_DIR", tmp_path)
     monkeypatch.setitem(ml.GBM_PARAMS, "n_estimators", 20)
-    card, text = ml.train_card(t, mapped, split, "vx", "xsec test", "", spec_id="gbm_xsec", order=9)
-    assert card["recipe"] == "gbm_xsec" and set(ml.XSEC) <= set(card["features"])
+    card, text = ml.train_card(t, mapped, split, "vx", "xsec test", "", spec_id="gbm_xsec8", order=9)
+    assert card["recipe"] == "gbm_xsec8" and set(ml.XSEC8) <= set(card["features"])
     ml.save_gbm(card, text)
     ml._BOOSTERS.clear()
     lg = M.logits(M.load_card("vx"), t)
@@ -221,10 +222,10 @@ def test_gbm_xsec_card_cv_and_page(tmp_path, monkeypatch):
         M.logits(card, bare)
     # CV, summary and the ML page with the new features; without them the page leaves them out
     L = ml.labels(t, mapped)
-    zoo = [ml.spec_by_id("gbm_terrain"), ml.spec_by_id("gbm_xsec"), ml.spec_by_id("logit_xsec")]
+    zoo = [ml.spec_by_id("gbm_terrain"), ml.spec_by_id("gbm_xsec8"), ml.spec_by_id("logit_xsec8")]
     cv = ml.run_cv(t, L, zoo, repeats=1, log=lambda m: None)
     res = ml.summarise(t, L, cv, ml.run_loro(t, L, zoo, log=lambda m: None), zoo)
-    assert [m["id"] for m in res["models"]] == ["gbm_terrain", "gbm_xsec", "logit_xsec"]
+    assert [m["id"] for m in res["models"]] == ["gbm_terrain", "gbm_xsec8", "logit_xsec8"]
     e = mlpage.explore(t, L, log=lambda m: None)
     assert {"xs_w10", "xs_pinch"} <= {f["id"] for f in e["features"]}
     e0 = mlpage.explore(bare, L, log=lambda m: None)

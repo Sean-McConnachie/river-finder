@@ -109,14 +109,17 @@ def prepare(g: gpd.GeoDataFrame, maf_cfg=None) -> gpd.GeoDataFrame:
     up = _upstream_main(g)
     down = g["down_seg"].to_numpy()
     for col, out in (("gradient_m_per_km", "grad_s"), ("ksn", "ksn_s")):
-        v = g[col].to_numpy(dtype=float)
-        L = g["length_m"].to_numpy(dtype=float)
+        v = g[col].to_numpy(dtype=float).copy()
+        L = g["length_m"].to_numpy(dtype=float).copy()
+        bad = ~np.isfinite(v)   # no profile (the 1 m rebuild's zero-length reaches): left out of the average
+        v[bad], L[bad] = 0.0, 0.0
         num, den = v * L, L.copy()
         for nb in (up, down):
             ok = nb >= 0
             num[ok] += v[nb[ok]] * L[nb[ok]]
             den[ok] += L[nb[ok]]
-        g[out] = num / den
+        with np.errstate(invalid="ignore", divide="ignore"):
+            g[out] = np.where(den > 0, num / np.where(den > 0, den, 1.0), 0.0)
     g["power_kw_m"] = RHO_G * g["maf_m3s"] * g["grad_s"] / 1000.0 / 1000.0
     g["up_seg"] = up
     return g

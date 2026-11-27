@@ -3,7 +3,7 @@ gauge-scaling settings.
 
 Validated on load; any error names the key. Paths are relative to the repository root
 (``paths.nz_data``) or to ``nz_data`` (``tiles``, ``segments``, ``rain``); the CLI's ``--data``
-replaces ``nz_data``.
+replaces ``nz_data``. Without ``paths.nz_data`` it is the national root (``national.nz_dir``).
 """
 
 from __future__ import annotations
@@ -561,8 +561,14 @@ def parse_config(d: dict, root: Path = REPO_ROOT) -> RainConfig:
     for k, v in paths.items():
         if not isinstance(v, str) or not v:
             _err(f"paths.{k} must be a non-empty string")
-    nz = Path(paths.get("nz_data", "data/nz"))
-    return RainConfig(windows, source, compare, forecast, grids, nz if nz.is_absolute() else root / nz,
+    if "nz_data" in paths:
+        nz = Path(paths["nz_data"])
+        nz = nz if nz.is_absolute() else root / nz
+    else:   # the national root (national.nz_dir: data/nz until the 1 m switch, $RIVER_FINDER_NZ)
+        from ..national import root_setting
+
+        nz = root_setting()[0]
+    return RainConfig(windows, source, compare, forecast, grids, nz,
                       paths.get("tiles", "tiles"), paths.get("segments", "segments_table.pkl"),
                       paths.get("rain", "rain"), _ecmwf(d.get("ecmwf", {})), _gauges(d.get("gauges", {})),
                       _scaling(d.get("scaling", {}), grids))

@@ -18,6 +18,7 @@ from importlib import resources
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import rasterio
 from PIL import Image
 from pyproj import Transformer
@@ -93,6 +94,9 @@ def _segments(region: Region, min_area_km2: float = 1.0, sections=None) -> dict 
     status, grade, held, _, secs = segment_labels(g, region.name, sections)
     g["lab_status"], g["lab_grade"], g["lab_held"] = status, grade, held
     g = g[g["area_km2"] >= min_area_km2].copy()
+    num = ["length_m", "grad_s", "steepest_50m_m_per_km", "area_km2", "maf_m3s", "gorge_depth_m", "z_top", "z_bot",
+           "ksn_s", "power_kw_m", "head_m", "melton", "height_to_width", "score_regression", "score_signature"]
+    g[num] = g[num].fillna(0.0)   # the 1 m rebuild has a few reaches without a profile (zero length)
     idx = {int(s): i for i, s in enumerate(g["seg_id"])}
     g["geometry"] = g.geometry.simplify(6.0)
     g = g.to_crs(4326)
@@ -131,7 +135,23 @@ def _segments(region: Region, min_area_km2: float = 1.0, sections=None) -> dict 
         "sig": [round(float(v), 1) for v in g["score_signature"]],
         "z": [[round(float(v), 2) for v in row] for row in g[zcols].to_numpy()],
         "c": [[[round(x, 5), round(y, 5)] for x, y in geom.coords] for geom in g.geometry],
-    }
+    } | _segments_1m(g)
+
+
+def _segments_1m(g) -> dict:
+    """The 1 m rebuild's extra reach columns (``viewer_nz.PACK_1M``; none for the 8 m scan or a 5 m area)."""
+    if "steps_n" not in g:
+        return {}
+    num = lambda c: np.nan_to_num(g[c].to_numpy(dtype=float))   # noqa: E731
+    src = {"lidar": 0, "mixed": 1, "8m": 2, "lake": 3}
+    yr = list(g["lidar_year"]) if "lidar_year" in g else [None] * len(g)
+    return {"s100": [round(float(v), 1) for v in num("steepest_100m_m_per_km")],
+            "stp": [int(v) for v in num("steps_n")],
+            "smax": [round(float(v), 1) for v in num("step_max_m")],
+            "f1m": [int(v) for v in num("falls1m_n")],
+            "lake": [int(bool(v)) for v in g["lake"].fillna(False)] if "lake" in g else [0] * len(g),
+            "dsrc": [src.get(str(v), 2) for v in g["dem_source"]] if "dem_source" in g else [2] * len(g),
+            "ly": [None if v is None or pd.isna(v) else int(v) for v in yr]}
 
 
 def _catchment_labels(region: Region, shape: tuple[int, int], max_px: int, min_area_km2: float = 1.0) -> str | None:

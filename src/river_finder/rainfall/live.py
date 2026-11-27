@@ -307,7 +307,9 @@ def build_inputs(cfg: RainConfig, out_dir: Path, viewer_dir: Path | None = None,
         zones = {"file": cfg.zones_path.name, "built": zm.meta.get("built"), "zones": list(zm.names), **zm.rule()}
         log(f"scaling zones: {cfg.zones_path} ({cfg.zones_path.stat().st_size / 1e3:.0f} kB), {len(zm.names)} zones, "
             f"built {zm.meta.get('built')}")
-    vdir = Path(viewer_dir) if viewer_dir else cfg.nz_data.parent / "viewer_nz"
+    from ..national import viewer_dir_for
+
+    vdir = Path(viewer_dir) if viewer_dir else viewer_dir_for(cfg.nz_data)
     vindex = vdir / "regions_index.json"
     index = None
     if vindex.exists():

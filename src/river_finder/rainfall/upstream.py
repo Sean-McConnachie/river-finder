@@ -51,7 +51,9 @@ equals its tributaries plus its own local volume, and the outlets hold all local
 - ``OUTLET`` (1): ``down < 0`` (6,824 nationally).
 - ``EDGE`` (2): an outlet that leaves its tile at a tile edge and that the relink (rf-t26.8,
   ``relink_log.csv``, status other than ``linked``) could not reconnect: the river goes on in the
-  next tile, but its totals stop here. 175 outlets holding 34,564 km² of pixels.
+  next tile, but its totals stop here. 175 outlets holding 34,564 km² of pixels. On the 1 m rebuild: the
+  outlets with ``outlet_kind`` 3 (an unresolved box edge, from the merge; ``stitch`` and ``outlet_kind`` replace the
+  relink logs).
 - ``EDGE_BIG`` (4): the ``EDGE`` outlets over 200 km², the 26 big rivers of rf-t26.11
   (``unresolved_gt200.csv``): the upper Whanganui, the Tongariro/Taupo system, the Ruamahanga, lakes
   Hawea, Wakatipu and Te Anau split by tiles. The rivers below them miss that water: the Clutha
@@ -61,7 +63,8 @@ equals its tributaries plus its own local volume, and the outlets hold all local
   goes; it is the rivers below the edge that lack it).
 - ``AREA_SHORT`` (16): ``A_up`` is short of the table's ``area_km2`` by at least 5 % and 1 km²: the
   tile added REC2 inflow area at an edge whose pixels drain to an ``EDGE`` outlet in another tile.
-  Such a reach's ``mm_up`` is the depth over the part that was counted; ``m3_up`` misses the rest.
+  Such a reach's ``mm_up`` is the depth over the part that was counted; ``m3_up`` misses the rest. On the 1 m
+  rebuild also every reach the merge marks ``truncated`` (area enters a tile's core where no reach links in).
 
 **Consistency** (:meth:`Network.area_check`, in ``totals.json``): ``A_up`` against the table's
 ``area_km2`` by size class. The median ratio is 0.999-1.000 in every class; 92-96 % of reaches below
@@ -286,9 +289,10 @@ class Network:
 
     @classmethod
     def build(cls, gid, down, area_m2, region_of, regions, table_area_km2, vi=None, edge_gids=(),
-              edge_big_gids=None, meta: dict | None = None) -> Network:
+              edge_big_gids=None, meta: dict | None = None, truncated=None) -> Network:
         """A network from arrays. ``edge_gids``: tile-edge outlets the relink could not reconnect;
-        ``edge_big_gids``: rf-t26.11's list (default: the ``edge_gids`` over 200 km²)."""
+        ``edge_big_gids``: rf-t26.11's list (default: the ``edge_gids`` over 200 km²); ``truncated``: reaches whose
+        catchment is cut off at a tile edge (the 1 m merge), flagged ``AREA_SHORT`` whatever their pixel area."""
         gid = np.asarray(gid, dtype=np.int64)
         n = gid.size
         down = _check_down(down)
@@ -315,6 +319,8 @@ class Network:
         flags[(flags[root] & EDGE) > 0] |= ABOVE_EDGE
         short = table_area_km2.astype(np.float64) - up_area / 1e6
         flags[(short >= SHORT_FRAC * table_area_km2) & (short >= SHORT_KM2)] |= AREA_SHORT
+        if truncated is not None:
+            flags[np.asarray(truncated, dtype=bool)] |= AREA_SHORT
         net = cls(gid, down, area_m2, region_of, tuple(regions), vi, table_area_km2, flags, order, up_area,
                   up_regions, dict(meta or {}))
         net.meta.update(built=datetime.now(UTC).isoformat(timespec="seconds"), rows=n,
@@ -401,7 +407,8 @@ def read_weights_network(path: Path) -> dict:
 
 def network_from_files(weights_path: Path, table_path: Path, relink_log: Path | None = None,
                        unresolved: Path | None = None, log=print) -> Network:
-    """Build the :class:`Network` from a weights file, the segment table and the relink logs."""
+    """Build the :class:`Network` from a weights file, the segment table and the relink logs (8 m scan), or the
+    table's ``outlet_kind`` and ``truncated`` (the 1 m rebuild's merge; the relink logs are then not read)."""
     w = read_weights_network(weights_path)
     t = pd.read_pickle(table_path)
     if "vi" not in t:
@@ -413,7 +420,15 @@ def network_from_files(weights_path: Path, table_path: Path, relink_log: Path | 
     if not np.array_equal(down, w["down"]):
         log(f"note: {weights_path.name} holds an older down link; using {table_path.name}'s "
             f"({int((down != w['down']).sum())} links differ; rain weights refreshes the copy)")
-    edge, big, src = [], None, {}
+    edge, big, src, trunc = [], None, {}, None
+    if "outlet_kind" in t:
+        ok = t["outlet_kind"].fillna(0).to_numpy(np.int64)
+        edge = gid[(down < 0) & (ok == 3)]
+        trunc = t["truncated"].fillna(False).to_numpy(bool) if "truncated" in t else None
+        src["merge"] = {"outlet_kind_3_edge": int(edge.size),
+                        "outlet_kind": {str(k): int(v) for k, v in pd.Series(ok[down < 0]).value_counts().items()},
+                        "truncated": int(trunc.sum()) if trunc is not None else None}
+        relink_log = unresolved = None
     if relink_log is not None and Path(relink_log).exists():
         lg = pd.read_csv(relink_log, usecols=["gid", "status"])
         unlinked = lg[lg["status"] != "linked"]
@@ -429,7 +444,8 @@ def network_from_files(weights_path: Path, table_path: Path, relink_log: Path | 
             "weights": str(weights_path), "pixel_area_m2": w["pixel_area_m2"],
             "land_unassigned_km2": w["land_unassigned_km2"], "sources": src}
     return Network.build(gid, down, w["npix"] * w["pixel_area_m2"], w["region_of"], w["regions"],
-                         t["area_km2"].to_numpy(np.float32), t["vi"].to_numpy(np.int32), edge, big, meta)
+                         t["area_km2"].to_numpy(np.float32), t["vi"].to_numpy(np.int32), edge, big, meta,
+                         truncated=trunc)
 
 
 # --- local windows -------------------------------------------------------------------------------

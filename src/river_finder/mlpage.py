@@ -21,7 +21,6 @@ import pandas as pd
 
 from . import ml
 from . import reachtype as RT
-from .models import MODELS_DIR
 from .regions import REPO_ROOT
 
 PDF = "MB1997_reach_classification_spec.pdf"
@@ -57,6 +56,17 @@ SHOW = {
     "xs_omega10": ("Unit stream power over the 10 m-stage width", "log10 W/m²"),
     "xs_vel": ("Mean velocity at MAF (Manning)", "log10 m/s"),
     "xs_omega_q": ("Unit stream power at MAF (Manning width)", "log10 W/m²"),
+    "x1_w10": ("1 m section width at 10 m stage", "log10 m (1 m LiDAR, median of sections)"),
+    "x1_w20": ("1 m section width at 20 m stage", "log10 m"),
+    "x1_wall": ("Lower valley wall (150 m, 1 m sections)", "m, capped at 300"),
+    "x1_vf": ("Valley floor width-to-height", "log10"),
+    "x1_b": ("Channel shape exponent b (w ~ h^b)", "0 box, 0.5 parabola, 1 V"),
+    "x1_ffbf": ("Form factor at bankfull", "A / (w h)"),
+    "x1_bank": ("Bank angle to bankfull", "deg"),
+    "x1_steep": ("Bank share in > 60° steps", "fraction"),
+    "x1_rough": ("Bed roughness (1 m long profile)", "log10 m"),
+    "x1_dropconc": ("Drop in the steepest 10 % of the reach", "fraction"),
+    "x1_vel": ("Mean velocity at MAF (Manning, 1 m section)", "log10 m/s"),
     "falls": ("OSM waterfalls on reach", "ln(1 + count)"),
     "falls_h": ("Tallest OSM waterfall", "m"),
     "rapids": ("OSM rapids near reach", "ln(1 + count)"),
@@ -98,7 +108,7 @@ def explore(t: pd.DataFrame | None = None, L: ml.Labels | None = None, log=print
     styles = list(t["style"].cat.categories)
     sc = t["style"].cat.codes.to_numpy()
     feats = [f for f in SHOW if (f == "area" or f in ml.FEATURES or f in ml.EXTRA)
-             and (f not in ml.XSEC_ALL or "xs_n" in t.columns)]
+             and ml.available(t, ml.Spec(f, "", "", [f]))]
     cols = {f: _col(t, f) for f in feats}
     out: dict = {"created": dt.datetime.now().isoformat(timespec="minutes"), "regions": regions, "styles": styles,
                  "style_labels": RT.STYLE_LABELS, "reach_types": RT.classes(),
@@ -224,8 +234,8 @@ def explore(t: pd.DataFrame | None = None, L: ml.Labels | None = None, log=print
 
 def write_explore(log=print) -> Path:
     e = explore(log=log)
-    ml.CV_DIR.mkdir(parents=True, exist_ok=True)
-    p = ml.CV_DIR / "explore.json"
+    ml.cv_dir().mkdir(parents=True, exist_ok=True)
+    p = ml.cv_dir() / "explore.json"
     p.write_text(json.dumps(e, ensure_ascii=False, separators=(",", ":"), allow_nan=False) + "\n")
     log(f"explore -> {p} ({p.stat().st_size / 1e6:.1f} MB)")
     return p
@@ -246,8 +256,10 @@ def page_data() -> dict:
     def load(p: Path):
         return json.loads(p.read_text()) if p.exists() else None
 
-    return {"explore": load(ml.CV_DIR / "explore.json"), "results": load(ml.CV_DIR / "results.json"),
-            "registry": load(MODELS_DIR / "evaluations.json"),
+    from .models import evaluations_path
+
+    return {"explore": load(ml.cv_dir() / "explore.json"), "results": load(ml.cv_dir() / "results.json"),
+            "registry": load(evaluations_path()),
             "zoo": [{"id": s.id, "kind": s.kind, "title": s.title, "features": s.features,
                      "categorical": s.categorical, "description": s.description} for s in ml.ZOO],
             "feature_docs": _docs_features(), "pdf": PDF, "spec": _spec_digest()}

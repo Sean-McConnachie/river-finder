@@ -263,7 +263,10 @@ def line_coverage(lines, geoms: list, in_mosaic: np.ndarray, step_m: float = STE
 
 
 def _tile_index(tile_id: str) -> int:
-    return int(tile_id[4:6]) * 100 + int(tile_id[1:3])
+    """``gid // SEG_BASE`` of a tile's reaches: 64 km ``x05y07`` (8 m scan) or 32 km ``q10y14`` (1 m rebuild)."""
+    from .nz import Tile
+
+    return Tile.parse(tile_id).index
 
 
 def catchment_counts(lc: np.ndarray, code: np.ndarray, base: int, n_local: int, n_codes: int) -> np.ndarray:
@@ -285,8 +288,10 @@ def gap_blocks(land: np.ndarray, covered: np.ndarray, block: int) -> tuple[np.nd
 
 
 def tile_coverage(tile_dir: Path, layer, step_m: float = STEP_M, cell_m: float = GAP_CELL_M):
-    """One national tile: per-reach line coverage, per-local-catchment cell counts by code, and the 1 km gap blocks.
-    Returns ``(reaches DataFrame, counts (n, ncodes+1), gid array, (land blocks, gap blocks, x0, y1))``."""
+    """One national tile: per-reach line coverage, per-local-catchment cell counts by code, and the 1 km gap blocks
+    of the cells the tile owns. Returns ``(reaches DataFrame, counts (n, ncodes+1), gid array, (land blocks, gap
+    blocks, x0, y1, cell m2))``. The cell size is the raster's (8 m tiles: 64 m2 over the core; 1 m rebuild tiles:
+    10 m cells, 100 m2, over the box, each cell owned by one tile)."""
     import pyogrio
     import rasterio
     import shapely
@@ -312,10 +317,11 @@ def tile_coverage(tile_dir: Path, layer, step_m: float = STEP_M, cell_m: float =
     n_local = int(max(rec["gid"].max() - base + 1 if len(rec) else 0, lc.max() - base + 1 if lc.max() >= 0 else 0))
     counts = catchment_counts(lc, code, base, n_local, len(layer))
     block = int(round(cell_m / abs(tf.a)))
-    land, gap = gap_blocks(lc >= 0, code >= 0, block) if shape[0] % block == 0 and shape[1] % block == 0 else (None,
-                                                                                                             None)
+    aligned = abs(x0 / cell_m - round(x0 / cell_m)) < 1e-6 and abs(y1 / cell_m - round(y1 / cell_m)) < 1e-6
+    land, gap = (gap_blocks(lc >= 0, code >= 0, block) if aligned and shape[0] % block == 0 and shape[1] % block == 0
+                 else (None, None))
     gids = base + np.arange(n_local, dtype=np.int64)
-    return rec, counts, gids, (land, gap, x0, y1)
+    return rec, counts, gids, (land, gap, x0, y1, float(abs(tf.a * tf.e)))
 
 
 def reach_coverage(layer, tiles_dir: Path, out: Path | None = None, step_m: float = STEP_M, log=print):
@@ -324,7 +330,7 @@ def reach_coverage(layer, tiles_dir: Path, out: Path | None = None, step_m: floa
     out = out or default_dir()
     tiles = sorted(p for p in tiles_dir.iterdir() if (p / "segments_core.gpkg").exists())
     nc = len(layer)
-    recs, cnts, gids, blocks = [], [], [], []
+    recs, cnts, gids, blocks, cell_m2 = [], [], [], [], set()
     t0 = time.time()
     for i, td in enumerate(tiles):
         rec, counts, gid, blk = tile_coverage(td, layer, step_m)
@@ -332,35 +338,45 @@ def reach_coverage(layer, tiles_dir: Path, out: Path | None = None, step_m: floa
         keep = counts.sum(axis=1) > 0
         cnts.append(counts[keep])
         gids.append(gid[keep])
-        blocks.append((td.name, *blk))
+        blocks.append(blk[:4])
+        cell_m2.add(blk[4])
         if (i + 1) % 10 == 0 or i + 1 == len(tiles):
             log(f"lidar: {i + 1}/{len(tiles)} tiles ({time.time() - t0:.0f}s)")
     r = pd.concat(recs, ignore_index=True)
     r = r[~r["gid"].duplicated()].reset_index(drop=True)
     cg = np.concatenate(gids)
     cc = np.concatenate(cnts).astype(np.int64) if cnts else np.zeros((0, nc + 1), np.int64)
-    np.savez_compressed(out / "catchment_cells.npz", gid=cg, counts=cc, cell_m2=np.float64(64.0))
-    _save_gap_grid(blocks, out / "gap_grid.npz")
+    if len(cell_m2) > 1:
+        raise ValueError(f"local catchment rasters of several cell sizes under {tiles_dir}: {sorted(cell_m2)} m2")
+    cm2 = cell_m2.pop() if cell_m2 else 64.0
+    np.savez_compressed(out / "catchment_cells.npz", gid=cg, counts=cc, cell_m2=np.float64(cm2))
+    _save_gap_grid(blocks, out / "gap_grid.npz", dem_cell_m=float(np.sqrt(cm2)))
     r.to_pickle(out / "reach_coverage_raw.pkl")
     return r, cg, cc
 
 
-def _save_gap_grid(blocks, path: Path) -> None:
+def _save_gap_grid(blocks, path: Path, dem_cell_m: float = 8.0) -> None:
+    """The 1 km land and gap counts on the national grid, summed over the tiles' rasters (``(lb, gb, x0, y1)``
+    per tile: a 64 km core, or a 32 km tile's box whose cells each belong to one tile)."""
     from .nz import NX, NY, TILE, X0, Y0
 
     nb = int(TILE / GAP_CELL_M)
     land = np.zeros((NY * nb, NX * nb), np.int32)
     gap = np.zeros_like(land)
-    for tid, lb, gb, _x0, _y1 in blocks:
+    y_top = Y0 + NY * TILE
+    for lb, gb, x0, y1 in blocks:
         if lb is None:
             continue
-        ix, iy = int(tid[1:3]), int(tid[4:6])
-        r0 = (NY - 1 - iy) * nb
-        c0 = ix * nb
-        land[r0:r0 + nb, c0:c0 + nb] = lb
-        gap[r0:r0 + nb, c0:c0 + nb] = gb
-    np.savez_compressed(path, land=land, gap=gap, x0=np.float64(X0), y1=np.float64(Y0 + NY * TILE),
-                        cell_m=np.float64(GAP_CELL_M), dem_cell_m=np.float64(8.0))
+        r0, c0 = int(round((y_top - y1) / GAP_CELL_M)), int(round((x0 - X0) / GAP_CELL_M))
+        h, w = lb.shape
+        rs, cs = max(r0, 0), max(c0, 0)
+        re_, ce = min(r0 + h, land.shape[0]), min(c0 + w, land.shape[1])
+        if re_ <= rs or ce <= cs:
+            continue
+        land[rs:re_, cs:ce] += lb[rs - r0:re_ - r0, cs - c0:ce - c0]
+        gap[rs:re_, cs:ce] += gb[rs - r0:re_ - r0, cs - c0:ce - c0]
+    np.savez_compressed(path, land=land, gap=gap, x0=np.float64(X0), y1=np.float64(y_top),
+                        cell_m=np.float64(GAP_CELL_M), dem_cell_m=np.float64(dem_cell_m))
 
 
 def upstream_shares(down: np.ndarray, local_cells: np.ndarray, local_lidar: np.ndarray, local_any: np.ndarray):
@@ -375,9 +391,10 @@ def upstream_shares(down: np.ndarray, local_cells: np.ndarray, local_lidar: np.n
         return np.where(tot > 0, lid / tot, np.nan), np.where(tot > 0, anyc / tot, np.nan)
 
 
-def attach(table: pd.DataFrame, reach: pd.DataFrame, cg: np.ndarray, cc: np.ndarray, layer) -> pd.DataFrame:
+def attach(table: pd.DataFrame, reach: pd.DataFrame, cg: np.ndarray, cc: np.ndarray, layer,
+           cell_m2: float = 64.0) -> pd.DataFrame:
     """The per-reach coverage table aligned to the national ``table`` (key ``gid``), with catchment shares and the
-    survey fields of ``lidar_code``."""
+    survey fields of ``lidar_code``. ``cell_m2``: the local-catchment cell area (``catchment_cells.npz``)."""
     f = pd.DataFrame({"gid": table["gid"].to_numpy(np.int64)})
     f = f.merge(reach, on="gid", how="left")
     miss = f["lidar_share"].isna().to_numpy()
@@ -394,7 +411,7 @@ def attach(table: pd.DataFrame, reach: pd.DataFrame, cg: np.ndarray, cc: np.ndar
     tot = local.sum(axis=1)
     lid = local[:, 1:][:, in_mosaic].sum(axis=1)
     anyc = local[:, 1:].sum(axis=1)
-    f["local_km2"] = tot * 64e-6
+    f["local_km2"] = tot * cell_m2 / 1e6
     f["local_lidar_share"] = np.where(tot > 0, lid / np.maximum(tot, 1), np.nan)
     down = table["down"].to_numpy(np.int64)
     f["catch_lidar_share"], f["catch_any_share"] = upstream_shares(down, tot, lid, anyc)
@@ -601,25 +618,37 @@ def summarise(table: pd.DataFrame, cov: pd.DataFrame, layer, sections: list[dict
     return out
 
 
+def out_dir() -> Path:
+    """Where ``run`` writes: ``data/analysis/lidar`` for the 8 m scan, ``<root>/analysis/lidar`` for the 1 m rebuild
+    (which reads the survey layer of ``data/analysis/lidar`` and never writes there)."""
+    from .national import is_1m, nz_dir
+
+    return nz_dir() / "analysis" / "lidar" if is_1m() else default_dir()
+
+
 def run(out: Path | None = None, refresh: bool = False, log=print) -> dict:
     """Coverage layer, per-reach coverage, the attached table (``reach_coverage.pkl`` aligned to the national
-    table) and ``summary.json``. Reads ``data/nz/tiles`` and ``data/nz/segments_table.pkl``."""
+    table) and ``summary.json``. Reads ``<root>/tiles`` and ``<root>/segments_table.pkl`` (``nz_dir()``); the survey
+    layer comes from ``<out>/lidar_coverage.gpkg``, else ``data/analysis/lidar`` (built there when missing)."""
     from .models import national_table
     from .national import nz_dir
 
-    out = out or default_dir()
+    out = out or out_dir()
     out.mkdir(parents=True, exist_ok=True)
-    layer = coverage_layer(out, refresh=refresh, log=log)
+    own = (out / "lidar_coverage.gpkg").exists() or out.resolve() == default_dir().resolve() or refresh
+    layer = coverage_layer(out if own else default_dir(), refresh=refresh, log=log)
     t0 = time.time()
     raw = out / "reach_coverage_raw.pkl"
     if raw.exists() and not refresh and (out / "catchment_cells.npz").exists():
         reach = pd.read_pickle(raw)
         z = np.load(out / "catchment_cells.npz")
         cg, cc = z["gid"], z["counts"]
+        cm2 = float(z["cell_m2"]) if "cell_m2" in z else 64.0
     else:
         reach, cg, cc = reach_coverage(layer, nz_dir() / "tiles", out, log=log)
+        cm2 = float(np.load(out / "catchment_cells.npz")["cell_m2"])
     table = national_table(log=log)
-    cov = attach(table, reach, cg, cc, layer)
+    cov = attach(table, reach, cg, cc, layer, cm2)
     cov["source"] = pd.Categorical(source_flag(cov["lidar_share"].to_numpy(), cov["new_share"].to_numpy()),
                                    categories=["lidar", "mixed", "8m"])
     cov.to_pickle(out / "reach_coverage.pkl")
@@ -627,7 +656,7 @@ def run(out: Path | None = None, refresh: bool = False, log=print) -> dict:
     secs = section_rows(table)
     s = summarise(table, cov, layer, secs, out / "gap_grid.npz")
     gl, _, _ = gap_layer(out / "gap_grid.npz")
-    gl.to_file(out / "lidar_coverage.gpkg", layer="gaps", driver="GPKG")
+    gl.to_file(out / ("lidar_coverage.gpkg" if own else "lidar_gaps.gpkg"), layer="gaps", driver="GPKG")
     (out / "summary.json").write_text(json.dumps(s, indent=1, ensure_ascii=False, default=str))
     n = s["national"]
     log(f"lidar: national {n['all']['km_share']:.1%} of reach km, {n['domain']['km_share']:.1%} of reaches >= 2 km2, "

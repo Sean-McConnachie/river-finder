@@ -23,6 +23,7 @@ from __future__ import annotations
 import base64
 import datetime as dt
 import json
+import os
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -33,11 +34,12 @@ from pyproj import Transformer
 from scipy.spatial import cKDTree
 
 from .labels import Section, load_sections, one_path, parse_grade, pieces_note, river_outlet
-from .national import FILTER_ORDER, nz_dir
+from .national import FILTER_ORDER, data_kind, is_1m, nz_dir
 from .regions import REPO_ROOT, list_regions, load_region
 from .scoring import FEATURES, _standardise, logistic_fit
 
-MODELS_DIR = REPO_ROOT / "models"
+MODELS_ENV = "RIVER_FINDER_MODELS"     # another registry directory (a sample rebuild must not write models/)
+MODELS_DIR = Path(os.environ.get(MODELS_ENV) or REPO_ROOT / "models")
 SPLITS_DIR = MODELS_DIR / "splits"
 PCT_GRID = np.linspace(0.0, 100.0, 1001)
 SEED = 20261113
@@ -45,6 +47,17 @@ SEED = 20261113
 _RAW = ["grad_s", "steepest_50m_m_per_km", "ksn_s", "power_kw_m", "maf_m3s", "gorge_depth_m", "head_m",
         "upstream_flat_frac", "upstream_hard_frac", "bed_hard", "knick_ratio", "melton", "height_to_width"]
 _MAF_COLS = ["specific_maf_matched", "maf_raw_m3s", "maf_flag"]   # kept when present (maf.py, rf-xyk.6)
+# the 1 m rebuild's fields (docs/lidar-extraction-spec.md) that reach segments_table.pkl when the scored regions have
+# them; the x1_* section summaries join in ml_table (x1.arrow)
+FIELDS_1M = ["tile", "z_top", "z_bot", "gradient_m_per_km", "ksn", "relief_m", "area_mid_km2", "local_km2",
+             "area_tile_km2", "area_check", "steepest_100m_m_per_km", "steepest_200m_m_per_km", "steep50_water",
+             "longest_flat_m", "steps_n", "steps_drop_m", "step_max_m", "step_max_s_m", "steps_share", "drops_n",
+             "falls1m_n", "risers_n", "hand_w1_m", "hand_w2_m", "hand_w10_m", "hand_w20_m", "upstream_lake_frac",
+             "catch_lidar_share", "karst_up_frac", "sinuosity", "sinuosity_1km", "dem_source", "lidar_share",
+             "dem_res_m", "seam_dist_m", "lake", "lake_share", "lake_id", "water_flat_share", "water_planar_share",
+             "stitch", "outlet_kind", "truncated", "missing_up_km2", "rec2_nzsegment", "rec2_area_km2",
+             "rec2_area_at_km2", "rec2_dist_m", "river_rec2", "river_linz", "linz_dist_m", "linz_section_id",
+             "rec1_nzreach", "specific_maf", "bed_rock", "lidar_survey", "lidar_year", "lidar_year_start"]
 _TO_LL = Transformer.from_crs("EPSG:2193", "EPSG:4326", always_xy=True)
 _TO_NZTM = Transformer.from_crs("EPSG:4326", "EPSG:2193", always_xy=True)
 
@@ -102,7 +115,7 @@ def national_table(rebuild: bool = False, log=print) -> pd.DataFrame:
         if not p.exists():
             continue
         have = set(pyogrio.read_info(p)["fields"])
-        g = pyogrio.read_dataframe(p, columns=cols + [c for c in _MAF_COLS if c in have])
+        g = pyogrio.read_dataframe(p, columns=cols + [c for c in _MAF_COLS + FIELDS_1M if c in have])
         mid = g.geometry.interpolate(0.5, normalized=True)
         f = pd.DataFrame(g.drop(columns="geometry"))
         f["region"] = name
@@ -118,7 +131,12 @@ def national_table(rebuild: bool = False, log=print) -> pd.DataFrame:
     t["down"] = t["down_gid"].map(pos).fillna(-1).astype(np.int64).to_numpy()
     t = _finish(t, np.concatenate(xs), np.concatenate(ys))
     t["guide_region"] = t["region"]
-    if (nz_dir() / "tiles").exists() and (nz_dir() / "rec2.gpkg").exists():
+    for c in ("steep50_water", "lake", "truncated"):   # GeoPackage booleans come back as int or object
+        if c in t:
+            t[c] = t[c].fillna(False).astype(bool)
+    if is_1m():
+        log("table: 1 m rebuild: the merge's network is final (stitch, outlet_kind, truncated); no relink")
+    elif (nz_dir() / "tiles").exists() and (nz_dir() / "rec2.gpkg").exists():
         # ``nz score`` already relinks (nz.merge_segments); this catches segments_scored.gpkg files written
         # before it did. A second pass links nothing new.
         from .relink import relink_table
@@ -472,14 +490,38 @@ def load_split(name: str) -> dict:
 
 
 # ---------------------------------------------------------------------------- cards
+def set_models_dir(d: Path) -> None:
+    """Use another registry directory in this process (``nz1m finish --models-dir``; also ``$RIVER_FINDER_MODELS``)."""
+    global MODELS_DIR, SPLITS_DIR
+    from . import ml
+
+    MODELS_DIR, SPLITS_DIR = Path(d), Path(d) / "splits"
+    ml.MODELS_DIR, ml.CV_DIR, ml.CV1M_DIR, ml.AUDIT_DIR = (MODELS_DIR, MODELS_DIR / "cv", MODELS_DIR / "cv-1m",
+                                                         MODELS_DIR / "audits")
+
+
 def card_path(mid: str) -> Path:
     return MODELS_DIR / f"{mid}.json"
 
 
-def list_cards() -> list[dict]:
+def card_data(card: dict) -> str:
+    """The national build a card was trained and scored on: ``"8m"`` (v1-v4, cards without the field) or ``"1m"``."""
+    return card.get("data", "8m")
+
+
+def evaluations_path(kind: str | None = None) -> Path:
+    """``models/evaluations.json`` (8 m cards on the 8 m table) or ``models/evaluations-1m.json``."""
+    return MODELS_DIR / ("evaluations.json" if (kind or data_kind()) == "8m" else "evaluations-1m.json")
+
+
+def list_cards(kind: str | None = None) -> list[dict]:
+    """Every card (``kind`` None), or the cards of one national build (``"8m"``, ``"1m"``). Cards of another build
+    than the current root's are archived there: they keep their own scores and results and are not re-scored."""
     if not MODELS_DIR.exists():
         return []
-    cards = [json.loads(p.read_text()) for p in MODELS_DIR.glob("*.json") if p.name != "evaluations.json"]
+    cards = [json.loads(p.read_text()) for p in MODELS_DIR.glob("*.json") if not p.name.startswith("evaluations")]
+    if kind is not None:
+        cards = [c for c in cards if card_data(c) == kind]
     return sorted(cards, key=lambda c: c.get("order", 0))
 
 
@@ -489,6 +531,7 @@ def load_card(mid: str) -> dict:
 
 def save_card(card: dict) -> Path:
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    card.setdefault("data", data_kind())   # the build it was trained on (1 m cards are never scored on the 8 m table)
     p = card_path(card["id"])
     if p.exists():
         old = json.loads(p.read_text())
@@ -779,7 +822,7 @@ def evaluate_all(table: pd.DataFrame, mapped: list[Mapped], log=print) -> dict:
     table = scoring_table(table)
     res = []
     ref_mapped = None
-    for card in list_cards():
+    for card in list_cards(data_kind()):   # cards of another build keep their own results
         for sp in splits:
             if sp["name"] == "reference":
                 ref_mapped = ref_mapped or map_sections(table, reference_sections(), group=False)
@@ -793,7 +836,7 @@ def evaluate_all(table: pd.DataFrame, mapped: list[Mapped], log=print) -> dict:
                     f"median {e.get('median_pct')} rivers {e.get('test_rivers')}")
     out = {"created": dt.datetime.now().isoformat(timespec="minutes"), "evaluations": res,
            "splits": [{k: v for k, v in sp.items() if k != "sections"} for sp in splits]}
-    (MODELS_DIR / "evaluations.json").write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n")
+    evaluations_path().write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n")
     return out
 
 
@@ -838,7 +881,7 @@ def score_blob(card: dict, f: pd.DataFrame, guides: np.ndarray | None = None) ->
 def write_viewer_scores(out_dir: Path, table: pd.DataFrame | None = None, log=print) -> list[dict]:
     """``<region>_m_<model>.txt`` for every region in the viewer index and every card."""
     index = json.loads((out_dir / "regions_index.json").read_text())
-    cards = list_cards()
+    cards = list_cards(data_kind())   # archived cards (another build) keep their old blobs and are not re-scored
     by_slug = {_rslug(n): n for n in FILTER_ORDER}
     if table is None and any(e["id"] in by_slug for e in index):
         table = national_table()   # only national regions need it; reference regions have their own frame
@@ -861,7 +904,12 @@ def write_viewer_scores(out_dir: Path, table: pd.DataFrame | None = None, log=pr
             raise ValueError(f"{e['id']}: {n} reaches here but {e['segments']} in the viewer; rebuild the viewer")
         guides = guide_mask(f, secs)
         for c in cards:
-            (out_dir / f"{e['id']}_m_{c['id']}.txt").write_text(score_blob(c, f, guides))
+            try:
+                blob = score_blob(c, f, guides)
+            except KeyError as err:   # a 5 m reference area has no 1 m sections for a card that reads x1_*
+                log(f"scores: {e['id']}: {c['id']} left out ({err})")
+                continue
+            (out_dir / f"{e['id']}_m_{c['id']}.txt").write_text(blob)
         log(f"scores: {e['id']} ({n} reaches, {len(cards)} models)")
     return cards
 
@@ -869,7 +917,7 @@ def write_viewer_scores(out_dir: Path, table: pd.DataFrame | None = None, log=pr
 def scoring_table(table: pd.DataFrame) -> pd.DataFrame:
     """``table`` with the ML columns when a card needs them (kind "gbm"): the cached ``ml_table`` when it
     lines up with ``table`` (whole-NZ karst accumulation), else ``ml.enrich(table)``."""
-    if not any(c.get("kind") == "gbm" for c in list_cards()):
+    if not any(c.get("kind") == "gbm" for c in list_cards(data_kind())):
         return table
     from . import ml
 
@@ -883,7 +931,7 @@ def scoring_table(table: pd.DataFrame) -> pd.DataFrame:
 
 def cv_summary() -> dict | None:
     """The cross-validated model zoo (``models/cv/results.json``), headline numbers only."""
-    p = MODELS_DIR / "cv" / "results.json"
+    p = MODELS_DIR / ("cv-1m" if data_kind() == "1m" else "cv") / "results.json"   # as ml.cv_dir
     if not p.exists():
         return None
     r = json.loads(p.read_text())
@@ -899,26 +947,42 @@ def cv_summary() -> dict | None:
             "spec_version": r.get("spec_version"), "models": models}
 
 
+def _card_summary(c: dict) -> dict:
+    lab = c["labels"]
+    return ({k: c[k] for k in ("id", "title", "description", "created", "coef", "intercept", "kind")}
+            | {"variant": lab.get("variant"), "split": lab.get("split"),
+               "train_rivers": lab.get("train_rivers", []), "test_rivers": lab.get("test_rivers", []),
+               "positives": lab.get("positives"), "training_reaches": lab.get("training_reaches"),
+               "checkpoint_check": c.get("checkpoint_check"), "data": card_data(c)}
+            | ({"features": c["features"] + c.get("categorical", []), "importance": c.get("importance"),
+                "recipe": c.get("recipe")} if c["kind"] == "gbm" else {}))
+
+
 def viewer_models() -> dict:
     """What the page embeds: card summaries (no quantiles or sections), the held-out evaluations and the
     cross-validation summary. The default model is the newest card trained on every guide section
-    ("all" variant)."""
-    cards = []
-    for c in list_cards():
-        lab = c["labels"]
-        cards.append({k: c[k] for k in ("id", "title", "description", "created", "coef", "intercept", "kind")}
-                     | {"variant": lab.get("variant"), "split": lab.get("split"),
-                        "train_rivers": lab.get("train_rivers", []), "test_rivers": lab.get("test_rivers", []),
-                        "positives": lab.get("positives"), "training_reaches": lab.get("training_reaches"),
-                        "checkpoint_check": c.get("checkpoint_check")}
-                     | ({"features": c["features"] + c.get("categorical", []), "importance": c.get("importance"),
-                         "recipe": c.get("recipe")} if c["kind"] == "gbm" else {}))
-    ev = MODELS_DIR / "evaluations.json"
+    ("all" variant). Only the current build's cards are in ``models`` (they have score files); cards of another
+    build (v1-v4 on the 1 m rebuild) are listed in ``archived``, their results in ``archived_evaluations``."""
+    kind = data_kind()
+    other = "8m" if kind == "1m" else "1m"
+    arch = [_card_summary(c) for c in list_cards(other)]
+    aev = None
+    if arch:
+        ep = evaluations_path(other)
+        ids = {c["id"] for c in arch}
+        if ep.exists():
+            aev = json.loads(ep.read_text())
+            aev = {**aev, "evaluations": [e for e in aev["evaluations"] if e.get("model") in ids]}
+    cards = [_card_summary(c) for c in list_cards(kind)]
+    ev = evaluations_path(kind)
     full = [c for c in cards if c["kind"] in ("logistic", "gbm") and c["variant"] == "all"]
-    return {"models": cards, "default": (full or cards)[-1]["id"] if cards else None,
-            "evaluations": json.loads(ev.read_text()) if ev.exists() else None,
-            "cv": cv_summary(),
-            "descriptions": _descriptions(any(c["kind"] == "gbm" for c in cards))}
+    out = {"models": cards, "default": (full or cards)[-1]["id"] if cards else None,
+           "evaluations": json.loads(ev.read_text()) if ev.exists() else None,
+           "cv": cv_summary(),
+           "descriptions": _descriptions(any(c["kind"] == "gbm" for c in cards + arch))}
+    if arch:
+        out |= {"archived": arch, "archived_evaluations": aev, "data": kind}
+    return out
 
 
 def _descriptions(extended: bool) -> dict:

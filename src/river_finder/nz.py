@@ -51,23 +51,35 @@ DEM_8M = "new-zealand/new-zealand-contour/dem_8m/2193"
 SEG_BASE = 1_000_000  # global segment id = tile_index * SEG_BASE + local seg_id
 
 
+Q_TILE = 32_000.0   # the 1 m LiDAR rebuild's tiles (lidarspec.TILE_M): ``q{ix}y{iy}``, a quarter of a 64 km tile
+Q_INDEX0 = 10_000   # their tile index starts here (lidarspec.TILE_INDEX0), so 1 m gids never equal 8 m gids
+
+
 @dataclass(frozen=True)
 class Tile:
+    """A national tile: 64 km (``x05y07``, the 8 m scan) or 32 km (``q10y14``, the 1 m rebuild) on the grid from
+    (``X0``, ``Y0``), with a 3 km halo."""
     ix: int
     iy: int
+    size: float = TILE
+
+    @property
+    def prefix(self) -> str:
+        return "x" if self.size == TILE else "q"
 
     @property
     def id(self) -> str:
-        return f"x{self.ix:02d}y{self.iy:02d}"
+        return f"{self.prefix}{self.ix:02d}y{self.iy:02d}"
 
     @property
     def index(self) -> int:
-        return self.iy * 100 + self.ix
+        """``gid // SEG_BASE`` of the tile's reaches."""
+        return self.iy * 100 + self.ix + (0 if self.size == TILE else Q_INDEX0)
 
     @property
     def core(self) -> tuple[float, float, float, float]:
-        x, y = X0 + self.ix * TILE, Y0 + self.iy * TILE
-        return (x, y, x + TILE, y + TILE)
+        x, y = X0 + self.ix * self.size, Y0 + self.iy * self.size
+        return (x, y, x + self.size, y + self.size)
 
     @property
     def box(self) -> tuple[float, float, float, float]:
@@ -87,7 +99,15 @@ class Tile:
 
     @staticmethod
     def parse(s: str) -> Tile:
-        return Tile(int(s[1:3]), int(s[4:6]))
+        """``x05y07`` (64 km) or ``q10y14`` (32 km)."""
+        if s[:1] not in ("x", "q") or len(s) != 6 or s[3] != "y":
+            raise ValueError(f"not a tile id: {s!r} (x05y07 or q10y14)")
+        return Tile(int(s[1:3]), int(s[4:6]), TILE if s[0] == "x" else Q_TILE)
+
+    @staticmethod
+    def of_index(k: int) -> Tile:
+        """The tile of a tile index (``gid // SEG_BASE``)."""
+        return Tile((k - Q_INDEX0) % 100, (k - Q_INDEX0) // 100, Q_TILE) if k >= Q_INDEX0 else Tile(k % 100, k // 100)
 
 
 def land_tiles(rec2: gpd.GeoDataFrame) -> list[Tile]:
@@ -461,7 +481,8 @@ def _relink(g: gpd.GeoDataFrame, log=print) -> None:
 
 # --- GIS export -----------------------------------------------------------------------------------
 def _vrt(paths: list[Path], out: Path, band_type: str, nodata, resampling: str = "nearest") -> None:
-    """A GDAL VRT mosaic of same-resolution NZTM tiles (QGIS opens it like one raster)."""
+    """A GDAL VRT mosaic of same-resolution NZTM tiles (QGIS opens it like one raster). Overlapping tiles (the 1 m
+    rebuild's rasters over each tile's box) are drawn with their no-data cells transparent."""
     infos = []
     for p in paths:
         with rasterio.open(p) as ds:
@@ -473,15 +494,20 @@ def _vrt(paths: list[Path], out: Path, band_type: str, nodata, resampling: str =
     y0 = min(i[1].bottom for i in infos)
     W, H = round((x1 - x0) / res), round((y1 - y0) / res)
     srs = rasterio.crs.CRS.from_epsg(2193).to_wkt().replace("&", "&amp;").replace('"', "&quot;")
+    bb = [i[1] for i in infos]
+    overlap = any(a.left < b.right and b.left < a.right and a.bottom < b.top and b.bottom < a.top
+                  for k, a in enumerate(bb) for b in bb[k + 1:])
+    kind = "ComplexSource" if overlap else "SimpleSource"   # tiles overlap: no data must not paint over data
+    nd = f"\n      <NODATA>{nodata}</NODATA>" if kind == "ComplexSource" else ""
     src = []
     for p, b, w, h, _ in infos:
         xo, yo = round((b.left - x0) / res), round((y1 - b.top) / res)
-        src.append(f"""    <SimpleSource resampling="{resampling}">
+        src.append(f"""    <{kind} resampling="{resampling}">
       <SourceFilename relativeToVRT="1">{os.path.relpath(p, out.parent)}</SourceFilename>
       <SourceBand>1</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="{w}" ySize="{h}" />
-      <DstRect xOff="{xo}" yOff="{yo}" xSize="{w}" ySize="{h}" />
-    </SimpleSource>""")
+      <DstRect xOff="{xo}" yOff="{yo}" xSize="{w}" ySize="{h}" />{nd}
+    </{kind}>""")
     out.write_text(f"""<VRTDataset rasterXSize="{W}" rasterYSize="{H}">
   <SRS>{srs}</SRS>
   <GeoTransform>{x0}, {res}, 0, {y1}, 0, {-res}</GeoTransform>
@@ -516,9 +542,35 @@ def _area_code_qml() -> str:
 """
 
 
+def truncation_rasters(out: Path, log=print) -> list[Path]:
+    """The 1 m rebuild's truncation mask per tile (``<out>/<tile>.tif``, 10 m, uint8: 1 the cell's local catchment
+    reach is ``truncated``, 0 not, 255 no reach), painted from ``network.parquet`` through
+    ``local_catchment_core.tif`` (the 8 m scan's ``truncated_core.tif`` is not kept by the tile job)."""
+    tab = pd.read_parquet(nz_dir() / "network.parquet", columns=["gid", "truncated"])
+    gid_s = np.sort(tab["gid"].to_numpy(np.int64))
+    tr_s = tab.set_index("gid")["truncated"].reindex(gid_s).to_numpy(bool)
+    out.mkdir(parents=True, exist_ok=True)
+    paths = []
+    for src in sorted((nz_dir() / "tiles").glob("*/local_catchment_core.tif")):
+        with rasterio.open(src) as ds:
+            lc, prof = ds.read(1), ds.profile
+        k = np.clip(np.searchsorted(gid_s, lc), 0, max(len(gid_s) - 1, 0))
+        hit = (lc >= 0) & (gid_s[k] == lc) if len(gid_s) else np.zeros(lc.shape, bool)
+        m = np.where(hit, tr_s[k].astype(np.uint8), 255).astype(np.uint8) if len(gid_s) else np.full(lc.shape, 255,
+                                                                                                    np.uint8)
+        prof.update(dtype="uint8", nodata=255, compress="deflate", tiled=True, blockxsize=512, blockysize=512)
+        p = out / f"{src.parent.name}.tif"
+        with rasterio.open(p, "w", **prof) as ds:
+            ds.write(m, 1)
+        paths.append(p)
+    log(f"truncation mask: {len(paths)} tiles -> {out}")
+    return paths
+
+
 def export_gis(log=print) -> Path:
-    """``data/nz/gis/``: GeoPackage (segments >= 1 km2, runs, region filters) and VRT mosaics."""
-    from .national import region_filters
+    """``<root>/gis/``: GeoPackage (segments >= 1 km2, runs, region filters) and VRT mosaics. On the 1 m rebuild the
+    truncation mask is painted from the reaches' ``truncated`` (``truncation_rasters``)."""
+    from .national import is_1m, region_filters
 
     out = nz_dir() / "gis"
     out.mkdir(exist_ok=True)
@@ -537,17 +589,22 @@ def export_gis(log=print) -> Path:
         pd.concat(runs, ignore_index=True).pipe(gpd.GeoDataFrame, crs="EPSG:2193").to_file(gpkg, layer="runs",
                                                                                           driver="GPKG")
     root = nz_dir() / "tiles"
+    one = is_1m()
     for name, typ, nodata, rs in (("area_code", "Byte", 0, "nearest"), ("hillshade_24m", "Byte", 0, "average"),
                                   ("truncated_core", "Byte", 255, "nearest"),
                                   ("local_catchment_core", "Int64", -1, "nearest")):
-        paths = sorted(root.glob(f"*/{name}.tif"))
+        if name == "truncated_core" and one:
+            paths = truncation_rasters(out / "truncated", log=log)
+        else:
+            paths = sorted(root.glob(f"*/{name}.tif"))
         if paths:
             _vrt(paths, out / f"{name}.vrt", typ, nodata, rs)
     (out / "area_code.qml").write_text(_area_code_qml())
+    res = "10 m (from the 2 m routing of the 1 m LiDAR rebuild)" if one else "8 m"
     (out / "README.txt").write_text(
         "river-finder national GIS export. NZTM2000 (EPSG:2193). Open the .vrt files in QGIS; they\n"
         "read the per-tile GeoTIFFs in ../tiles/ (keep the folder layout).\n\n"
-        "area_code.vrt        8 m catchment area as a code: 0 sea, 2..255 = log10(km2) from 2e-5 to 30 000 km2\n"
+        f"area_code.vrt        {res} catchment area as a code: 0 sea, 2..255 = log10(km2) from 2e-5 to 30 000 km2\n"
         f"                     (area = 10 ** ({CODE_LOG_MIN:.4f} + (code - 2) * {CODE_STEP:.6f}));\n"
         "                     styled by area_code.qml\n"
         "hillshade_24m.vrt    hillshade\n"

@@ -276,6 +276,15 @@ def _tile(path: Path, luts: dict, accs: list[_GridAcc], stats: dict, seg_base: i
     lds = rasterio.open(land_path) if land_path.exists() else None
     with rasterio.open(path) as ds:
         h, w, tr = ds.height, ds.width, ds.transform
+        if lds is not None and lds.res != ds.res:
+            lds.close()
+            lds = None   # land counts need the same cells
+        # the 1 m rebuild's local catchments span the tile box, its area code only the core: read the land on the
+        # local-catchment grid (cells outside the area code are not land of this tile)
+        same = lds is not None and lds.transform == tr and lds.shape == (h, w)
+        if lds is not None and not same:
+            lc0 = round((tr.c - lds.transform.c) / lds.transform.a)
+            lr0 = round((tr.f - lds.transform.f) / lds.transform.e)
         to_ll = Transformer.from_crs(ds.crs, "EPSG:4326", always_xy=True)
         lon_n, lat_n = _lattice(tr, h, w, step, to_ll)
         tgs = [_TileGrid(acc.grid, lon_n, lat_n) for acc in accs]
@@ -286,7 +295,8 @@ def _tile(path: Path, luts: dict, accs: list[_GridAcc], stats: dict, seg_base: i
             g = ds.read(1, window=Window(0, r0, w, nrows))
             valid = g >= 0
             if lds is not None:
-                land = lds.read(1, window=Window(0, r0, w, nrows)) > 0
+                land = (lds.read(1, window=Window(0, r0, w, nrows)) if same else
+                        lds.read(1, window=Window(lc0, lr0 + r0, w, nrows), boundless=True, fill_value=0)) > 0
                 stats["land_pixels"] += int(land.sum())
                 stats["land_unassigned"] += int((land & ~valid).sum())
             if not valid.any():

@@ -1,0 +1,8 @@
+# The national data root that nz_dir() returns (national.root_setting). Every national command reads and writes
+# here: nz score, models, ml, external, hydro, rain, nz viewer (viewer data in <root>/viewer_nz unless the root is
+# data/nz, whose viewer data stay in data/viewer_nz). $RIVER_FINDER_NZ overrides it for one process.
+#
+#   data/nz    the 8 m scan (the live site until the switch)
+#   data/nz1m  the 1 m LiDAR rebuild (docs/nz1m-finish.md); `river-finder nz1m switch` sets it, `--back` resets it
+[data]
+root = "data/nz"

@@ -331,7 +331,8 @@ def main(argv: list[str] | None = None) -> None:
                          "reach >= 1 km2 (8 m DEM fetched again per tile, resumable) -> data/nz/xsec/tiles/ and "
                          "data/nz/xsec.pkl (src/river_finder/xsec.py, docs/cross-sections.md)")
     pn.add_argument("tiles", nargs="*", help="tile ids such as x11y16 (default: every land tile)")
-    pn.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz")
+    pn.add_argument("-o", "--out", type=Path, default=None,
+                    help="viewer: output directory (default: data/viewer_nz for data/nz, else <root>/viewer_nz)")
     pn.add_argument("--page-only", action="store_true", help="viewer: re-render only the page, keep the region files")
     pn.add_argument("--data", type=Path, default=None,
                     help="relink: national data directory with tiles/, rec2.gpkg and segments_table.pkl "
@@ -362,12 +363,13 @@ def main(argv: list[str] | None = None) -> None:
     pm.add_argument("--description")
     pm.add_argument("--seed", type=int, default=20261113)
     pm.add_argument("--test-frac", type=float, default=0.25)
-    pm.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz")
+    pm.add_argument("-o", "--out", type=Path, default=None,
+                    help="viewer: viewer data directory (default: as nz viewer)")
     px = sub.add_parser("external", help="waterfalls, rapids, roads and tracks from OpenStreetMap via Overture "
                                          "Maps: fetch | attach | all (see src/river_finder/external.py)")
     px.add_argument("step", choices=["fetch", "attach", "all"])
-    px.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz",
-                    help="attach: viewer directory to write <region>_x.txt / _falls.json into")
+    px.add_argument("-o", "--out", type=Path, default=None,
+                    help="attach: viewer directory to write <region>_x.txt / _falls.json into (default: as nz viewer)")
     ph = sub.add_parser("hydro", help="hydro-diverted, regulated and reservoir reaches from config/hydro.toml: "
                                       "check (where each point snaps) | attach (data/nz/hydro.pkl; see "
                                       "src/river_finder/hydro.py, docs/hydro.md)")
@@ -399,13 +401,33 @@ def main(argv: list[str] | None = None) -> None:
                                      "(stitch the done tiles, lakes as nodes, network areas -> network.parquet, "
                                      "reaches.parquet, x1.arrow, steps.arrow, merge.json) (src/river_finder/nz1m.py, "
                                      "nz1mlakes.py, nz1mmerge.py; docs/nz1m-tile-job.md, docs/nz1m-merge.md)")
-    pq.add_argument("step", choices=["plan", "tile", "check", "lakes", "merge"])
+    pq.add_argument("step", choices=["plan", "tile", "check", "lakes", "merge", "finish", "switch", "status"],
+                    help="finish: everything downstream of the merge into the root, resumable (joins, nz score, "
+                         "models table, viewer, external, hydro, lidar, ml table + CV + card v5, scores, web data, "
+                         "rain inputs, GIS, reference comparison, section audit; docs/nz1m-finish.md); status: the "
+                         "finish steps done; switch: point config/national.toml at the root (--back: at data/nz)")
     pq.add_argument("tiles", nargs="*", help="32 km tile ids such as q11y15 (a quarter of x05y07); lakes: survey "
                                              "or build, then the tiles or windows")
     pq.add_argument("--out", type=Path, default=None, help="merge: output directory (default: the root)")
     pq.add_argument("--threads", type=int, default=32, help="tile: 1 m read threads")
-    pq.add_argument("--force", action="store_true", help="tile: run again even when done")
+    pq.add_argument("--force", action="store_true", help="tile: run again even when done; finish: re-run done "
+                                                        "steps; switch: switch with steps not done")
     pq.add_argument("--root", type=Path, default=None, help="output root (default data/nz1m)")
+    pq.add_argument("--steps", nargs="+", default=None, help="finish: only these steps (run even when done)")
+    pq.add_argument("--merge", type=Path, default=None, help="finish: merge outputs to link in (default: the root)")
+    pq.add_argument("--tiles-dir", type=Path, default=None, help="finish: tiles to link in (default: <root>/tiles)")
+    pq.add_argument("--inputs", type=Path, default=None, help="finish: national input layers (default data/nz)")
+    pq.add_argument("--models-dir", type=Path, default=None,
+                    help="finish: model registry to read and write (default models/; a sample run gives another)")
+    pq.add_argument("--repeats", type=int, default=5, help="finish cv: repeats of the 5-fold split")
+    pq.add_argument("--cv-models", nargs="*", default=None, help="finish cv: only these recipes")
+    pq.add_argument("--v5-id", default="v5", help="finish v5: card id")
+    pq.add_argument("--v5-recipe", default="gbm_xsec", help="finish v5: model-zoo recipe")
+    pq.add_argument("--refs", action="store_true", help="finish viewer: keep the 5 m reference areas in the viewer")
+    pq.add_argument("--web-only", nargs="*", default=None, help="finish web: only these web data steps")
+    pq.add_argument("--back", action="store_true", help="switch: back to data/nz")
+    pq.add_argument("--ref8m", type=Path, default=None,
+                    help="finish sections: the 8 m scan to compare with, read only (default data/nz)")
     pw = sub.add_parser("web", help="web app (Map, Top rivers, Models, Info): build | serve (see web/README.md)")
     pw.add_argument("step", choices=["data", "build", "serve", "pages"],
                     help="data: per-region extras (sections, roads, tracks, gauges, LINZ rivers, satellite, hydro, "
@@ -420,8 +442,9 @@ def main(argv: list[str] | None = None) -> None:
                          "survey per reach, from s3://nz-imagery, no key)")
     pw.add_argument("--refresh", action="store_true",
                     help="data: fetch cached source tables again (aerial: the STAC survey table and Basemaps layers)")
-    pw.add_argument("--data", type=Path, default=REPO_ROOT / "data" / "viewer_nz",
-                    help="region data files (from nz viewer / models viewer / external attach)")
+    pw.add_argument("--data", type=Path, default=None,
+                    help="region data files (from nz viewer / models viewer / external attach; default: "
+                         "data/viewer_nz for data/nz, else <root>/viewer_nz)")
     pw.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "web")
     pw.add_argument("--basemaps-key", default=None, help="LINZ Basemaps API key for the standalone site "
                                                           "(default: $LINZ_BASEMAPS_KEY)")
@@ -436,7 +459,7 @@ def main(argv: list[str] | None = None) -> None:
     pl.add_argument("--top", type=int, default=60, help="audit: how many rivers")
     pl.add_argument("--models", nargs="*", help="cv: only these model ids (default: the whole zoo)")
     pl.add_argument("--repeats", type=int, default=5, help="cv: repeats of the 5-fold split")
-    pl.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer_nz")
+    pl.add_argument("-o", "--out", type=Path, default=None, help="page: viewer data directory (default: as nz viewer)")
     pr = sub.add_parser("rain", help="rainfall per catchment: weights | ecmwf | gauges | zones | scale | totals | "
                                      "inputs | publish | status (see src/river_finder/rainfall/, docs/live-rain.md, "
                                      "docs/rain-gauges.md, docs/rainfall-scaling.md)")
@@ -552,6 +575,14 @@ def main(argv: list[str] | None = None) -> None:
                                 "envelope; src/river_finder/maf.py): overrides [correction] apply in "
                                 "config/maf.toml (default off)")
     args = ap.parse_args(argv)
+    if args.cmd in ("nz", "models", "external", "ml") and getattr(args, "out", 0) is None:
+        from .national import viewer_dir
+
+        args.out = viewer_dir()   # follows the national root (config/national.toml, $RIVER_FINDER_NZ)
+    if args.cmd == "web" and args.data is None:
+        from .national import viewer_dir
+
+        args.data = viewer_dir()
     if getattr(args, "maf_correction", None):
         from . import maf
 
@@ -599,6 +630,24 @@ def main(argv: list[str] | None = None) -> None:
             from . import nz1mmerge
 
             nz1mmerge.merge(args.tiles or None, args.root, out=args.out)
+        elif args.step in ("finish", "switch", "status"):
+            from . import nz1mfinish as F
+
+            t0 = time.time()
+
+            def log(m):
+                print(f"[{(time.time() - t0) / 60:6.1f} min] {m}", flush=True)
+
+            if args.step == "status":
+                F.status(args.root)
+            elif args.step == "switch":
+                F.switch(args.root, back=args.back, force=args.force)
+            else:
+                F.finish(args.root, steps=args.steps, force=args.force, merge=args.merge, tiles=args.tiles_dir,
+                         inputs=args.inputs, ref8m=args.ref8m, models_dir=args.models_dir, log=log,
+                         cv_repeats=args.repeats,
+                         cv_models=args.cv_models, v5_id=args.v5_id, v5_recipe=args.v5_recipe, refs=args.refs,
+                         web_steps=args.web_only)
         else:
             from . import nz1mcheck
 

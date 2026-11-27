@@ -217,8 +217,9 @@ def reach_falls(lines: gpd.GeoSeries, falls: gpd.GeoDataFrame, snap_m: float = S
     return pd.DataFrame({"falls_n": n, "falls_max_h_m": h}), out.assign(reach=reach, snap_m=d)
 
 
-def _frames():
-    """(viewer id, national region name or None, segments GeoDataFrame, viewer min area)."""
+def _frames(refs: bool = True):
+    """(viewer id, national region name or None, segments GeoDataFrame, viewer min area); ``refs``: also the 5 m
+    reference areas."""
     import pyogrio
 
     from .nzscore import region_dir
@@ -228,14 +229,14 @@ def _frames():
         if p.exists():
             yield region_dir(name).name, name, pyogrio.read_dataframe(
                 p, columns=["seg_id", "area_km2", "steepest_50m_m_per_km", "knick_ratio", "grad_s"]), 2.0
-    for rid in list_regions():
+    for rid in list_regions() if refs else []:
         p = load_region(rid).data_dir() / "segments_scored.gpkg"
         if p.exists():
             yield rid, None, pyogrio.read_dataframe(
                 p, columns=["seg_id", "area_km2", "steepest_50m_m_per_km", "knick_ratio", "grad_s"]), 1.0
 
 
-def attach(out_dir: Path | None = None, log=print) -> dict:
+def attach(out_dir: Path | None = None, log=print, refs: bool = True) -> dict:
     """Per-reach access distances and waterfalls for every national region and reference area.
 
     Writes ``data/nz/external.pkl`` (national reaches, ``national_table`` row order) and, with
@@ -243,7 +244,7 @@ def attach(out_dir: Path | None = None, log=print) -> dict:
     """
     falls, access = load("waterfalls"), load("access")
     nat, checks = [], []
-    for vid, name, g, min_a in _frames():
+    for vid, name, g, min_a in _frames(refs):
         t0 = time.time()
         per, wf = reach_falls(g.geometry, falls)
         x = pd.concat([reach_access(g.geometry, access), per], axis=1)

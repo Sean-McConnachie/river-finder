@@ -151,7 +151,8 @@ def test_tile_coverage_and_attach(tmp_path):
     layer.loc[0, "geometry"] = _sq(0, 0, 1500, 2000)
     layer = layer.iloc[[0]].reset_index(drop=True)
     d, base = _write_tile(tmp_path, layer)
-    rec, counts, gids, (land, gap, _x0, _y1) = L.tile_coverage(d, layer, step_m=10)
+    rec, counts, gids, (land, gap, _x0, _y1, cell_m2) = L.tile_coverage(d, layer, step_m=10)
+    assert cell_m2 == 64.0
     assert rec["gid"].tolist() == [base, base + 1]
     np.testing.assert_allclose(rec["lidar_share"], [1.0, 5 / 9], atol=0.02)
     assert counts.shape == (2, 2) and gids.tolist() == [base, base + 1]
@@ -191,3 +192,39 @@ def test_summarise_counts_regions_guides_and_years():
     assert s["sections"]["not_full"][0]["lidar_share"] == pytest.approx(0.2) and s["sections"]["not_full"][0][
         "years"] == [2024]
     json.dumps(s, default=str)   # serialisable
+
+
+def test_q_tile_ids_cell_area_and_gap_grid(tmp_path):
+    """A 1 m rebuild tile (32 km ``q`` id, 10 m local catchments over its box): the tile index of its gids, the
+    100 m2 cell area in the local areas, and the gap grid summing the cells it owns."""
+    from river_finder import nz
+
+    assert L._tile_index("q24y32") == 13224 and L._tile_index("x05y07") == 705
+    layer = _layer().iloc[[0]].reset_index(drop=True)
+    tid = "q24y32"
+    d = tmp_path / "tiles" / tid
+    d.mkdir(parents=True)
+    base = 13224 * L.SEG_BASE
+    tf = from_origin(X0, Y0 + 2000, 10.0, 10.0)
+    lc = np.full((200, 200), base, np.int64)
+    lc[:, 100:] = base + 1
+    lc[:10, :] = -1
+    with rasterio.open(d / "local_catchment_core.tif", "w", driver="GTiff", height=200, width=200, count=1,
+                       dtype="int64", crs="EPSG:2193", transform=tf, nodata=-1) as ds:
+        ds.write(lc, 1)
+    g = gpd.GeoDataFrame({"gid": [base, base + 1]},
+                         geometry=[shapely.LineString([(X0 + 500, Y0 + 1000), (X0 + 1000, Y0 + 1000)]),
+                                   shapely.LineString([(X0 + 1000, Y0 + 1000), (X0 + 1900, Y0 + 1000)])],
+                         crs="EPSG:2193")
+    g.to_file(d / "segments_core.gpkg", driver="GPKG")
+    rec, counts, gids, (land, gap, x0, y1, cell_m2) = L.tile_coverage(d, layer, step_m=10)
+    assert cell_m2 == 100.0 and gids.tolist() == [base, base + 1] and land.sum() == (lc >= 0).sum()
+    table = pd.DataFrame({"gid": [base, base + 1], "down": [1, -1]})
+    cov = L.attach(table, rec, gids, counts, layer, cell_m2=cell_m2)
+    np.testing.assert_allclose(cov["local_km2"], [190 * 100 * 100 / 1e6] * 2)
+    out = tmp_path / "out"
+    out.mkdir()
+    L.reach_coverage(layer, tmp_path / "tiles", out, step_m=10)
+    z, gg = np.load(out / "catchment_cells.npz"), np.load(out / "gap_grid.npz")
+    assert float(z["cell_m2"]) == 100.0 and float(gg["dem_cell_m"]) == 10.0
+    assert gg["land"].sum() == (lc >= 0).sum() and gg["land"].shape == (nz.NY * 64, nz.NX * 64)

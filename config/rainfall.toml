@@ -5,8 +5,10 @@
 windows = [1, 3, 6, 12, 24]
 
 [paths]
-nz_data = "data/nz"              # national data, relative to the repository root; --data overrides it
-tiles = "tiles"                  # <nz_data>/tiles/<tile>/local_catchment_core.tif (8 m, gid per pixel)
+# nz_data = "data/nz"            # national data, relative to the repository root; --data overrides it. Unset: the
+                                 # national root (config/national.toml: data/nz, data/nz1m after the 1 m switch)
+tiles = "tiles"                  # <nz_data>/tiles/<tile>/local_catchment_core.tif (gid per pixel: 8 m, or 10 m on the
+                                 # 1 m rebuild)
 segments = "segments_table.pkl"  # one row per reach: the row order of every catchment array
 rain = "rain"                    # outputs: weights_<grid>.npz (+ .json), obs_<source>.npz, fc_<source>.npz (+ .json)
 

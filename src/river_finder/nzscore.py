@@ -2,7 +2,8 @@
 
 1. Merge every tile's core segments (``nz.merge_segments``), stitching downstream links across
    tile edges and reconnecting the rest along REC2 (``relink.py``), and give each segment its
-   river-guide region (``national.assign_regions``).
+   river-guide region (``national.assign_regions``). On the 1 m rebuild (``national.is_1m``) the merge is done
+   already: read ``reaches.parquet`` and ``joins.parquet`` (``reaches_1m``).
 2. Split into one frame per region (``down_seg`` re-indexed within the region).
 3. Label known runs. For now these are the reference rivers of ``regions/*.toml``, matched by
    name *inside that reference region's box* (the same names recur elsewhere in NZ).
@@ -66,11 +67,37 @@ class NationalLabels:
         return (listed & sized).astype(int), held
 
 
-def national_frames(tiles=None, log=print) -> dict[str, gpd.GeoDataFrame]:
-    from .nz import merge_segments
+def reaches_1m(root=None, tiles=None, log=print) -> gpd.GeoDataFrame:
+    """The 1 m rebuild's national reaches: ``reaches.parquet`` (the merge) with ``joins.parquet`` (``nz1mjoin``:
+    geology at the midpoint, LINZ names and distance, LiDAR survey, sinuosity; its ``river`` replaces the merge's
+    REC2-only name). ``tiles``: only these (``nz.Tile`` or ids)."""
+    root = root or nz_dir()
+    g = gpd.read_parquet(root / "reaches.parquet")
+    if tiles:
+        ids = {getattr(t, "id", t) for t in tiles}
+        g = g[g["tile"].isin(ids)].reset_index(drop=True)
+    jp = root / "joins.parquet"
+    if not jp.exists():
+        raise SystemExit(f"no {jp}: run `river-finder nz1m finish --steps joins` first")
+    j = pd.read_parquet(jp).drop_duplicates("gid").set_index("gid").reindex(g["gid"].to_numpy())
+    if j.index.isna().any() or j["river"].isna().any():
+        raise SystemExit(f"{jp} does not cover {root / 'reaches.parquet'}: run the joins again")
+    for c in j.columns:
+        g[c] = j[c].to_numpy()
+    log(f"1 m reaches: {len(g)} from {root / 'reaches.parquet'} + {jp.name}")
+    return g
 
-    g = merge_segments(tiles, log=log)
-    g["region"] = assign_regions(g.geometry.interpolate(0.5, normalized=True))
+
+def national_frames(tiles=None, log=print) -> dict[str, gpd.GeoDataFrame]:
+    from .national import is_1m
+
+    if is_1m():
+        g = reaches_1m(tiles=tiles, log=log)   # regions come with the merge
+    else:
+        from .nz import merge_segments
+
+        g = merge_segments(tiles, log=log)
+        g["region"] = assign_regions(g.geometry.interpolate(0.5, normalized=True))
     frames = {}
     for name in FILTER_ORDER:
         f = g[g["region"] == name].reset_index(drop=True)

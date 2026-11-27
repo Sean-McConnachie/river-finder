@@ -82,7 +82,10 @@ def test_stored_layouts_match_the_code():
 
 def test_gid_scheme():
     ix, iy = 2 * nz.NX - 1, 2 * nz.NY - 1                       # the last 32 km tile of the national grid
-    assert nz.Tile.parse(S.tile_id(10, 14)) == nz.Tile(10, 14)  # the id format parses as today's ids do
+    q = nz.Tile.parse(S.tile_id(10, 14))                        # the id format parses, as a 32 km tile
+    assert q == nz.Tile(10, 14, nz.Q_TILE) and q.id == S.tile_id(10, 14) and q.index == S.tile_index(10, 14)
+    assert q.core == (nz.X0 + 10 * S.TILE_M, nz.Y0 + 14 * S.TILE_M, nz.X0 + 11 * S.TILE_M, nz.Y0 + 15 * S.TILE_M)
+    assert nz.Tile.parse("x05y07") == nz.Tile(5, 7) and nz.Tile.of_index(q.index) == q
     old_max = (nz.NY * 100 + nz.NX + 1) * nz.SEG_BASE
     g = S.gid(0, 0, 0)
     assert g > old_max and S.gid(ix, iy, 999_999) < 2**62

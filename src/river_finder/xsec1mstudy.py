@@ -42,7 +42,9 @@ def _log10(s, lo, hi, fill):
     return np.log10(s.fillna(fill).clip(lo, hi))
 
 
-# name -> (builder, description, group); reaches without valid sections are not in the sample, so fills are rare
+# name -> (builder, description, group); reaches without valid sections are not in the sample, so fills are rare.
+# The rebuild's keep list lives in ml.EXTRA (ml.XSEC + ml.XSEC_HYD); FEATURES1M takes those builders from there.
+KEEP1M = ["x1_w10", "x1_w20", "x1_wall", "x1_vf", "x1_b", "x1_ffbf", "x1_bank", "x1_steep", "x1_rough", "x1_dropconc"]
 FEATURES1M: dict[str, tuple] = {
     "x1_vel": (lambda g: _log10(g["x1_v_q"], 0.05, 20, 0.1),
                "Mean velocity at the mean annual flood, Q / A on the median 1 m section (Manning stage from the water "
@@ -98,6 +100,8 @@ FEATURES1M: dict[str, tuple] = {
     "x1_vf": (lambda g: _log10(g["x1_vf_med"], 0.001, 100, 1), "Valley floor width-to-height: 2 w(2 m) / (left + "
               "right highest ground within 500 m), log10", "valley"),
 }
+for _k in KEEP1M + ["x1_vel"]:   # one builder for each kept feature: ml.EXTRA's (study groups kept)
+    FEATURES1M[_k] = (ML.EXTRA[_k][0], ML.EXTRA[_k][1], FEATURES1M[_k][2])
 GROUPS: dict[str, list[str]] = {}
 for _k, _v in FEATURES1M.items():
     GROUPS.setdefault(_v[2], []).append(_k)
@@ -109,7 +113,7 @@ TERRAIN_NUM = ML.BASE + ML.TERRAIN
 @contextmanager
 def registered():
     """The 1 m features in ``ml.EXTRA`` for the duration (so ``ml.run_cv`` can build them); removed afterwards."""
-    added = [k for k in FEATURES1M if k not in ML.EXTRA]
+    added = [k for k in FEATURES1M if k not in ML.EXTRA]   # the keep list is in ml.EXTRA already
     ML.EXTRA.update({k: FEATURES1M[k] for k in added})
     try:
         yield
@@ -431,7 +435,7 @@ def study(repeats: int = 10, keep_low: list[str] | None = None, log=print) -> di
     sep = separation(s, L, names + REF)
     sp = spearman(s, names, REF)
     rs = residual(s, L, names, TERRAIN_NUM)
-    rs8 = residual(s, L, names, TERRAIN_NUM + ML.XSEC)
+    rs8 = residual(s, L, names, TERRAIN_NUM + ML.XSEC8)
     res["separation"] = sep.round(4).to_dict(orient="index")
     res["spearman"] = sp.round(3).to_dict(orient="index")
     res["residual_terrain"] = rs.round(4).to_dict(orient="index")
@@ -442,13 +446,13 @@ def study(repeats: int = 10, keep_low: list[str] | None = None, log=print) -> di
     for kind, tag, base, b0 in (("gbm", "gbm", ML.BASE + ML.TERRAIN, "gbm_terrain"),
                                 ("logistic", "logit", ML.BASE + ML.TERRAIN + ML.OSM + ML.ROCK_ONEHOT, "logit_plus")):
         x8, t1 = f"{tag}_xsec", f"{tag}_t+"
-        specs += [spec(b0, kind, base), spec(x8, kind, base + ML.XSEC)]
+        specs += [spec(b0, kind, base), spec(x8, kind, base + ML.XSEC8)]
         pairs[x8] = b0
         for gname, feats in GROUPS.items():
             specs.append(spec(t1 + gname, kind, base + feats))
             pairs[t1 + gname] = b0
         specs += [spec(t1 + "x1all", kind, base + names), spec(t1 + "keep", kind, base + keep),
-                  spec(f"{x8}+low", kind, base + ML.XSEC + keep_low)]
+                  spec(f"{x8}+low", kind, base + ML.XSEC8 + keep_low)]
         pairs.update({t1 + "x1all": b0, t1 + "keep": b0, f"{x8}+low": x8})
         comp += [(x8, b0), (t1 + "valley", b0), (t1 + "valley", x8), (t1 + "keep", b0), (t1 + "keep", x8),
                  (t1 + "keep", t1 + "valley"), (t1 + "x1all", t1 + "keep"), (f"{x8}+low", x8)]
