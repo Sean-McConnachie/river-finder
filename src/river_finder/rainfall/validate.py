@@ -395,13 +395,17 @@ def tile_bounds(tiles_dir: Path) -> list[tuple[Path, tuple[float, float, float, 
     return out
 
 
-def locate_gauges(tiles_dir: Path, x, y, search_px: int = 6) -> np.ndarray:
+def locate_gauges(tiles_dir: Path, x, y, search_px: int = 6, gid_map=None) -> np.ndarray:
     """gid of the 8 m local catchment holding each point (NZTM ``x``, ``y``), from the tiles'
     ``local_catchment_core.tif``; a point on a pixel of no catchment takes the nearest one within ``search_px``
-    pixels; -1 when none (or no position)."""
+    pixels; -1 when none (or no position). Gids the 1 m merge dropped are read as the reach that took them
+    (``gid_map``, default ``national.merged_gids`` of the tiles' root)."""
     import rasterio
     from rasterio.windows import Window
 
+    from ..national import merged_gids
+
+    gmap = merged_gids(Path(tiles_dir).parent) if gid_map is None else gid_map
     x, y = np.asarray(x, np.float64), np.asarray(y, np.float64)
     out = np.full(x.size, -1, dtype=np.int64)
     tiles = tile_bounds(tiles_dir)
@@ -414,7 +418,7 @@ def locate_gauges(tiles_dir: Path, x, y, search_px: int = 6) -> np.ndarray:
             with rasterio.open(p) as ds:
                 r, c = ds.index(x[i], y[i])
                 r0, c0 = max(0, r - search_px), max(0, c - search_px)
-                win = ds.read(1, window=Window(c0, r0, 2 * search_px + 1, 2 * search_px + 1))
+                win = gmap(ds.read(1, window=Window(c0, r0, 2 * search_px + 1, 2 * search_px + 1)))
             ok = win >= 0
             if ok.any():
                 rr, cc = np.nonzero(ok)

@@ -228,3 +228,40 @@ def test_q_tile_ids_cell_area_and_gap_grid(tmp_path):
     z, gg = np.load(out / "catchment_cells.npz"), np.load(out / "gap_grid.npz")
     assert float(z["cell_m2"]) == 100.0 and float(gg["dem_cell_m"]) == 10.0
     assert gg["land"].sum() == (lc >= 0).sum() and gg["land"].shape == (nz.NY * 64, nz.NX * 64)
+
+
+def test_dropped_gids_count_for_the_reach_that_took_them(tmp_path):
+    """rf-lxa.13: the merge dropped A3 (into A2), A4 (into B1, in the next tile) and A5 (lost); the tiles' local
+    catchments still name them. Their cells count for the receiving reach (one row per gid, summed over tiles); the
+    land and gap blocks keep every cell."""
+    layer = _layer().iloc[[0]].reset_index(drop=True)
+    a1, a2, a3, a4, a5 = (13224 * L.SEG_BASE + i for i in range(1, 6))
+    b1 = 13225 * L.SEG_BASE + 1
+    root = tmp_path / "nz1m"
+    root.mkdir()
+    (root / "merge.json").write_text(json.dumps({"tiles": ["q24y32", "q25y32"], "zero_length": {
+        "merged": [[a3, a2], [a4, b1], [a5, -1]]}}))
+    a = np.full((100, 100), -1, np.int64)
+    a[:50, :50], a[:50, 50:], a[50:75, :50], a[50:75, 50:], a[75:, :50] = a1, a2, a3, a4, a5
+    for tid, x0, lc, gids in (("q24y32", X0, a, [a1, a2, a3, a4, a5]),
+                              ("q25y32", X0 + 1000, np.full((100, 100), b1, np.int64), [b1])):
+        d = root / "tiles" / tid
+        d.mkdir(parents=True)
+        with rasterio.open(d / "local_catchment_core.tif", "w", driver="GTiff", height=100, width=100, count=1,
+                           dtype="int64", crs="EPSG:2193", transform=from_origin(x0, Y0 + 1000, 10.0, 10.0),
+                           nodata=-1) as ds:
+            ds.write(lc, 1)
+        g = gpd.GeoDataFrame({"gid": gids}, geometry=[shapely.LineString([(x0 + 100 + 50 * k, Y0 + 500),
+                                                                           (x0 + 140 + 50 * k, Y0 + 500)])
+                                                      for k in range(len(gids))], crs="EPSG:2193")
+        g.to_file(d / "segments_core.gpkg", driver="GPKG")
+    out = tmp_path / "out"
+    out.mkdir()
+    L.reach_coverage(layer, root / "tiles", out, step_m=10)       # the map from <tiles>/../merge.json
+    z = np.load(out / "catchment_cells.npz")
+    cells = dict(zip(z["gid"].tolist(), z["counts"].sum(axis=1).tolist(), strict=True))
+    assert cells == {a1: 2500, a2: 3750, b1: 11250} and len(z["gid"]) == len(set(z["gid"].tolist()))
+    assert np.load(out / "gap_grid.npz")["land"].sum() == 8750 + 10000      # A5's cells are still land
+    _, counts, gids, _ = L.tile_coverage(root / "tiles" / "q24y32", layer, step_m=10)   # no map: as the raster
+    cells0 = dict(zip(gids.tolist(), counts.sum(axis=1).tolist(), strict=True))
+    assert cells0[a2] == 2500 and cells0[a3] == 1250 and b1 not in cells0

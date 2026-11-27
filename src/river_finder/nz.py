@@ -36,7 +36,7 @@ from rasterio.windows import Window
 from shapely.geometry import LineString, Point, box
 
 from .areacode import CODE_LOG_MIN, CODE_STEP, CODE_TAG, encode_area
-from .national import nz_dir
+from .national import merged_gids, nz_dir
 from .products import _write, hillshade
 from .regions import Region
 from .routing import accumulate, edge_mask, route
@@ -545,15 +545,17 @@ def _area_code_qml() -> str:
 def truncation_rasters(out: Path, log=print) -> list[Path]:
     """The 1 m rebuild's truncation mask per tile (``<out>/<tile>.tif``, 10 m, uint8: 1 the cell's local catchment
     reach is ``truncated``, 0 not, 255 no reach), painted from ``network.parquet`` through
-    ``local_catchment_core.tif`` (the 8 m scan's ``truncated_core.tif`` is not kept by the tile job)."""
+    ``local_catchment_core.tif`` (the 8 m scan's ``truncated_core.tif`` is not kept by the tile job). Cells of a gid
+    the merge dropped take the reach that took it (``national.merged_gids``)."""
     tab = pd.read_parquet(nz_dir() / "network.parquet", columns=["gid", "truncated"])
     gid_s = np.sort(tab["gid"].to_numpy(np.int64))
     tr_s = tab.set_index("gid")["truncated"].reindex(gid_s).to_numpy(bool)
+    gmap = merged_gids()
     out.mkdir(parents=True, exist_ok=True)
     paths = []
     for src in sorted((nz_dir() / "tiles").glob("*/local_catchment_core.tif")):
         with rasterio.open(src) as ds:
-            lc, prof = ds.read(1), ds.profile
+            lc, prof = gmap(ds.read(1)), ds.profile
         k = np.clip(np.searchsorted(gid_s, lc), 0, max(len(gid_s) - 1, 0))
         hit = (lc >= 0) & (gid_s[k] == lc) if len(gid_s) else np.zeros(lc.shape, bool)
         m = np.where(hit, tr_s[k].astype(np.uint8), 255).astype(np.uint8) if len(gid_s) else np.full(lc.shape, 255,
@@ -565,6 +567,34 @@ def truncation_rasters(out: Path, log=print) -> list[Path]:
         paths.append(p)
     log(f"truncation mask: {len(paths)} tiles -> {out}")
     return paths
+
+
+def local_catchment_rasters(out: Path, log=print) -> list[Path]:
+    """The tiles' ``local_catchment_core.tif`` for the GIS mosaic, with the gids the 1 m merge dropped replaced by
+    the gid that took them (``national.merged_gids``): a tile that holds one is written to ``<out>/<tile>.tif``
+    (the same grid and profile); the others are used as they are. On the 8 m scan: the tiles' rasters."""
+    gmap = merged_gids()
+    paths = sorted((nz_dir() / "tiles").glob("*/local_catchment_core.tif"))
+    if not gmap:
+        return paths
+    res, n = [], 0
+    for src in paths:
+        with rasterio.open(src) as ds:
+            lc, tags = ds.read(1), ds.tags()
+            prof = dict(ds.profile, compress="deflate", predictor=2, tiled=True, blockxsize=512, blockysize=512)
+        m = gmap(lc)
+        if m is lc:
+            res.append(src)
+            continue
+        out.mkdir(parents=True, exist_ok=True)
+        p = out / f"{src.parent.name}.tif"
+        with rasterio.open(p, "w", **prof) as dst:
+            dst.write(m.astype(prof["dtype"]), 1)
+            dst.update_tags(**tags, dropped_gids_mapped="merge.json zero_length.merged (rf-lxa.13)")
+        res.append(p)
+        n += 1
+    log(f"local catchments: {n} of {len(paths)} tiles hold gids the merge dropped ({len(gmap)}): mapped -> {out}")
+    return res
 
 
 def export_gis(log=print) -> Path:
@@ -595,6 +625,8 @@ def export_gis(log=print) -> Path:
                                   ("local_catchment_core", "Int64", -1, "nearest")):
         if name == "truncated_core" and one:
             paths = truncation_rasters(out / "truncated", log=log)
+        elif name == "local_catchment_core":
+            paths = local_catchment_rasters(out / "local_catchment", log=log)
         else:
             paths = sorted(root.glob(f"*/{name}.tif"))
         if paths:
@@ -609,7 +641,8 @@ def export_gis(log=print) -> Path:
         "                     styled by area_code.qml\n"
         "hillshade_24m.vrt    hillshade\n"
         "truncated_core.vrt   1 = catchment reaches a tile edge without a REC2 inflow\n"
-        "local_catchment_core.vrt  global id (gid) of the reach segment each cell first drains into\n"
+        "local_catchment_core.vrt  global id (gid) of the reach segment each cell first drains into (1 m: the\n"
+        "                     tiles that held a reach the merge dropped are read from local_catchment/)\n"
         "river_finder_nz.gpkg layers: guide_regions, reach_segments (>= 1 km2, all features and\n"
         "                     scores, gid / region), runs (default run-finder settings)\n"
         "../candidates.csv    candidate runs not on known rivers, all regions\n")

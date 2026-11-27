@@ -30,7 +30,9 @@ error on random pixels of every tile against the exact transform and stores the 
 **Gaps.** A catchment with no pixel (its local area lies in a neighbouring tile's halo, see
 ``nz.finish_tile``) gets weight 1 on the cell holding its midpoint (table ``lon``/``lat``) and area 0,
 flagged ``fallback``: its depth is the local cell's, its volume 0. Land pixels draining into no
-kept segment (coastal slivers, tile edges) are counted in the build stats.
+kept segment (coastal slivers, tile edges) are counted in the build stats. On the 1 m rebuild the
+pixels of the zero-length reaches the merge dropped (still named in the tiles' rasters) count for
+the reach that took their area (``merge.json`` ``zero_length.merged``, ``national.merged_gids``).
 
 Upstream totals (rf-t26.6, :mod:`.upstream`) use ``area_m2`` and the segment table's ``down`` (row
 index of the downstream catchment, -1 at an outlet; ``down`` here is the copy taken when the weights
@@ -166,8 +168,13 @@ def _interp_points(node: np.ndarray, step: int, r: np.ndarray, c: np.ndarray) ->
             + node[i0, j0 + 1] * (1 - fr) * fc + node[i0 + 1, j0 + 1] * fr * fc)
 
 
-def _row_lookup(gid: np.ndarray, seg_base: int) -> dict[int, tuple[np.ndarray, np.ndarray]]:
-    """tile index -> (lut: local seg id -> tile-row position or -1, tile rows: global row per position)."""
+def _row_lookup(gid: np.ndarray, seg_base: int, gid_map=None) -> dict[int, tuple[np.ndarray, np.ndarray]]:
+    """tile index -> (lut: local seg id -> tile-row position or -1, tile rows: global row per position).
+
+    ``gid_map`` (``national.GidMap``: gids the 1 m merge dropped -> the gid that took their local area): the lut of a
+    dropped gid's tile points at an extra position holding the receiving reach's row (in any tile), so its pixels
+    count for that reach. A dropped gid that is still a row of the table keeps its row; one whose area was lost
+    (``-1``) or whose receiver is not in the table stays unknown."""
     order = np.argsort(gid, kind="stable")
     g = gid[order]
     tiles = g // seg_base
@@ -178,6 +185,20 @@ def _row_lookup(gid: np.ndarray, seg_base: int) -> dict[int, tuple[np.ndarray, n
         lut = np.full(int(local.max()) + 1, -1, dtype=np.int64)
         lut[local] = np.arange(b - a)
         out[int(t)] = (lut, order[a:b])
+    if gid_map is None or not len(gid_map) or not len(g):
+        return out
+    j = np.minimum(np.searchsorted(g, gid_map.dst), len(g) - 1)
+    ok = (gid_map.dst >= 0) & (g[j] == gid_map.dst)
+    src, recv = gid_map.src[ok], order[j[ok]]
+    for t in np.unique(src // seg_base):
+        sel = src // seg_base == t
+        loc, rows = src[sel] - t * seg_base, recv[sel]
+        lut, tile_rows = out.get(int(t), (np.full(1, -1, dtype=np.int64), np.zeros(0, dtype=np.int64)))
+        if int(loc.max()) >= lut.size:
+            lut = np.r_[lut, np.full(int(loc.max()) + 1 - lut.size, -1, dtype=np.int64)]
+        free = lut[loc] < 0
+        lut[loc[free]] = tile_rows.size + np.arange(int(free.sum()))
+        out[int(t)] = (lut, np.r_[tile_rows, rows[free]].astype(np.int64))
     return out
 
 
@@ -347,22 +368,25 @@ def _tile(path: Path, luts: dict, accs: list[_GridAcc], stats: dict, seg_base: i
 
 
 def build_weights(tile_paths: list[Path], table: pd.DataFrame, grids: list[GridSpec], *, seg_base: int = SEG_BASE,
-                  strip_rows: int = 512, lattice_step: int = 64, check_points: int = 4096,
+                  strip_rows: int = 512, lattice_step: int = 64, check_points: int = 4096, gid_map=None,
                   log=print) -> tuple[dict[str, CatchmentWeights], dict]:
     """Weight matrices of every grid in one pass over the local-catchment tiles.
 
     ``table`` needs ``gid`` and ``down`` (row index downstream, -1 none); ``area_km2``, ``region``,
-    ``lon``/``lat`` are used when present (checks, factor regions, fallback cells). Returns the
-    weights per grid name and the build statistics. Memory stays at a few hundred MB: one strip of
-    ``strip_rows`` rows at a time, and GDAL's block cache is capped (each block is read once).
+    ``lon``/``lat`` are used when present (checks, factor regions, fallback cells). ``gid_map``
+    (``national.merged_gids`` of the root): the pixels of gids the 1 m merge dropped count for the reach that
+    took them (``_row_lookup``). Returns the weights per grid name and the build statistics. Memory stays at a
+    few hundred MB: one strip of ``strip_rows`` rows at a time, and GDAL's block cache is capped (each block is
+    read once).
     """
     t0 = time.time()
     n = len(table)
     gid_all = table["gid"].to_numpy(np.int64)
-    luts = _row_lookup(gid_all, seg_base)
+    luts = _row_lookup(gid_all, seg_base, gid_map)
     accs = [_GridAcc(g) for g in grids]
     stats = {"tiles": 0, "pixels_assigned": 0, "pixels_unknown_gid": 0, "land_pixels": 0, "land_unassigned": 0,
-             "strip_rows": strip_rows, "lattice_step_px": lattice_step}
+             "strip_rows": strip_rows, "lattice_step_px": lattice_step,
+             "gids_mapped": int(len(gid_map)) if gid_map is not None else 0}
     rng = np.random.default_rng(20261119)
     px_area = None
     with rasterio.Env(GDAL_CACHEMAX=64):

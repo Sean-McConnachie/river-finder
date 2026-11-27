@@ -40,7 +40,7 @@ from rasterio.warp import reproject
 from . import viewer
 from .areacode import CODE_LOG_MIN, CODE_STEP  # shared with nz.encode_area
 from .labels import load_sections
-from .national import FILTER_ORDER, is_1m, nz_dir, region_filters
+from .national import FILTER_ORDER, is_1m, merged_gids, nz_dir, region_filters
 from .nz import Tile
 from .nzscore import region_dir, slug
 from .regions import KnownRun, Region, list_regions, load_region
@@ -208,14 +208,17 @@ def build_label() -> str:
     return "national 1 m LiDAR rebuild" if is_1m() else "national 8 m scan"
 
 
-def gid_lookup(gids: np.ndarray, values: np.ndarray):
+def gid_lookup(gids: np.ndarray, values: np.ndarray, gid_map=None):
     """A raster transform for ``_mosaic``: each cell's gid (local catchment raster) -> ``values`` of that gid, 0
-    where the gid is not in ``gids`` (or no data); ``None`` for a tile with no hit."""
+    where the gid is not in ``gids`` (or no data); ``None`` for a tile with no hit. ``gid_map``
+    (``national.merged_gids``): a cell of a gid the 1 m merge dropped takes the values of the reach that took it."""
     order = np.argsort(gids)
     gid_s, val_s = np.asarray(gids)[order], np.asarray(values)[order]
 
     def fn(t, src):
         src = src.astype(np.int64)
+        if gid_map:
+            src = gid_map(src)
         if not len(gid_s):
             return None
         k = np.clip(np.searchsorted(gid_s, src), 0, len(gid_s) - 1)
@@ -251,6 +254,7 @@ def region_files(name: str, out_dir: Path, max_px: int = 4000, min_area_km2: flo
     bounds = (b[0] - 2000, b[1] - 2000, b[2] + 2000, b[3] + 2000)
     tiles = _tiles_for(bounds)
     tr, w, h, merc = _grid(bounds, max_px)
+    gmap = merged_gids()    # the 1 m merge's dropped gids (still in local_catchment_core.tif) -> the reach below
 
     area = _mosaic(tiles, "area_code.tif", tr, w, h, Resampling.max, np.uint8)
 
@@ -266,7 +270,7 @@ def region_files(name: str, out_dir: Path, max_px: int = 4000, min_area_km2: flo
         tg = g["gid"].to_numpy(np.int64)[g["truncated"].fillna(False).astype(bool).to_numpy()] if "truncated" in g \
             else np.zeros(0, np.int64)
         trunc = _mosaic(tiles, "local_catchment_core.tif", tr, w, h, Resampling.nearest, np.uint8, combine="set",
-                        transform_fn=gid_lookup(tg, np.full(len(tg), 255, np.uint8)))
+                        transform_fn=gid_lookup(tg, np.full(len(tg), 255, np.uint8), gmap))
     hs = _mosaic(tiles, "hillshade_24m.tif", tr, w, h, Resampling.average, np.uint8, combine="set")
 
     # catchment labels: global segment id -> viewer index (+1), small segments folded downstream
@@ -282,19 +286,8 @@ def region_files(name: str, out_dir: Path, max_px: int = 4000, min_area_km2: flo
             chain.append(cur)
             cur = down[cur]
         view[chain] = view[cur] if cur >= 0 else -1
-    gid = g["gid"].to_numpy()
-    order = np.argsort(gid)
-    gid_s, view_s = gid[order], view[order] + 1
-
-    def labels(t, src):
-        src = src.astype(np.int64)
-        k = np.clip(np.searchsorted(gid_s, src), 0, len(gid_s) - 1)
-        hit = (src >= 0) & (gid_s[k] == src)
-        out = np.where(hit, view_s[k], 0).astype(np.int32)
-        return out if out.any() else None
-
     lab = _mosaic(tiles, "local_catchment_core.tif", tr, w, h, Resampling.nearest, np.int32, combine="set",
-                  transform_fn=labels)
+                  transform_fn=gid_lookup(g["gid"].to_numpy(np.int64), (view + 1).astype(np.int32), gmap))
     rgb = np.stack([(lab >> 16) & 255, (lab >> 8) & 255, lab & 255], axis=-1).astype(np.uint8)
 
     Image.fromarray(hs, "L").save(out_dir / f"{sl}_hs.jpg", format="JPEG", quality=78, optimize=True)

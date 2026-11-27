@@ -392,12 +392,17 @@ def tile_segments(tiles_dir: Path, gids: np.ndarray, log=print):
     return end, exits, length, np.concatenate(xs), np.concatenate(rows)
 
 
-def tile_local_km2(tiles_dir: Path, gids: np.ndarray, strip_rows: int = 1024, workers: int = 4) -> np.ndarray:
+def tile_local_km2(tiles_dir: Path, gids: np.ndarray, strip_rows: int = 1024, workers: int = 4,
+                   gid_map=None) -> np.ndarray:
     """Pixel local area (km2) of each reach: the cells of the tiles' ``local_catchment_core.tif`` that
-    hold its gid. Aligned to ``gids``; reaches with no cell get 0."""
+    hold its gid. Aligned to ``gids``; reaches with no cell get 0. Gids the 1 m merge dropped count for the reach
+    that took them (``gid_map``, default ``national.merged_gids`` of the tiles' root; none on the 8 m scan)."""
     import rasterio
     from rasterio.windows import Window
 
+    from .national import merged_gids
+
+    gmap = merged_gids(Path(tiles_dir).parent) if gid_map is None else gid_map
     gids = np.asarray(gids, dtype=np.int64)
     order = np.argsort(gids)
     sg = gids[order]
@@ -409,6 +414,7 @@ def tile_local_km2(tiles_dir: Path, gids: np.ndarray, strip_rows: int = 1024, wo
             for r0 in range(0, ds.height, strip_rows):
                 a = ds.read(1, window=Window(0, r0, ds.width, min(strip_rows, ds.height - r0))).ravel()
                 v, c = np.unique(a[a >= 0], return_counts=True)
+                v = gmap(v)
                 k = np.searchsorted(sg, v)
                 ok = (k < len(sg)) & (sg[np.minimum(k, len(sg) - 1)] == v)
                 np.add.at(out, order[k[ok]], c[ok] * px)

@@ -287,11 +287,13 @@ def gap_blocks(land: np.ndarray, covered: np.ndarray, block: int) -> tuple[np.nd
     return lb, gb
 
 
-def tile_coverage(tile_dir: Path, layer, step_m: float = STEP_M, cell_m: float = GAP_CELL_M):
+def tile_coverage(tile_dir: Path, layer, step_m: float = STEP_M, cell_m: float = GAP_CELL_M, gid_map=None):
     """One national tile: per-reach line coverage, per-local-catchment cell counts by code, and the 1 km gap blocks
     of the cells the tile owns. Returns ``(reaches DataFrame, counts (n, ncodes+1), gid array, (land blocks, gap
     blocks, x0, y1, cell m2))``. The cell size is the raster's (8 m tiles: 64 m2 over the core; 1 m rebuild tiles:
-    10 m cells, 100 m2, over the box, each cell owned by one tile)."""
+    10 m cells, 100 m2, over the box, each cell owned by one tile). ``gid_map`` (``national.merged_gids``): the
+    cells of a gid the 1 m merge dropped count for the reach that took it (rows for receivers in another tile follow
+    the tile's own); the land and gap blocks keep every cell."""
     import pyogrio
     import rasterio
     import shapely
@@ -314,26 +316,44 @@ def tile_coverage(tile_dir: Path, layer, step_m: float = STEP_M, cell_m: float =
     shapes = [(s, c) for s, c in shapes if not s.is_empty]
     code = (rasterize(shapes, out_shape=shape, transform=tf, fill=-1, dtype="int16") if shapes
             else np.full(shape, -1, np.int16)).astype(np.int64)
-    n_local = int(max(rec["gid"].max() - base + 1 if len(rec) else 0, lc.max() - base + 1 if lc.max() >= 0 else 0))
-    counts = catchment_counts(lc, code, base, n_local, len(layer))
+    lm = gid_map(lc) if gid_map else lc
+    other = None                        # cells of a dropped gid whose receiver is in another tile
+    mx = int(lm.max())
+    if lm is not lc:
+        other = (lm >= 0) & (lm // SEG_BASE != base // SEG_BASE)
+        mx = int(np.max(lm, where=~other, initial=-1))
+    n_local = int(max(rec["gid"].max() - base + 1 if len(rec) else 0, mx - base + 1 if mx >= 0 else 0))
+    counts = catchment_counts(lm, code, base, n_local, len(layer))    # (other tiles' gids fall outside n_local)
+    gids = base + np.arange(n_local, dtype=np.int64)
+    if other is not None and other.any():
+        og, inv = np.unique(lm[other], return_inverse=True)
+        oc = np.bincount(inv * (len(layer) + 1) + code[other] + 1,
+                         minlength=len(og) * (len(layer) + 1)).reshape(len(og), len(layer) + 1)
+        counts, gids = np.vstack([counts, oc]), np.r_[gids, og]
+    del lm, other
     block = int(round(cell_m / abs(tf.a)))
     aligned = abs(x0 / cell_m - round(x0 / cell_m)) < 1e-6 and abs(y1 / cell_m - round(y1 / cell_m)) < 1e-6
     land, gap = (gap_blocks(lc >= 0, code >= 0, block) if aligned and shape[0] % block == 0 and shape[1] % block == 0
                  else (None, None))
-    gids = base + np.arange(n_local, dtype=np.int64)
     return rec, counts, gids, (land, gap, x0, y1, float(abs(tf.a * tf.e)))
 
 
-def reach_coverage(layer, tiles_dir: Path, out: Path | None = None, step_m: float = STEP_M, log=print):
+def reach_coverage(layer, tiles_dir: Path, out: Path | None = None, step_m: float = STEP_M, log=print,
+                   gid_map=None):
     """Per-reach coverage over every national tile, cached in ``<out>/reach_coverage.pkl``, plus the 1 km gap
-    grid (``<out>/gap_grid.npz``). Local catchment cells per survey code go to ``<out>/catchment_cells.npz``."""
+    grid (``<out>/gap_grid.npz``). Local catchment cells per survey code go to ``<out>/catchment_cells.npz`` (one
+    row per gid). Gids the 1 m merge dropped count for the reach that took them (``gid_map``, default
+    ``national.merged_gids`` of the tiles' root)."""
+    from .national import merged_gids
+
     out = out or default_dir()
+    gmap = merged_gids(Path(tiles_dir).parent) if gid_map is None else gid_map
     tiles = sorted(p for p in tiles_dir.iterdir() if (p / "segments_core.gpkg").exists())
     nc = len(layer)
     recs, cnts, gids, blocks, cell_m2 = [], [], [], [], set()
     t0 = time.time()
     for i, td in enumerate(tiles):
-        rec, counts, gid, blk = tile_coverage(td, layer, step_m)
+        rec, counts, gid, blk = tile_coverage(td, layer, step_m, gid_map=gmap)
         recs.append(rec)
         keep = counts.sum(axis=1) > 0
         cnts.append(counts[keep])
@@ -344,8 +364,13 @@ def reach_coverage(layer, tiles_dir: Path, out: Path | None = None, step_m: floa
             log(f"lidar: {i + 1}/{len(tiles)} tiles ({time.time() - t0:.0f}s)")
     r = pd.concat(recs, ignore_index=True)
     r = r[~r["gid"].duplicated()].reset_index(drop=True)
-    cg = np.concatenate(gids)
+    cg = np.concatenate(gids) if gids else np.zeros(0, np.int64)
     cc = np.concatenate(cnts).astype(np.int64) if cnts else np.zeros((0, nc + 1), np.int64)
+    ug, inv = np.unique(cg, return_inverse=True)
+    if len(ug) < len(cg):       # a gid counted in two tiles' rasters (a dropped gid's receiver): one row, summed
+        s = np.zeros((len(ug), cc.shape[1]), np.int64)
+        np.add.at(s, inv, cc)
+        cg, cc = ug, s
     if len(cell_m2) > 1:
         raise ValueError(f"local catchment rasters of several cell sizes under {tiles_dir}: {sorted(cell_m2)} m2")
     cm2 = cell_m2.pop() if cell_m2 else 64.0

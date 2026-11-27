@@ -215,6 +215,104 @@ def test_truncation_rasters_and_overlapping_vrt(tmp_path):
     assert "SimpleSource" in (root / "one.vrt").read_text()
 
 
+# --- rf-lxa.13: the gids the merge dropped (zero-length reaches) in the readers of local_catchment_core.tif
+A1, A2, A3, A4, A5 = (13224 * 10**6 + i for i in range(1, 6))     # q24y32
+B1 = 13225 * 10**6 + 1                                              # q25y32
+DROPPED = [[A3, A2], [A4, B1], [A5, -1]]     # into the reach below, into another tile's reach, lost
+
+
+def _dropped_root(tmp_path, merged=DROPPED):
+    """A 1 m root of two 20 x 20 tiles (10 m cells, 1 cell = 1e-4 km2) whose merge dropped A3 (into A2), A4 (into
+    B1, in the other tile) and A5 (lost). Tile A: rows 0-9 A1 | A2, rows 10-14 A3 | A4, rows 15-19 A5 | none;
+    tile B: B1 but its first row."""
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    root = _one_m_root(tmp_path)
+    pd.DataFrame({"gid": [A1, A2, B1], "truncated": [False, True, False]}).to_parquet(root / "network.parquet")
+    zl = {"n": len(merged), "merged": merged} if merged is not None else None
+    (root / "merge.json").write_text(json.dumps({"tiles": ["q24y32", "q25y32"]} | ({"zero_length": zl} if zl else {})))
+    a = np.full((20, 20), -1, np.int64)
+    a[:10, :10], a[:10, 10:], a[10:15, :10], a[10:15, 10:], a[15:, :10] = A1, A2, A3, A4, A5
+    b = np.full((20, 20), B1, np.int64)
+    b[0] = -1
+    raw = {}
+    for t, x0, v in (("q24y32", X0, a), ("q25y32", X0 + 200, b)):
+        d = root / "tiles" / t
+        d.mkdir(parents=True)
+        with rasterio.open(d / "local_catchment_core.tif", "w", driver="GTiff", height=20, width=20, count=1,
+                           dtype="int64", crs="EPSG:2193", transform=from_origin(x0, Y0 + 200, 10, 10),
+                           nodata=-1) as ds:
+            ds.write(v, 1)
+        raw[t] = v
+    return root, raw
+
+
+def test_gid_map_from_merge_json(tmp_path):
+    assert not national.merged_gids(tmp_path / "nowhere") and len(national.merged_gids(tmp_path / "nowhere")) == 0
+    old, _ = _dropped_root(tmp_path / "old", merged=None)     # a merge before rf-lxa.12: no zero_length section
+    a = np.array([[A3, -1]])
+    assert not national.merged_gids(old) and national.merged_gids(old)(a) is a
+    root, raw = _dropped_root(tmp_path / "new")
+    g = national.merged_gids(root)
+    assert len(g) == 3 and g.as_dict() == {A3: A2, A4: B1, A5: -1} and national.merged_gids(root) is g   # read once
+    out = g(raw["q24y32"])
+    assert out.dtype == np.int64 and (out[10:15, :10] == A2).all() and (out[10:15, 10:] == B1).all()
+    assert (out[15:] == -1).all() and (out[:10] == raw["q24y32"][:10]).all()
+    assert g(raw["q25y32"]) is raw["q25y32"] and g(np.zeros(0, np.int64)).size == 0   # nothing to map: as it is
+    assert g(np.array([A3, A1, 7], np.int64)).tolist() == [A2, A1, 7]
+    with national.using_root(root):
+        assert national.merged_gids().as_dict() == g.as_dict()
+    assert national.GidMap([[1, 2], [2, 3]]).as_dict() == {1: 3, 2: 3}     # chains followed to their end
+    assert national.GidMap([[1, 2], [2, 1]]).as_dict() == {1: -1, 2: -1}
+
+
+def test_readers_map_dropped_gids(tmp_path):
+    """Rain weights, the pixel local areas, the gauge locator, the GIS truncation mask and local-catchment mosaic
+    and the viewer lookups count a dropped gid's cells for the reach that took them (none for a lost one)."""
+    from river_finder import viewer_nz as V
+    from river_finder.rainfall.config import load_config
+    from river_finder.rainfall.validate import locate_gauges
+    from river_finder.rainfall.weights import build_weights, tile_paths
+    from river_finder.relink import tile_local_km2
+
+    root, raw = _dropped_root(tmp_path)
+    gmap = national.merged_gids(root)
+    table = pd.DataFrame({"gid": [A1, A2, B1], "down": [-1, -1, -1], "area_km2": [0.01, 0.015, 0.043],
+                          "region": ["R"] * 3, "lon": [176.0] * 3, "lat": [-38.2] * 3})
+    grid = load_config().grids["ecmwf"]
+    paths = tile_paths(root / "tiles")
+    old, s0 = build_weights(paths, table, [grid], strip_rows=8, log=lambda m: None)
+    new, s1 = build_weights(paths, table, [grid], strip_rows=8, gid_map=gmap, log=lambda m: None)
+    assert old["ecmwf"].npix.tolist() == [100, 100, 380] and s0["pixels_unknown_gid"] == 150
+    assert new["ecmwf"].npix.tolist() == [100, 150, 430] and s1["pixels_unknown_gid"] == 50   # A5: lost
+    assert s1["pixels_assigned"] == 680 and s1["gids_mapped"] == 3
+    np.testing.assert_allclose(new["ecmwf"].area_m2 / 1e6, table["area_km2"])      # pixel areas = local areas
+    np.testing.assert_allclose(np.asarray(new["ecmwf"].W.sum(axis=1)).ravel(), 1.0)
+    np.testing.assert_allclose(tile_local_km2(root / "tiles", table["gid"].to_numpy()), [0.01, 0.015, 0.043])
+    np.testing.assert_allclose(tile_local_km2(root / "tiles", table["gid"].to_numpy(), gid_map=national.GidMap()),
+                               [0.01, 0.01, 0.038])
+    # gauges on an A3 and an A4 cell, and on A5 (lost: the nearest catchment, A3's cells -> A2)
+    x = np.array([X0 + 25, X0 + 155, X0 + 25])
+    y = np.array([Y0 + 200 - 115, Y0 + 200 - 125, Y0 + 200 - 165])
+    assert locate_gauges(root / "tiles", x, y).tolist() == [A2, B1, A2]
+    with national.using_root(root):
+        tm = nz.truncation_rasters(root / "gis" / "truncated", log=lambda m: None)
+        lcp = nz.local_catchment_rasters(root / "gis" / "local_catchment", log=lambda m: None)
+    with rasterio.open(tm[0]) as ds:
+        m = ds.read(1)
+    assert (m[:15, 10:] == np.r_[[1] * 10, [0] * 5][:, None]).all()      # A2 and A3 truncated, A4 -> B1 not
+    assert (m[:10, :10] == 0).all() and (m[15:] == 255).all()
+    assert lcp == [root / "gis" / "local_catchment" / "q24y32.tif", root / "tiles" / "q25y32" /
+                   "local_catchment_core.tif"]
+    with rasterio.open(lcp[0]) as ds:
+        assert (ds.read(1) == gmap(raw["q24y32"])).all() and ds.nodata == -1 and ds.dtypes[0] == "int64"
+        assert "dropped_gids_mapped" in ds.tags()
+    fn = V.gid_lookup(np.array([A2, B1]), np.array([7, 9], np.uint8), gmap)
+    out = fn(None, raw["q24y32"])
+    assert (out[:15, 10:] == np.r_[[7] * 10, [9] * 5][:, None]).all() and (out[10:15, :10] == 7).all()
+    assert (out[15:] == 0).all() and (out[:10, :10] == 0).all()
+    assert (V.gid_lookup(np.array([A2]), np.array([7], np.uint8))(None, raw["q24y32"])[10:15, :10] == 0).all()
+
+
 def _card(mid, order, data=None, kind="logistic"):
     c = {"id": mid, "order": order, "kind": kind, "title": mid, "description": "", "created": "2026-11-27",
          "coef": {}, "intercept": 0.0, "features": [], "labels": {"variant": "all", "split": "s", "positives": 1}}

@@ -112,6 +112,81 @@ def using_root(d: Path):
             os.environ[NZ_ENV] = old
 
 
+class GidMap:
+    """Gids the 1 m merge dropped -> the gid that took their local area (rf-lxa.12, rf-lxa.13).
+
+    The merge takes the zero-length reaches out of the network (``nz1mmerge.drop_zero_length``): the first reach of
+    non-zero length below takes each one's local area, or none (``-1``: lost with it). ``merge.json``
+    ``zero_length.merged`` lists ``[dropped gid, gid that took it]``. The tiles' ``local_catchment_core.tif`` still
+    name the dropped gids, so every reader of those rasters maps its cells with this (``gmap(a)``): a dropped gid
+    becomes the gid that took it (``-1``, no catchment, when lost), every other value stays as it is. Empty (the
+    identity) for the 8 m scan and for merges before rf-lxa.12. Chains (a target that is itself dropped) are
+    followed to their end."""
+
+    def __init__(self, pairs=()):
+        d = {int(a): int(b) for a, b in pairs}
+        for a in list(d):
+            b, seen = d[a], {a}
+            while b in d and b not in seen:
+                seen.add(b)
+                b = d[b]
+            d[a] = -1 if b in seen else b
+        k = np.array(sorted(d), np.int64)
+        self.src = k
+        self.dst = np.array([d[int(x)] for x in k], np.int64)
+
+    def __len__(self) -> int:
+        return int(self.src.size)
+
+    def __bool__(self) -> bool:
+        return bool(self.src.size)
+
+    def as_dict(self) -> dict[int, int]:
+        return dict(zip(self.src.tolist(), self.dst.tolist(), strict=True))
+
+    def __call__(self, a: np.ndarray) -> np.ndarray:
+        """``a`` (gids, any shape; negative = none) with every dropped gid replaced. Returns ``a`` itself when no
+        cell holds one, else a new int64 array."""
+        a = np.asarray(a)
+        if not self.src.size or not a.size:
+            return a
+        hi = a.max()
+        if hi < self.src[0]:
+            return a
+        lo = np.min(a, where=a >= 0, initial=hi)
+        i0, i1 = int(np.searchsorted(self.src, lo, "left")), int(np.searchsorted(self.src, hi, "right"))
+        if i0 >= i1:
+            return a
+        k, v = self.src[i0:i1], self.dst[i0:i1]
+        m = (a >= k[0]) & (a <= k[-1])
+        sub = a[m].astype(np.int64)
+        j = np.minimum(np.searchsorted(k, sub), k.size - 1)
+        hit = k[j] == sub
+        if not hit.any():
+            return a
+        out = a.astype(np.int64, copy=True)
+        sub[hit] = v[j[hit]]
+        out[m] = sub
+        return out
+
+
+_GIDMAP_CACHE: dict[tuple[str, int], GidMap] = {}
+
+
+def merged_gids(root: Path | None = None) -> GidMap:
+    """The :class:`GidMap` of a national root (default ``nz_dir()``) from its ``merge.json`` ``zero_length.merged``;
+    the identity when the file or the section is missing (the 8 m scan, older merges). Read once per file version."""
+    p = Path(root if root is not None else nz_dir()) / "merge.json"
+    try:
+        key = (str(p.resolve()), p.stat().st_mtime_ns)
+    except OSError:
+        return GidMap()
+    if key not in _GIDMAP_CACHE:
+        pairs = (json.loads(p.read_text()).get("zero_length") or {}).get("merged") or []
+        _GIDMAP_CACHE[key] = GidMap(pairs)
+    return _GIDMAP_CACHE[key]
+
+
 def _post(url: str, params: dict, tries: int = 5) -> dict:
     data = urllib.parse.urlencode(params).encode()
     for i in range(tries):

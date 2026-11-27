@@ -59,14 +59,17 @@ def run_weights(cfg: RainConfig, families: list[str], log=print) -> dict[str, Pa
     """Build the weight matrices of ``families`` in one pass over the tiles; write .npz + .json."""
     import pandas as pd
 
+    from ..national import merged_gids
     from .weights import build_weights, tile_paths
 
     table = pd.read_pickle(cfg.segments_path)[TABLE_COLUMNS]
     paths = tile_paths(cfg.tiles_dir)
     if not paths:
         raise SystemExit(f"no */local_catchment_core.tif under {cfg.tiles_dir}")
-    log(f"{len(table)} catchments, {len(paths)} tiles, grids {', '.join(families)}")
-    built, stats = build_weights(paths, table, [cfg.grids[f] for f in families], log=log)
+    gmap = merged_gids(cfg.nz_data)    # gids the 1 m merge dropped (still in the rasters) -> the reach that took them
+    log(f"{len(table)} catchments, {len(paths)} tiles, grids {', '.join(families)}"
+        + (f", {len(gmap)} dropped gids mapped" if gmap else ""))
+    built, stats = build_weights(paths, table, [cfg.grids[f] for f in families], gid_map=gmap, log=log)
     out = {}
     for name, cw in built.items():
         p = cw.save(cfg.weights_path(name))
