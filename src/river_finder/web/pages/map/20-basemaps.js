@@ -31,6 +31,10 @@
   M.basemapAvailable = (b) => (!b.site || SITE) && (!b.key || !!KEY);
   /** Left out of the picker: topographic and aerial on a site built without a key (nothing to enable them). */
   M.basemapHidden = (b) => SITE && !!b.key && !KEY;
+  /** The base map a visitor starts on: the LINZ aerial photos where the site has them (built with a key), else the
+      terrain. A base map picked in the panel (prefs.basemapChosen) is kept from then on. */
+  M.defaultBasemap = () => (SITE && KEY ? "linz-aerial" : "terrain");
+  if (!M.prefs.basemapChosen) M.prefs.basemap = M.defaultBasemap();
   /** Photo base maps (dark imagery: overlays take a stronger tint). */
   M.isImagery = (id) => id === "satellite" || id === "linz-aerial";
   M.AERIAL_MIN_ZOOM = 13; // the zoom from which river lines fade on the aerial photos (50-rivers.js)
@@ -266,7 +270,7 @@
   }
   M.setBasemap = (id) => {
     const prevCatch = M.prefs.basemap.startsWith("catch");
-    M.prefs.basemap = id; M.savePrefs();
+    M.prefs.basemap = id; M.prefs.basemapChosen = true; M.savePrefs();
     applyBasemap();
     if (id.startsWith("catch") && (prevCatch || true)) redrawCatch();
     M.renderLegend?.();

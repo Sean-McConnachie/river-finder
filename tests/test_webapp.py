@@ -221,3 +221,34 @@ def test_aerial_basemap_only_with_a_basemaps_key(tmp_path, target, key):
         assert got["vis"]["bm-aerial"] and not got["vis"]["bm-sat"]  # the LINZ layer at every zoom, on its own
     else:
         assert picker["linz-aerial"] is False and "bm-aerial" not in got["sources"] and not got["vis"]["bm-aerial"]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+@pytest.mark.parametrize("target,key,prefs,want", [
+    ("site", "DUMMY", {}, "bm-aerial"),                                   # a new visitor: the LINZ aerial photos
+    ("site", "DUMMY", {"basemap": "terrain"}, "bm-aerial"),               # an old saved default, never picked
+    ("site", "DUMMY", {"basemap": "topo", "basemapChosen": True}, "bm-topo"),   # a picked base map stays
+    ("site", "", {}, "terrain"),                                          # no key: no aerial, terrain
+    ("artifact", "", {}, "terrain"),
+])
+def test_default_basemap_is_linz_aerial_where_the_site_has_it(tmp_path, target, key, prefs, want):
+    js = webapp.web_root().joinpath("pages/map/20-basemaps.js").read_text()
+    (tmp_path / "run.mjs").write_text(
+        "const out = { vis: {} };\n"
+        f"const RF = {{ config: {{ target: {json.dumps(target)}, basemapsKey: {json.dumps(key)} }},\n"
+        "  util: { debounce: (f) => f, toast() {} }, data: { regions: () => [] } };\n"
+        "globalThis.window = { RF };\n"
+        "globalThis.document = { querySelector: () => null };\n"
+        f"const M = RF.mapkit = {{ prefs: Object.assign({{ basemap: 'terrain', catch: {{}} }}, {json.dumps(prefs)}),\n"
+        "  onRegion() {}, onTheme() {}, token: () => '#888', isDark: () => false, savePrefs() {},\n"
+        "  addLayer() {}, vis: (id, on) => { out.vis[id] = on; },\n"
+        "  map: { addSource() {}, on() {}, getLayer: () => null, getSource: () => null } };\n"
+        f"(0, eval)({json.dumps(js)});\n"
+        "M.initBasemaps();\n"
+        "out.on = Object.keys(out.vis).filter((k) => out.vis[k] && k !== 'catch');\n"
+        "out.basemap = M.prefs.basemap;\n"
+        "console.log(JSON.stringify(out));\n")
+    r = subprocess.run(["node", str(tmp_path / "run.mjs")], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    got = json.loads(r.stdout)
+    assert got["on"] == [want]
