@@ -35,7 +35,9 @@ One tile is a 32 km core on the national grid (`nz.X0`, `nz.Y0`) with a 3 km hal
    sections read the unfilled DEM.
 5. **Route** at 2 m (`lidarpipe.route_lean`, REC2 border outlets), **accumulate** as uint32 cell counts, add the
    REC2 inflows at the box edge along their paths (held sparsely), take channels of 0.5 km2 and cut reaches every
-   ~250 m of 20 m-smoothed length.
+   ~250 m of 20 m-smoothed length. A link of 3-6 path cells (its cells and the confluence cell below) takes the
+   length of the cell path: the moving average would put all its vertices on one point, a reach of length 0 with no
+   profile (rf-lxa.12; tiles that ran before have them, and the merge drops them, `nz1m-merge.md`).
 6. **2 m pass**: each cell's first reach; per core reach the local sums (`local_km2`, mean and highest elevation,
    flat, hard rock, LiDAR and lake area) and the HAND counts at 1, 2, 5, 10 and 20 m; gorge depth (150 m maximum of
    the 10 m block maximum); seam distance; the 10 m local-catchment, HAND and area-code rasters, the 24 m hillshade.

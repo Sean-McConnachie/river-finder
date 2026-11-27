@@ -136,6 +136,32 @@ def test_reaches_cut_on_smoothed_length_and_local_areas():
     assert (lc10[lc10 >= 0] < len(R)).all() and (h10 < 255).any()
 
 
+def test_short_link_gets_its_cell_length_not_zero():
+    """rf-lxa.12: a tributary that reaches the threshold 3 cells above the confluence (a path of 4 cells) is not
+    smoothed to a point: its reach has the cell path's length and profile stations; the other links keep their
+    smoothed lengths."""
+    n = 40
+    d = np.full((n, n), 6, np.uint8)                       # south
+    d[n - 1, :] = 8                                        # outlets on the last row
+    d[20, 21:] = 3                                         # the tributary flows west into the main valley (column 20)
+    cnt = np.ones((n, n), np.uint32)
+    cnt[:, 20] = 1000 + np.arange(n)
+    cnt[20:, 20] += 200
+    cnt[20, 21:24] = [110, 105, 100]                       # >= 100 cells (the threshold) from column 23 on
+    cnt[20, 24:] = 50
+    tf = from_origin(0, 2 * n, 2, 2)
+    e = np.zeros(0, np.int64), np.zeros(0)
+    links, R = N.build_reaches(d, cnt, *e, tf, (0, 0, 2 * n, 2 * n), min_area_km2=100 * 4e-6, seg_len_m=250.0)
+    assert len(R) == 3 and (R["length_m"] > 0).all()
+    path_n = R["link"].map(lambda li: len(links[li]["path"]))
+    short = R[path_n == 4].iloc[0]
+    assert short["length_m"] == pytest.approx(6.0) and short["down_seg"] >= 0
+    for _, r in R[path_n > 6].iterrows():
+        assert r["length_m"] == pytest.approx(P.smooth_distance(links[r["link"]]["xy"], N.SMOOTH_M, N.CELL)[-1])
+    x, _, own = N.link_stations(links[short["link"]], R)
+    assert len(x) == 6 and (own == short["seg_id"]).all()
+
+
 def test_fill_holes_matches_fill_lakes_and_skips_the_sea():
     H = W = 64
     z = np.fromfunction(lambda r, c: 100 + 0.5 * r + 0.3 * c, (H, W)).astype(np.float32)
