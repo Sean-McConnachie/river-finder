@@ -49,8 +49,8 @@ or dropped; `tests/test_lidarpipe.py` checks the profile pieces. Dry run outputs
   `truncated_core.tif`, the relink logs, the reference-area pipeline (`data/<region>/`), the 64 km tile class, the
   column list of `models.national_table`, `lidar coverage`'s 8 m pixel size, and cards v1-v4 (same column names, new
   definitions). See [What consumers lose](#what-consumers-lose-or-must-change).
-- **Open questions for the user**: 10, listed at the end (reference areas, cards v1-v4, optional rasters, section
-  spacing, the 1 m DSM, reach length, output root, line tolerance, the proposed extra fields, the step definition).
+- **Decisions** (2026-11-27): listed at the end. No DSM read; v5 card; the reference pipeline is retired after one
+  comparison; output goes to `data/nz1m/`.
 
 ## What runs where (stages)
 
@@ -608,26 +608,24 @@ match and names, LINZ names and `linz_dist_m`, geology, survey and year, `sinuos
 6. `external attach`, `hydro attach`. 7. `ml table`, CV, card v5. 8. `nz viewer`, `models viewer`, `web data`. 9. `rain
 weights`, `rain zones`, network, `rain inputs` (refresh the `rain-inputs` branch). 10. `web build`, Pages.
 
-## Open questions for the user
+## Decisions (2026-11-27)
 
-1. **Reference areas**: retire the per-region 5 m pipeline (`river-finder run kaimai ...`, `data/<region>/`, the three
-   reference viewer entries) after the national run, or keep it as a regression check?
-2. **Cards v1-v4**: after the rebuild, drop them from the site (they stay with the archived 8 m rows), or re-score
-   them on the new rows (same weights, shifted percentiles)?
-3. **Optional rasters**: keep a 10 m HAND raster (+0.7 GB) and/or a 10 m DEM (+2.8 GB), so later valley and catchment
-   features need no 1 m re-read?
-4. **Sections**: every 25 m (5.4 GB LiDAR reaches, 6.3 GB with the fallback) or 50 m (half; seven eighths of the
-   gain, rf-lxa.4)? Store sections on fallback reaches?
-5. **1 m DSM**: read the DSM in the same pass for canopy fields? It adds a second dataset's reads near the channels.
-6. **Proposed extras** (cheap, only possible in the tile job): HAND widths at 1, 2, 10 and 20 m, `local_lake_km2` /
-   `upstream_lake_frac`. Keep them?
-7. **Reach length**: cut reaches at 250 m of smoothed length (~+25 % reaches against today) or of D8 path as today
-   (~+43 % in the dry-run box)?
-8. **Output root**: build into `data/nz1m/` and switch `nz_dir()` when it is ready (today's site keeps working), or
-   replace `data/nz/`?
-9. **Line tolerance**: 1 m (~1.5 GB of lines) or 2 m (~1.0 GB)?
-10. **Steps**: is the definition above right for whitewater (1 m minimum, 4 m window, 1 m above a 100 m gradient)? It
-    is recomputable from the profiles, so this can also be settled after the pass.
+The user answered questions 1, 2 and 5. The others take the default shown, and can be changed before the run.
+
+1. **Reference areas** (user): compare the 1 m national results with the old reference outputs once, then retire the
+   per-region 5 m pipeline and the three reference viewer entries.
+2. **Cards v1-v4** (user): train a new card (v5) on the 1 m data and make it the site default. v1-v4 stay as archived
+   history with their 8 m scores. They are not re-scored.
+3. **Optional rasters** (default): keep the 10 m HAND raster (+0.7 GB). Do not keep the 10 m DEM.
+4. **Sections** (default): every 25 m, including the fallback reaches. Fallback sections are flagged by `dem_source`.
+5. **1 m DSM** (user): not read. The pass covers terrain only, with no canopy fields.
+6. **Proposed extras** (default): keep the HAND widths at 1, 2, 10 and 20 m and `local_lake_km2` /
+   `upstream_lake_frac`.
+7. **Reach length** (default): cut reaches at 250 m of smoothed length.
+8. **Output root** (default): build into `data/nz1m/`, then switch `nz_dir()` when it is ready. Today's site keeps
+   working until then.
+9. **Line tolerance** (default): 1 m, to stay aligned with the aerial photos.
+10. **Steps** (default): keep the definition above. Tune it after the pass from the stored profiles.
 
 ## Reproduce
 
