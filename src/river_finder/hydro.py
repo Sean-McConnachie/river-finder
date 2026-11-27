@@ -223,7 +223,7 @@ def snap(f: pd.DataFrame, cfg: HydroConfig, index=None) -> list[Snap]:
     f = _prep(f)
     idx = index if index is not None else _Index(f)
     x, y = f["x"].to_numpy(), f["y"].to_numpy()
-    rn = f["rnorm"].to_numpy()
+    rn = idx.rnorm   # the names the index matched with (a cached rnorm column can predate norm_river)
     out = []
     for p in cfg.points():
         r = idx.nearest((p.lon, p.lat), p.river, max_m=cfg.snap_any_m, named_m=cfg.snap_named_m)

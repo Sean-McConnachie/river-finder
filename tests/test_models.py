@@ -135,6 +135,61 @@ def test_map_section_name_rule_keeps_one_valley():
     assert section_record(m.section, [1], "put-in to take-out")["dropped"] is None
 
 
+def test_norm_river_forks_and_aliases():
+    # the kind of water, macrons and parentheses still do not matter; fork words go to river_side
+    assert M.norm_river("Kaitūna R.") == M.norm_river("Kaituna Stream") == "kaituna"
+    assert M.norm_river("Matukituki River East Branch") == M.norm_river("Matukituki River (West)") == "matukituki"
+    assert M.river_side("Matukituki River East Branch") == M.river_side("Matukituki River (East)") == "east"
+    assert M.river_side("North Branch Temple Stream") == "north"
+    assert M.river_side("North East Gorge Stream") == "east north"
+    assert M.river_side("Kaituna River") == "" and M.river_side("Westland Creek") == ""
+    # a name made only of such words keeps them (it was '', i.e. unnamed)
+    assert M.norm_river("Branch River") == M.norm_river("Branch Stream") == "branch"
+    assert M.norm_river("North River") == "north" and M.norm_river("Burn Creek") == "burn creek"
+    # guide spellings REC2 writes differently
+    assert M.norm_river("Routeburn River") == M.norm_river("Route Burn")
+    assert M.norm_river("Tauwharenikau River") == M.norm_river("Tauherenikau River")
+    assert M.norm_river("Hangatuha (Stony River)") == M.norm_river("Stony River")
+    assert list(M.same_side("south", ["", "south", "north", "north south"])) == [True, True, False, False]
+    assert M.same_side("", ["north", "south"]).all()
+
+
+def _forks():
+    """'Temple Stream' (rows 0-2, draining east) fed by 'North Branch Temple Stream' (rows 3-4, from the north) and
+    'Temple Stream South Branch' (rows 5-6, from the south)."""
+    x0, y0 = 1_850_000.0, 5_800_000.0
+    xs = [x0, x0 + 250, x0 + 500, x0 - 500, x0 - 250, x0 - 500, x0 - 250]
+    ys = [y0, y0, y0, y0 + 1000, y0 + 500, y0 - 1000, y0 - 500]
+    f = pd.DataFrame({"river": ["Temple Stream"] * 3 + ["North Branch Temple Stream"] * 2
+                      + ["Temple Stream South Branch"] * 2,
+                      "area_km2": [10, 11, 12, 3, 4, 3.5, 4.5], "length_m": 250.0, "grad_s": 30.0,
+                      "down": [1, 2, -1, 4, 0, 6, 0], "guide_region": "Waikato"})
+    return M._finish(f, np.array(xs), np.array(ys)), xs, ys
+
+
+def test_map_section_keeps_the_named_fork():
+    f, xs, ys = _forks()
+    idx = M._Index(f)
+    # a put-in placed by the north fork: 'South Temple Stream' never snaps to the north fork (the main stem is nearer
+    # than the south fork); the old match took the north fork
+    pi, to = _LL.transform(xs[3], ys[3] - 100), _LL.transform(xs[2], ys[2])
+    rows, how = M.map_section(f, Section("Waikato", "South Temple Stream", "runnable", put_in=pi, take_out=to), idx)
+    assert list(rows) == [0, 1, 2] and how == "put-in to take-out"
+    rows, how = M.map_section(f, Section("Waikato", "Temple Stream", "runnable", put_in=pi, take_out=to), idx)
+    assert list(rows) == [3, 4, 0, 1, 2]                                  # no fork named: any fork, as before
+    # the name rule: the named fork and the main stem, or one fork of the two when none is named
+    rows, how = M.map_section(f, Section("Waikato", "Temple Stream (South)", "runnable"), idx)
+    assert list(rows) == [0, 1, 2, 5, 6] and how == "name"
+    rows, how = M.map_section(f, Section("Waikato", "Temple Stream", "runnable"), idx)
+    assert len(rows) == 5 and how == "name (1 of 2 branches)"
+    # a fork named in the section title, when the river name has none
+    s = Section("Waikato", "Temple Stream", "runnable", extra={"section": "North Branch to the road end"})
+    assert M.section_side(s) == "north" and list(M.map_section(f, s, idx)[0]) == [0, 1, 2, 3, 4]
+    # a point that snaps to another river uses that name's fork words
+    s.extra["take_out_river"] = "Temple Stream South Branch"
+    assert M.section_side(s, "take_out") == "south" and M.section_side(s, "put_in") == "north"
+
+
 def test_split_keeps_rivers_whole():
     f, xs, ys = _frame()
     secs = [Section("Waikato", "Alpha River", "runnable", put_in=_LL.transform(xs[0], ys[0]),

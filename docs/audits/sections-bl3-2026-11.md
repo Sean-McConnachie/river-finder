@@ -163,3 +163,39 @@ and length) would fix them.
 The labels feed card v5 when `river-finder nz1m finish` runs (docs/nz1m-finish.md). Old splits and
 cards are frozen; river keys can change where a put-in moved to another guide region, so use a new
 split for the retrain.
+
+## Follow-up: fork names (rf-r4a, 2026-11-27)
+
+`models.norm_river` drops the kind of water, macrons, parentheses and the fork words (north, south, east,
+west, left, right, middle, branch), so "Matukituki River East Branch", "Matukituki River (West)" and
+"Matukituki River" share one name. That stays: it is what lets a guide's "Matukituki" find REC2's branches.
+What changed:
+
+- **Fork words.** `models.river_side` keeps them ("east"). A section whose river name names a fork
+  ("Matukituki River (East)", "South Temple Stream", "West Akatarawa"), or whose title does ("West Branch
+  Waikaia", "North Branch (Johnson Hut to Forks)"), matches reaches of that fork or of the main stem, never
+  another fork (`models.section_side`, `same_side`). Its points cannot snap to the other fork and the name
+  rule does not take it. A section with no fork word matches every fork, as before.
+- **Names made only of such words** ("Branch River", "North Stream", "Middle Creek") normalised to "", so
+  they counted as unnamed. They now keep the words ("branch"). `_Index` builds its names from `river` with
+  this code, not from the cached `rnorm` column, so today's table gets the fix too. Hydro points snap as
+  before (all 75 checked).
+- **Aliases** (`models.RIVER_ALIASES`) for guide spellings REC2 writes differently: Routeburn / Route Burn,
+  Tauwharenikau / Tauherenikau, Hangatuha (Stony River) / Stony River. Not Makawhio / "Jacobs (Makawhio)
+  River": REC2's name stops 2.5 km above the SH6 take-out, so the take-out would snap 2.5 km up the river
+  (9.6 km instead of 13.3 km, stated 15 km).
+
+Tests: `tests/test_models.py::test_norm_river_forks_and_aliases`, `test_map_section_keeps_the_named_fork`.
+
+On today's 8 m table 3 of 346 sections change, none for the worse: Tauwharenikau (same reaches, now
+put-in to take-out instead of walked towards the take-out) and Matukituki East and West (same reaches; the
+other fork is no longer a candidate, so the name rule drops 0.5 and 0 km instead of 10.1 and 7.7 km). Most
+fork mix-ups the issue saw (South Temple on the North Branch, the Matukituki forks) were already fixed by
+rf-bl3's points; the rule keeps them from coming back when a point is rough. The 1 m sample does not change.
+
+**Not done: splitting same-valley pieces into separate sections.** After rf-bl3 the Grey and the Waitara are
+placed by their points, not by name. Same-valley pieces more than 10 km apart remain only on the Hokianga
+Waima and the Mangakahia: in both, a 0.7 km piece of the big river 12.5 km below the run (430 to 510 km2,
+near the Waima's mouth). As separate sections they would label lowland river as runs, so the name rule
+still keeps one path. The Waima's other dropped piece (11.7 km) is another Waima that drains to the
+Northern Wairoa. The extents of these reference runs still need the user.

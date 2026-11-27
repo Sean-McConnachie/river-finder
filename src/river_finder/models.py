@@ -67,16 +67,51 @@ def _rslug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower().replace("'", "")).strip("-")
 
 
-def norm_river(name) -> str:
-    """'Kaituna River' / 'kaituna' / 'Kaitūna R.' -> 'kaituna' (for matching research names to REC2)."""
+_KIND = r"river|stream|creek|burn|r|str|ck|awa|the"
+_SIDE = ("north", "south", "east", "west", "left", "right", "middle")   # words that tell a river's forks apart
+# guide spellings that REC2 writes differently (normalised guide name -> normalised REC2 name)
+RIVER_ALIASES = {
+    "routeburn": "route",                     # "Routeburn River" / "Route Burn"
+    "tauwharenikau": "tauherenikau",          # packraftingtrips.nz / REC2 "Tauherenikau River"
+    "hangatuha": "stony",                     # "Hangatuha (Stony River)" / REC2 "Stony River"
+    # not "makawhio" -> "jacobs" (REC2 "Jacobs (Makawhio) River"): REC2's name stops 2.5 km above the SH6 take-out,
+    # so the take-out would snap up to where the name ends (rf-r4a)
+}
+
+
+def _plain(name) -> str:
     s = str(name or "").lower()
     for a, b in zip("āēīōū", "aeiou", strict=True):
         s = s.replace(a, b)
-    s = re.sub(r"\([^)]*\)", " ", s)
-    s = re.sub(r"[^a-z ]", " ", s)
-    s = re.sub(r"\b(river|stream|creek|burn|r|str|ck|awa|the|branch|north|south|east|west|left|right|true|"
-               r"upper|lower|middle)\b", " ", s)
-    return re.sub(r"\s+", " ", s).strip()
+    return s
+
+
+def norm_river(name) -> str:
+    """'Kaituna River' / 'kaituna' / 'Kaitūna R.' -> 'kaituna' (for matching research names to REC2). Drops the
+    kind of water, parentheses, and the fork words ('Matukituki River East Branch' -> 'matukituki'; the fork is
+    ``river_side``); keeps them when the name is nothing else ('Branch River' -> 'branch'). Guide spellings that
+    REC2 writes differently map to REC2's (``RIVER_ALIASES``: 'Routeburn River' -> 'route', as 'Route Burn')."""
+    s = re.sub(r"[^a-z ]", " ", re.sub(r"\([^)]*\)", " ", _plain(name)))
+    out = re.sub(rf"\b({_KIND}|branch|true|upper|lower|{'|'.join(_SIDE)})\b", " ", s)
+    if not out.strip():   # nothing but such words ('Branch River', 'North Stream', 'Burn Creek')
+        kept = re.sub(rf"\b({_KIND})\b", " ", s)
+        out = kept if kept.strip() else s
+    out = re.sub(r"\s+", " ", out).strip()
+    return RIVER_ALIASES.get(out, out)
+
+
+def river_side(name) -> str:
+    """The fork words of a river name, which ``norm_river`` drops: 'Matukituki River East Branch' and
+    'Matukituki River (East)' -> 'east', 'North Branch Temple Stream' -> 'north', 'Kaituna River' -> ''."""
+    words = re.sub(r"[^a-z ]", " ", _plain(name)).split()
+    return " ".join(sorted({w for w in words if w in _SIDE}))
+
+
+def same_side(want: str, side) -> np.ndarray:
+    """Which reaches (their ``river_side``) a name with fork words ``want`` may match: the same fork words, or
+    none (the main stem, which REC2 often names without them). A name without fork words matches every fork."""
+    side = np.asarray(side, dtype=object)
+    return np.ones(len(side), dtype=bool) if not want else (side == "") | (side == want)
 
 
 def _upstream_main(down: np.ndarray, area: np.ndarray) -> np.ndarray:
@@ -198,17 +233,33 @@ class _Index:
         self.tree = cKDTree(np.column_stack([f["x"].to_numpy()[self.ok], f["y"].to_numpy()[self.ok]]))
         self.down = f["down"].to_numpy()
         self.up = f["up"].to_numpy()
-        self.rnorm = f["rnorm"].to_numpy()
         self.xy = np.column_stack([f["x"].to_numpy(), f["y"].to_numpy()])
-        codes, uniq = pd.factorize(f["rnorm"])
+        # names from ``river`` with this code's norm_river (a cached ``rnorm`` column can predate it) and fork words
+        if "river" in f:
+            codes, uniq = pd.factorize(f["river"].fillna("").astype(str))
+            self.rnorm = np.array([norm_river(u) for u in uniq] or [""], dtype=object)[codes]
+            self.side = np.array([river_side(u) for u in uniq] or [""], dtype=object)[codes]
+        else:
+            self.rnorm = f["rnorm"].fillna("").to_numpy(object)
+            self.side = np.full(len(f), "", dtype=object)
+        codes, uniq = pd.factorize(self.rnorm)
         order = np.argsort(codes, kind="stable")
         bounds = np.searchsorted(codes[order], np.arange(len(uniq) + 1))
         self.by_name = {u: order[bounds[i]:bounds[i + 1]] for i, u in enumerate(uniq) if u}
 
-    def nearest(self, lonlat, river: str, max_m: float = 700.0, named_m: float = 3000.0) -> int:
+    def named(self, river: str, side: str | None = None) -> np.ndarray:
+        """Rows with the river's name (``norm_river``) on its fork (``same_side``; ``side`` defaults to the fork
+        words of ``river`` itself)."""
+        r = self.by_name.get(norm_river(river)) if river else None
+        if r is None:
+            return np.array([], dtype=np.int64)
+        return r[same_side(river_side(river) if side is None else side, self.side[r])]
+
+    def nearest(self, lonlat, river: str, max_m: float = 700.0, named_m: float = 3000.0,
+                side: str | None = None) -> int:
         x, y = _TO_NZTM.transform(*lonlat)
-        named = self.by_name.get(norm_river(river)) if river else None
-        if named is not None and len(named):
+        named = self.named(river, side)
+        if len(named):
             named = named[self.f["area_km2"].to_numpy()[named] >= 1.0]
             d = np.hypot(self.f["x"].to_numpy()[named] - x, self.f["y"].to_numpy()[named] - y)
             if len(d) and d.min() <= named_m:
@@ -240,7 +291,7 @@ class _Index:
 
 
 def _name_rows(f: pd.DataFrame, s: Section, idx: _Index) -> np.ndarray:
-    r = idx.by_name.get(norm_river(s.river), np.array([], dtype=np.int64))
+    r = idx.named(s.river, section_side(s))
     r = r[(f["grad_s"].to_numpy()[r] >= 10.0) & (f["area_km2"].to_numpy()[r] >= 2.0)]
     if s.bbox is not None:
         x0, y0, x1, y1 = s.bbox
@@ -261,14 +312,35 @@ def snap_river(s: Section, point: str) -> str:
     return s.river if v is None else str(v)
 
 
+_TITLE_SIDE = re.compile(rf"\b({'|'.join(_SIDE)})\s+(?:branch|fork)\b")
+
+
+def section_side(s: Section, point: str | None = None) -> str:
+    """The fork a section (or its ``point``) is on (``river_side``): the fork words of its river name
+    ('Matukituki River (East)', 'South Temple Stream'), else a fork its title names ('West Branch Waikaia',
+    'North Branch (Johnson Hut to Forks)'). A point that snaps to another river (``snap_river``) uses that name's.
+    The section then matches reaches of that fork or of the main stem, never of another fork."""
+    river = snap_river(s, point) if point else s.river
+    side = river_side(river)
+    if side or river != s.river:
+        return side
+    m = _TITLE_SIDE.search(_plain((s.extra or {}).get("section")))
+    return m.group(1) if m else ""
+
+
+def _snap(idx: _Index, s: Section, point: str) -> int:
+    return idx.nearest(getattr(s, point), snap_river(s, point), side=section_side(s, point))
+
+
 def map_section(f: pd.DataFrame, s: Section, idx: _Index, info: dict | None = None) -> tuple[np.ndarray, str]:
     """The frame rows a section covers and how they were placed. Put-in and take-out (or outlet and
     length) follow the network; without a path, the name rule takes the steep reaches with the river's
     name and keeps one downstream path of them (``labels.one_path``: "name (1 of 3 pieces)"). ``info``,
     if given, receives what the name rule dropped (pieces, branches, dropped reaches and km). Points snap
-    to the nearest reach with the river's name within 3 km, or to another name (``snap_river``)."""
+    to the nearest reach with the river's name within 3 km, or to another name (``snap_river``); a name with
+    fork words matches its fork and the main stem only (``section_side``)."""
     if s.put_in and s.take_out:
-        a, b = idx.nearest(s.put_in, snap_river(s, "put_in")), idx.nearest(s.take_out, snap_river(s, "take_out"))
+        a, b = _snap(idx, s, "put_in"), _snap(idx, s, "take_out")
         length = s.extra.get("length_km") if s.extra else None
         path = (idx.walk(a, b) or idx.walk(b, a)) if a >= 0 and b >= 0 else []
         if path and (len(path) > 1 or not length):
@@ -283,7 +355,7 @@ def map_section(f: pd.DataFrame, s: Section, idx: _Index, info: dict | None = No
                 return np.array(path, dtype=np.int64), "put-in towards take-out"
     length = s.extra.get("length_km") if s.extra else None
     if s.put_in and length:
-        a = idx.nearest(s.put_in, snap_river(s, "put_in"))
+        a = _snap(idx, s, "put_in")
         if a >= 0:
             out, km, cur = [], 0.0, a
             L = f["length_m"].to_numpy()
@@ -293,7 +365,7 @@ def map_section(f: pd.DataFrame, s: Section, idx: _Index, info: dict | None = No
                 cur = idx.down[cur]
             return np.array(out, dtype=np.int64), "put-in + length"
     if s.outlet and s.upstream_km:
-        a = idx.nearest(s.outlet, snap_river(s, "outlet"))
+        a = _snap(idx, s, "outlet")
         if a >= 0:
             out, km, cur = [], 0.0, a
             L = f["length_m"].to_numpy()
