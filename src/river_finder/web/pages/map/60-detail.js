@@ -146,31 +146,8 @@
 
   const section = (title, ...kids) => el("section", { class: "det-sec" }, el("h3", { text: title }), ...kids);
 
-  // Hydro-affected reaches (river_finder.webdata.write_hydro): <id>_hydro.json, optional.
-  const hydroFiles = new Map();
-  function hydroFile(id) {
-    if (!hydroFiles.has(id)) {
-      hydroFiles.set(id, fetch(`${id}_hydro.json`).then((res) => (res.ok ? res.json() : null)).then((H) => {
-        if (H) H.at = new Map(H.r.map(([m, c, sc]) => [m, [H.classes[c], H.schemes[sc]]]));
-        return H;
-      }).catch(() => null));
-    }
-    return hydroFiles.get(id);
-  }
+  // Hydro-affected reaches: RF.data.hydro(id) loads <id>_hydro.json (optional), RF.data.hydroOf summarises reaches.
   const HYDRO_PILL = { diverted: "Hydro-diverted", regulated: "Regulated flow", reservoir: "Hydro lake or dam" };
-  /** {cls, scheme, frac, note}: the hydro class over most of the flagged length of these reaches; null if none. */
-  function hydroOf(H, S, ms) {
-    if (!H || !H.at?.size) return null;
-    const by = new Map(); let all = 0, hit = 0;
-    ms.forEach((m) => {
-      all += S.len[m]; const h = H.at.get(m); if (!h) return;
-      hit += S.len[m]; const k = `${h[0]}|${h[1].id}`, cur = by.get(k);
-      if (cur) cur.len += S.len[m]; else by.set(k, { cls: h[0], scheme: h[1], len: S.len[m] });
-    });
-    if (!hit) return null;
-    const top = [...by.values()].sort((a, b) => b.len - a.len)[0];
-    return { cls: top.cls, scheme: top.scheme, frac: hit / all, note: H.notes[top.cls] || "" };
-  }
   function hydroNote(hy) {
     const part = hy.frac < 0.95 ? `${Math.round(100 * hy.frac)}% of this stretch: ` : "";
     const src = (hy.scheme.src || []).filter((u) => /^https?:\/\//i.test(u))[0];
@@ -192,7 +169,7 @@
     const score = sc?.pct?.length ? { pct: st.score,
       model: sc.fallback ? "Pooled regression (this build has no per-model scores)" : RF.models.get(RF.state.model)?.title || RF.state.model } : null;
     const onSection = f.kind !== "section" ? R.sections.find((x) => ms.some((m) => x.m.includes(m))) : null;
-    const hy = hydroOf(await hydroFile(R.id), S, f.kind === "reach" ? [f.seg] : ms);
+    const hy = RF.data.hydroOf(await RF.data.hydro(R.id), S, f.kind === "reach" ? [f.seg] : ms);
     const air = M.aerial ? M.aerial.of(await M.aerial.file(R.id), S, ms) : null; // 47-aerial.js; null without data
     const name = f.kind === "section" ? sec.river : f.name;
 

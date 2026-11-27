@@ -1,5 +1,5 @@
 /* RF.data and RF.models: the regions index, region loading (JSON + packed reaches + optional
-   waterfalls/access), per-model scores and the model registry. Owner: core.
+   waterfalls/access), per-model scores, hydro-affected reaches and the model registry. Owner: core.
    Files are the ones `river-finder nz viewer` / `models viewer` / `external attach` write
    (see viewer_nz.py, models.py, external.py); this reads them unchanged. */
 (() => {
@@ -130,9 +130,40 @@
       if (!gaugesP) gaugesP = fetch("gauges.json").then((r) => (r.ok ? r.json() : { flow: [], rain: [] })).catch(() => ({ flow: [], rain: [] }));
       return gaugesP;
     },
+    /** Hydro-affected reaches of a region (river_finder.webdata.write_hydro): <id>_hydro.json, optional, fetched once.
+     *  Resolves to the file ({classes, exclude, notes, schemes, r: [[reach, class, scheme, share %]]}) plus
+     *  at: Map(reach → [class name, scheme record, share %]); null when the region has no file. Never rejects. */
+    hydro(id) {
+      if (!hydroP.has(id)) {
+        hydroP.set(id, fetch(`${id}_hydro.json`).then((res) => (res.ok ? res.json() : null)).then((H) => {
+          if (!H || !Array.isArray(H.r)) return null;
+          H.at = new Map(H.r.map(([m, c, s, share]) => [m, [H.classes[c], H.schemes[s], share ?? 100]]));
+          return H;
+        }).catch(() => null));
+      }
+      return hydroP.get(id);
+    },
+    /** The hydro class over most of the flagged length of a set of reaches (S = Region.segments, H from hydro()):
+     *  {cls, scheme, frac (flagged share of the length, 0-1), note, out (class in H.exclude: not a new lead)}; null
+     *  when none is flagged. Pages pick their own threshold on frac (Top rivers and the details pill: 0.5). */
+    hydroOf(H, S, members) {
+      if (!H?.at?.size || !S) return null;
+      const by = new Map(); let all = 0, hit = 0;
+      (members || []).forEach((m) => {
+        const L = S.len[m] || 0; all += L;
+        const h = H.at.get(m); if (!h) return;
+        hit += L; const key = `${h[0]}|${h[1]?.id}`, cur = by.get(key);
+        if (cur) cur.len += L; else by.set(key, { cls: h[0], scheme: h[1], len: L });
+      });
+      if (!hit || !all) return null;
+      const top = [...by.values()].sort((a, b) => b.len - a.len)[0];
+      return { cls: top.cls, scheme: top.scheme, frac: hit / all, note: H.notes?.[top.cls] || "", out: (H.exclude || []).includes(top.cls) };
+    },
     decodeSegments,
   };
   let gaugesP = null;
+  const hydroP = new Map();   // region id → Promise<hydro file | null>
+
   // ---------- model registry (models/*.json cards, models/evaluations.json) ----------
   const REG = P.registry || null, CARDS = REG ? REG.models : [];
   RF.models = {

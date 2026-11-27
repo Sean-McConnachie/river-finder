@@ -151,16 +151,44 @@ Stable unless noted. Anything not listed here is internal.
 | `RF.data.release(id)` | forget a loaded region so its memory can be freed (not the one open on the map); `region(id)` loads it again |
 | `RF.data.gauges()` → `Promise<{flow, rain, sources}>` | national river-flow gauges `[site, name, lat, lon, council, operator, funder, area, years, maf, q10, q100]` and rain gauges `[agent, name, lat, lon, owner]` |
 | `RF.data.scores(regionId, modelId)` → `Promise<{pct, role}>` | per-reach percentile (0-100) for a model; `role` bits 0-1: 1 trained on, 2 test river; bit 2: on a guide section |
+| `RF.data.hydro(id)` → `Promise<Hydro \| null>` | hydro-affected reaches of a region (`<id>_hydro.json`, below), fetched once; null when the region has no file; never rejects |
+| `RF.data.hydroOf(H, S, members)` | `{cls, scheme, frac, note, out}`: the hydro class over most of the flagged length of a set of reaches, `frac` the flagged share of their length (0-1), `out` the class is in `H.exclude`; null when none is flagged. Top rivers and the details pill use it from `frac >= 0.5` |
 
 Catchment area: `Region.area` is an 8-bit log code (see `areacode.py`, decoded with `Region.code`):
 every land cell has an area, from 2e-5 km² (one cell) to 30 000 km².
 
 `Region` has `id, title, description, bounds, segments` (below), `sections` (known whitewater
-sections placed on reaches: `{id, river, section, grade, gmin, gmax, src, srcName, desc, putIn, takeOut,
-putInDesc, takeOutDesc, coords, gauge, flow, len, time, hazards, links: [{t, u}], how, m: [reach]}`,
-see `webdata.py`), `falls`
+sections placed on reaches: `{id, river, section, grade, gnum, gmin, gmax, src, srcName, desc, putIn, takeOut,
+putInDesc, takeOutDesc, coords, gauge, flow, len, time, hazards, deaths, popularity, status, links: [{t, u}], how,
+dropped, gap, m: [reach]}`, see `webdata.py`), `falls`
 (`[lon, lat, name, height_m | null, reach | -1, kind ("r" = rapids)]`), `runs` (reference markers),
 `rec2` (NIWA REC2 main rivers), `stats`, and image fields used by the map.
+
+Sections placed by river name keep one path down the river (`labels.one_path`):
+
+- `dropped`: null when nothing was left out, else `{pieces, branches, km}`: how many other pieces (same-name
+  stretches that do not join this one, e.g. a stream with the same name in another valley) and other branches
+  (the other fork, where the branches share the name) were left out, and their length. The map shows such a
+  section as "Approximate: placed by river name, 1 of N pieces kept, X km left out".
+- `gap`: reach indices (often empty) of the flatter or smaller reaches between the section's pieces along that
+  path. They are not part of the section (`m`), so they are not in its numbers, but they join its pieces into
+  one line: the map draws them dashed, counts pieces across them and runs the profile along the whole line.
+
+Hydro-affected reaches: `<region>_hydro.json` (`webdata.hydro_record`, from `hydro.py` and `config/hydro.toml`;
+`docs/hydro.md`), optional, flagged reaches only:
+
+```json
+{"classes": ["", "diverted", "regulated", "reservoir"], "exclude": ["diverted", "reservoir"],
+ "notes": {"diverted": "Hydro-diverted: most of the natural flow is taken out upstream, ...", ...},
+ "schemes": [{"id": "kaimai", "name": "Kaimai hydro scheme", "operator": "Manawa Energy (formerly Trustpower)", "note": "...",
+              "src": ["https://www.manawaenergy.co.nz/kaimai-power-scheme", ...]}, ...],
+ "r": [[742, 1, 2, 95], [743, 1, 2, 95], ...]}
+```
+
+`r`: `[reach, class index, scheme index, share %]` sorted by reach (viewer order, as `Region.segments`); share is
+the share of the natural flow behind the class (100 for reservoir reaches). `exclude`: the classes the lists leave
+out of new leads (Top rivers files those runs under "Hydro-affected"). `RF.data.hydro` adds
+`at: Map(reach → [class name, scheme record, share %])`.
 
 `Region.segments` (`S`) is columnar: one entry per reach (about 250 m of channel), index = reach id.
 

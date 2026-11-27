@@ -74,31 +74,11 @@
     }
     return m;
   }
-  // ---------- hydro-affected reaches (river_finder.webdata.write_hydro): <id>_hydro.json, optional ----------
-  const hydroFiles = new Map();   // region id → Promise<{classes, exclude, notes, schemes, at: Map(reach → [class, scheme])} | null>
-  function hydroFile(id) {
-    if (!hydroFiles.has(id)) {
-      hydroFiles.set(id, fetch(`${id}_hydro.json`).then((res) => (res.ok ? res.json() : null)).then((H) => {
-        if (!H) return null;
-        H.at = new Map(H.r.map(([m, c, s]) => [m, [H.classes[c], H.schemes[s]]]));
-        return H;
-      }).catch(() => null));
-    }
-    return hydroFiles.get(id);
-  }
+  // ---------- hydro-affected reaches: RF.data.hydro(id) loads <id>_hydro.json (optional) ----------
   /** The hydro class covering most of a run's flagged length, when at least half the run is flagged (as ml.py). */
   function runHydro(H, S, members) {
-    if (!H || !H.at.size) return null;
-    const by = new Map(); let all = 0, hit = 0;
-    members.forEach((m) => {
-      const L = S.len[m]; all += L;
-      const h = H.at.get(m); if (!h) return;
-      hit += L; const key = `${h[0]}|${h[1].id}`, cur = by.get(key);
-      if (cur) cur.len += L; else by.set(key, { cls: h[0], scheme: h[1], len: L });
-    });
-    if (!all || hit / all < 0.5) return null;
-    const top = [...by.values()].sort((a, b) => b.len - a.len)[0];
-    return { cls: top.cls, scheme: top.scheme, frac: hit / all, note: H.notes[top.cls] || "", out: (H.exclude || []).includes(top.cls) };
+    const hy = RF.data.hydroOf(H, S, members);
+    return hy && hy.frac >= 0.5 ? hy : null;
   }
 
   /** Rows of one region: the run plus what the list shows about it. The section a run is matched to is the
@@ -130,7 +110,7 @@
     if (hit) return hit;
     const R = await RF.data.region(id);
     const sc = model ? await RF.data.scores(id, model) : null;
-    const H = await hydroFile(id);
+    const H = await RF.data.hydro(id);
     await yieldMain();   // the region was just decoded: let the page paint before the run finder runs
     const out = { model, params, items: itemsFor(R, RF.runs.find(R, { model: sc }), H), fallback: !!sc?.fallback };
     if (model === RF.state.model && params === RF.state.runParams) cache.set(id, out);
