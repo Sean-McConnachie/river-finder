@@ -250,3 +250,69 @@ def test_profile_metrics():
     assert P.steepest(s, zm, 100.0) == pytest.approx(10.0, abs=0.2)
     assert P.longest_flat(s, zm, 0.05) == pytest.approx(500, abs=6)
     assert np.isnan(P.steepest(s[:10], zm[:10], 100.0))
+
+
+def _creek():
+    """A 400 m profile at 2 % with a 3 m fall at 100 m (smeared over 4 m), a 0.6 m ledge at 200 m, and from 300 m
+    flattened treads with a 1.5 m riser at 350 m."""
+    s = np.arange(400.0)
+    z = 100.0 - 0.02 * s
+    z -= np.clip((s - 98) / 4, 0, 1) * 3.0
+    z -= np.where(s >= 200, 0.6, 0.0)
+    z[300:] = z[300]
+    z[350:] -= 1.5
+    w = np.zeros(400, np.uint8)
+    w[300:] = P.W_FLAT
+    return s, z, w
+
+
+def test_profile_steps_finds_falls_and_flags_risers():
+    s, z, w = _creek()
+    st = P.profile_steps(z, w)
+    assert [x["kind"] for x in st] == [P.STEP_BED, P.STEP_RISER]
+    fall, riser = st
+    assert 96 <= fall["s0"] <= 99 and fall["s1"] <= 104 and fall["h"] == pytest.approx(3.0, abs=0.15)
+    assert riser["s0"] == pytest.approx(349, abs=1) and riser["h"] == pytest.approx(1.5, abs=0.05)
+    assert P.profile_steps(100.0 - 0.02 * s) == []                     # a plain slope has no steps
+    assert P.profile_steps(100.0 - 0.4 * s) == []                      # nor an evenly steep headwater (40 %)
+    zn = z.copy()
+    zn[150:160] = np.nan                                                 # a gap does not make a step
+    assert len(P.profile_steps(zn, w)) == 2
+    wc = w.copy()
+    wc[95:110] = P.W_COARSE                                              # the fall on the 8 m fallback
+    assert P.profile_steps(z, wc)[0]["kind"] == P.STEP_COARSE
+
+
+def test_reach_profile_and_steps_fields():
+    s, z, w = _creek()
+    zm = P.running_min(z)
+    f = P.reach_profile(z[:300], zm[:301], w[:300])
+    assert f["z_top"] == pytest.approx(100.0) and f["z_bot"] == pytest.approx(z[300], abs=1e-6)
+    assert f["gradient_m_per_km"] == pytest.approx((100.0 - z[300]) / 300 * 1000, rel=1e-3)
+    assert f["steepest_50m_m_per_km"] > f["steepest_100m_m_per_km"] > f["steepest_200m_m_per_km"] > 20
+    assert not f["steep50_water"] and f["water_flat_share"] == 0.0
+    assert f["lidar_share"] == 1.0 and f["dem_source"] == "lidar" and f["dem_res_m"] == 1.0
+    g = P.reach_profile(z[300:], zm[300:], w[300:])
+    assert g["steep50_water"] and g["water_flat_share"] == 1.0 and g["longest_flat_m"] >= 49
+    wc = w[:300].copy()
+    wc[:150] = P.W_COARSE
+    assert P.reach_profile(z[:300], zm[:301], wc)["dem_source"] == "mixed"
+    r = P.reach_steps(P.profile_steps(z, w), drop_m=float(z[0] - z[-1]))
+    assert r["steps_n"] == 1 and r["drops_n"] == 1 and r["falls1m_n"] == 0 and r["risers_n"] == 1
+    assert r["step_max_m"] == pytest.approx(3.0, abs=0.15)
+
+
+def test_profile_store_roundtrip():
+    rng = np.random.default_rng(3)
+    reach = np.repeat([7, 9, 12], [5, 1, 300])
+    z = (500 + np.cumsum(-np.abs(rng.normal(0, 0.3, len(reach))))).astype(np.float32)
+    w = rng.integers(0, 4, len(reach)).astype(np.uint8)
+    z[[2, 10, 11, 305]] = np.nan                                         # missing inside, at a reach start and end
+    enc = P.encode_profiles(reach, z, w)
+    assert list(enc["gid"]) == [7, 9, 12] and list(enc["n"]) == [5, 1, 300]
+    assert [len(d) for d in enc["dz"]] == [4, 0, 299] and all(d.dtype == np.int16 for d in enc["dz"])
+    back = P.decode_profiles(enc)
+    ok = np.isfinite(z)
+    assert np.array_equal(back["reach"], reach) and np.isfinite(back["z"]).all()
+    assert np.allclose(back["z"][ok], z[ok], atol=0.0051)
+    assert np.array_equal(back["w"][ok], w[ok]) and (back["w"][~ok] == P.W_COARSE).all()

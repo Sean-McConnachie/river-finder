@@ -1135,3 +1135,180 @@ def longest_flat(s: np.ndarray, z: np.ndarray, tol: float = 0.05) -> float:
             i += 1
         best = max(best, s[j] - s[i])
     return float(best)
+
+
+# ---------------------------------------------------------------------------------------------- 1 m long profiles
+# Code of a profile station (rf-lxa.3, ``lidarspec.PROFILE_STORE``): the 1 m cell the station's height comes from
+# is bed or dry ground, hydro-flattened water or planar (interpolated) water; or there is no 1 m cell within 2 m and
+# the height is the 2 m grid's (the seam-corrected 8 m fallback, or a lake fill).
+W_BED, W_FLAT, W_PLANAR, W_COARSE = 0, 1, 2, 3
+STEP_BED, STEP_RISER, STEP_PLANAR, STEP_COARSE = 0, 1, 2, 3   # step kinds (``profile_steps``)
+
+
+def _ffill(z: np.ndarray) -> np.ndarray:
+    """NaN replaced by the last finite value before it (leading NaN by the first finite one); all NaN stays NaN."""
+    z = np.asarray(z, np.float64)
+    ok = np.isfinite(z)
+    if not ok.any():
+        return z.copy()
+    idx = np.where(ok, np.arange(len(z)), 0)
+    np.maximum.accumulate(idx, out=idx)
+    out = z[idx]
+    out[:np.argmax(ok)] = z[np.argmax(ok)]
+    return out
+
+
+def profile_steps(z: np.ndarray, w: np.ndarray | None = None, ds: float = 1.0, win: float = 4.0,
+                  min_slope: float = 0.25, excess: float = 1.0, trend: float = 100.0, min_h: float = 1.0,
+                  gap: float = 3.0, ctx: float = 10.0) -> list[dict]:
+    """Steps (falls, ledges, steep chutes) in a 1 m long profile ``z`` (downstream order, one station every ``ds``
+    m; the downstream running minimum is applied here) with water codes ``w`` (``W_*``).
+
+    A ``win`` m window (4 m: the lowest-cell window spreads a vertical face over ~4 m) is steep where the profile
+    drops at least ``min_slope * win`` in it (1 m) and at least ``excess`` m more than the local gradient over
+    ``trend`` m predicts: a step stands out from its own channel, so an evenly steep headwater has none. Steep
+    windows are trimmed to their metres steeper than max(``min_slope`` / 2, 1.5 x the local gradient), runs closer
+    than ``gap`` m are merged, and a step is a run that drops at least ``min_h``. Kind: ``STEP_RISER`` where both
+    ``ctx`` m above and below are mostly hydro-flattened water (a survey breakline between treads, not a fall),
+    ``STEP_PLANAR`` where the step itself is mostly interpolated water, ``STEP_COARSE`` where a station of it is not
+    on 1 m data (fallback, lake fill, a seam), else ``STEP_BED``. Returns one dict per step: station range
+    ``i0``-``i1``, ``s0``/``s1`` (m from the first
+    station), ``h`` (m), ``h_excess`` (m above the local gradient), ``len`` (m), ``slope_max`` (steepest 2 m, m/m),
+    ``z_top`` (m), ``kind``."""
+    zf = _ffill(running_min(_ffill(z)))
+    n = len(zf)
+    if n < 2 or not np.isfinite(zf).all():
+        return []
+    w = np.zeros(n, np.uint8) if w is None else np.asarray(w, np.uint8)
+    d = np.maximum(zf[:-1] - zf[1:], 0.0)
+    c = np.r_[0.0, np.cumsum(d)]
+    k = max(1, int(round(win / ds)))
+    i = np.arange(n - 1)
+    j = np.minimum(i + k, n - 1)
+    ht = max(1, int(round(trend / 2 / ds)))
+    lo, hi = np.maximum(i - ht, 0), np.minimum(i + ht, n - 1)
+    grad = (c[hi] - c[lo]) / ((hi - lo) * ds)                              # local gradient, m/m
+    drop = c[j] - c[i]
+    steep = (drop >= min_slope * win) & (drop - grad * (j - i) * ds >= excess)
+    cover = np.zeros(n + 1, np.int64)
+    np.add.at(cover, i[steep], 1)
+    np.add.at(cover, j[steep], -1)
+    on = (np.cumsum(cover)[:n - 1] > 0) & (d >= np.maximum(0.5 * min_slope, 1.5 * grad) * ds)
+    idx = np.flatnonzero(on)
+    if not len(idx):
+        return []
+    g = max(1, int(round(gap / ds)))
+    cut = np.flatnonzero(np.diff(idx) > g + 1)
+    starts = np.r_[idx[0], idx[cut + 1]]
+    ends = np.r_[idx[cut], idx[-1]] + 1
+    kc = max(1, int(round(ctx / ds)))
+    k2 = max(1, int(round(2.0 / ds)))
+    out = []
+    for a, b in zip(starts, ends, strict=True):
+        h = float(zf[a] - zf[b])
+        if h < min_h:
+            continue
+        x = np.arange(a, b)
+        sm = float(np.max(c[np.minimum(x + k2, b)] - c[x]) / (k2 * ds))
+        up, dn, mid = w[max(0, a - kc):a], w[b + 1:b + 1 + kc], w[a:b + 1]
+        if (mid == W_COARSE).any():
+            kind = STEP_COARSE
+        elif len(up) and len(dn) and (up == W_FLAT).mean() >= 0.5 and (dn == W_FLAT).mean() >= 0.5:
+            kind = STEP_RISER
+        elif (mid == W_PLANAR).mean() >= 0.5:
+            kind = STEP_PLANAR
+        else:
+            kind = STEP_BED
+        he = h - float(grad[(a + b) // 2]) * (b - a) * ds
+        out.append({"i0": int(a), "i1": int(b), "s0": a * ds, "s1": b * ds, "h": round(h, 2),
+                    "h_excess": round(he, 2), "len": round((b - a) * ds, 1), "slope_max": round(sm, 3),
+                    "z_top": round(float(zf[a]), 2), "kind": kind})
+    return out
+
+
+def reach_profile(z: np.ndarray, zm: np.ndarray, w: np.ndarray, ds: float = 1.0) -> dict:
+    """Per-reach long-profile fields (``lidarspec``, stage ``1m``) from its stations: raw heights ``z`` (lowest 1 m
+    cell within 2 m), the running minimum ``zm`` along the link, station codes ``w``. ``zm`` may hold one more value
+    than ``z``: the next reach's first station, so the drops of a link's reaches add up. For windows longer than the
+    reach, the steepest stretch is the reach gradient."""
+    from .xsec1m import profile_metrics
+
+    zm = np.asarray(zm, np.float64)
+    w = np.asarray(w, np.uint8)
+    n = len(z)
+    s = np.arange(len(zm)) * ds
+    L = max(float(s[-1]), ds)
+    ok = np.isfinite(zm)
+    lid = float((w != W_COARSE).mean()) if n else 0.0
+    out = {"length_profile_m": round(L, 1), "lidar_share": round(lid, 4),
+           "dem_source": "lidar" if lid >= 0.95 else ("8m" if lid < 0.05 else "mixed"),
+           "dem_res_m": 1.0 if lid >= 0.95 else 8.0}
+    if ok.sum() < 2:
+        return out | {"z_top": np.nan, "z_bot": np.nan, "gradient_m_per_km": np.nan}
+    zt, zb = float(zm[ok][0]), float(zm[ok][-1])
+    grad = (zt - zb) / L * 1000.0
+    zz = _ffill(zm)
+    out.update(z_top=round(zt, 2), z_bot=round(zb, 2), gradient_m_per_km=round(grad, 2))
+    for win in (50, 100, 200):
+        v = steepest(s, zz, win) if L >= 0.9 * win else grad
+        out[f"steepest_{win}m_m_per_km"] = round(float(v if np.isfinite(v) else grad), 2)
+    k = int(round(50 / ds))                         # is the steepest 50 m on water (riser, interpolation)?
+    i = int(np.argmax(zz[:-k] - zz[k:])) if len(zz) > k else 0
+    ww = w[i:min(i + k, n)]
+    out["steep50_water"] = bool(len(ww) and np.isin(ww, (W_FLAT, W_PLANAR)).mean() >= 0.5)
+    out["longest_flat_m"] = round(longest_flat(s, zz, 0.05), 1)
+    for name, code in (("water_flat_share", W_FLAT), ("water_planar_share", W_PLANAR)):
+        out[name] = round(float((w == code).mean()), 4) if n else np.nan
+    rough, conc, _, _ = profile_metrics(s[:n], np.asarray(z, np.float64))
+    out["x1_rough"], out["x1_dropconc"] = rough, conc
+    return out
+
+
+def reach_steps(steps: list[dict], drop_m: float) -> dict:
+    """Per-reach step fields (``lidarspec``) from the steps assigned to the reach (``profile_steps``, ``s0`` from
+    the reach's top). Counts and heights are of bed steps; ``risers_n`` counts survey breaklines on flattened water."""
+    bed = [s for s in steps if s["kind"] == STEP_BED]
+    h = np.array([s["h"] for s in bed], float)
+    top = bed[int(np.argmax(h))] if len(bed) else None
+    return {"steps_n": int(len(h)), "steps_drop_m": round(float(h.sum()), 2),
+            "step_max_m": round(float(h.max()), 2) if len(h) else 0.0,
+            "step_max_s_m": round(float(top["s0"]), 1) if top else np.nan,
+            "steps_share": round(float(h.sum() / drop_m), 4) if drop_m > 0.5 else np.nan,
+            "drops_n": int((h >= 2.0).sum()), "falls1m_n": int((h >= 5.0).sum()),
+            "risers_n": int(sum(s["kind"] == STEP_RISER for s in steps))}
+
+
+def encode_profiles(reach: np.ndarray, z: np.ndarray, w: np.ndarray) -> dict:
+    """The stored form of 1 m long profiles (``lidarspec.PROFILE_STORE``). Stations grouped by ``reach`` (station
+    order within a reach) -> one row per reach: ``gid``, ``n`` stations, ``z0_cm`` (int32, first height in cm),
+    ``dz`` (int16 cm differences to the station before, n - 1 values) and ``w4`` (the 2-bit station codes ``W_*``,
+    four per byte). Heights are kept to 1 cm. Every station on a reach has a height (the 2 m grid's where no 1 m cell
+    is near, code ``W_COARSE``); a missing one (NaN) repeats the height before it and is coded ``W_COARSE``."""
+    reach = np.asarray(reach)
+    cut = np.flatnonzero(np.r_[True, reach[1:] != reach[:-1], True])
+    gid, n, z0, dz, w4 = [], [], [], [], []
+    for a, b in zip(cut[:-1], cut[1:], strict=True):
+        q = np.nan_to_num(_ffill(np.round(np.asarray(z[a:b], np.float64) * 100.0)), nan=0.0).astype(np.int64)
+        ww = np.where(np.isfinite(z[a:b]), w[a:b], W_COARSE).astype(np.uint8)
+        p = np.r_[ww, np.zeros((-len(ww)) % 4, np.uint8)].reshape(-1, 4)
+        gid.append(int(reach[a]))
+        n.append(b - a)
+        z0.append(int(q[0]))
+        dz.append(np.clip(np.diff(q), -32767, 32767).astype(np.int16))
+        w4.append((p[:, 0] | (p[:, 1] << 2) | (p[:, 2] << 4) | (p[:, 3] << 6)).astype(np.uint8))
+    return {"gid": np.array(gid, np.int64), "n": np.array(n, np.int32), "z0_cm": np.array(z0, np.int32),
+            "dz": dz, "w4": w4}
+
+
+def decode_profiles(t: dict) -> dict:
+    """Inverse of ``encode_profiles``: per station ``reach``, ``z`` (float32 m) and ``w``."""
+    rs, zs, ws = [np.zeros(0, np.int64)], [np.zeros(0, np.float32)], [np.zeros(0, np.uint8)]
+    for g, n, z0, dz, w4 in zip(t["gid"], t["n"], t["z0_cm"], t["dz"], t["w4"], strict=True):
+        q = np.r_[np.int64(z0), np.int64(z0) + np.cumsum(np.asarray(dz, np.int64))]
+        b = np.asarray(w4, np.uint8)
+        w = np.stack([b & 3, (b >> 2) & 3, (b >> 4) & 3, (b >> 6) & 3], axis=1).ravel()[:n].astype(np.uint8)
+        z = (q / 100.0).astype(np.float32)
+        rs.append(np.full(n, g, np.int64))
+        zs.append(z)
+        ws.append(w)
+    return {"reach": np.concatenate(rs), "z": np.concatenate(zs), "w": np.concatenate(ws)}

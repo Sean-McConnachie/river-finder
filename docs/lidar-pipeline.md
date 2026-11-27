@@ -3,7 +3,8 @@
 How the national scan moves from the 8 m contour DEM to the LINZ 1 m LiDAR DEM on this machine (4 cores, 15 GB
 RAM, ~11 GB of free disk), measured on one benchmark tile, and how the dependent issues (rf-t26.11, rf-3ri.6,
 rf-33a.4, rf-3ri.7, rf-a33) are handled. Coverage, water surfaces and the fallback rule come from
-[`lidar-coverage.md`](lidar-coverage.md) (rf-lxa.1); the per-reach attribute list is rf-lxa.3.
+[`lidar-coverage.md`](lidar-coverage.md) (rf-lxa.1); the per-reach attribute list is rf-lxa.3
+([`lidar-extraction-spec.md`](lidar-extraction-spec.md)).
 
 Code: `src/river_finder/lidarpipe.py` (reusable pieces, tests in `tests/test_lidarpipe.py`) and
 `src/river_finder/lidarbench.py` (the benchmark: `river-finder lidar bench stream | speed | route | compare | tiling |
