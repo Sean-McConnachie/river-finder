@@ -308,6 +308,9 @@ Anything selectable is a plain object with `kind`, `region`, `id` and `name`:
 draws one graph of stacked tracks sharing the x axis and one crosshair (each track its own y scale;
 no dual axes). `RF.chart.placeholder(title, message)`, `RF.chart.ticks(lo, hi, n)`. River detail views
 (kinds `section`, `run`, `reach`) are registered by the map page and work from any page.
+Shared libraries go in `LIBS` (`webapp.py`). A large library that one view needs may instead be loaded by that
+page from cdnjs (exact version) when the view opens: the Models page loads Plotly gl3d 2.35.0 (1.6 MB) only for its
+3D separation view and says so if it cannot load.
 
 ### Utilities: `RF.util`
 

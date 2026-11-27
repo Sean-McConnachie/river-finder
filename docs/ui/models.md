@@ -66,7 +66,8 @@ Read `src/river_finder/web/README.md` (the `RF` contract). Most relevant:
 - `RF.runs.find(region, {model, params, rankBy})`, `RF.runs.segmentScores(S, params)`
 - `RF.go("map", {select: run})` and `RF.detail.open(run)` to show a run
 - Charts: no chart library is loaded. Small SVG charts are fine; if you need a library, load it from
-  cdnjs with an exact version (artifact CSP) and ask the core owner to add it to `LIBS` in `webapp.py`.
+  cdnjs with an exact version (artifact CSP) and ask the core owner to add it to `LIBS` in `webapp.py`, or load it
+  from the page only when its view opens (agreed for Plotly gl3d, 2026-11-27).
 
 The placeholder in `pages/models/models.js` already lists the registry, switches models and shows the
 run-finder settings: start from it or replace it.
