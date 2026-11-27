@@ -19,6 +19,12 @@
   // Lines follow each connected downstream chain of reaches (never joined out of order), smoothed.
   M.geometry.run = (f) => { const S = M.R?.segments; return S ? { type: "MultiLineString", coordinates: RF.runs.chains(S, f.members) } : null; };
   M.geometry.section = M.geometry.run;
+  /** The reaches bridged between a section's pieces (sec.gap, 50-rivers.js M.sectionLine), drawn dashed; null if none. */
+  M.gapGeometry = (f) => {
+    const S = M.R?.segments; if (f?.kind !== "section" || !f.sec?.gap?.length || !S) return null;
+    const { gap } = M.sectionLine(S, f.sec);
+    return gap.length ? { type: "MultiLineString", coordinates: RF.runs.chains(S, gap) } : null;
+  };
   M.geometry.reach = (f) => { if (f.geometry) return f.geometry; const S = M.R?.segments; return S ? { type: "LineString", coordinates: RF.runs.smooth(S.c[f.seg]) } : null; };
   M.geometry["linz-river"] = (f) => f.geometry || null;
   M.card["linz-river"] = (f) => ({ eyebrow: `LINZ ${f.linz.type}`, title: f.name,
@@ -35,16 +41,27 @@
     : g.type === "MultiLineString" ? g.coordinates.flat() : [];
 
   const CASING_W = ["interpolate", ["linear"], ["zoom"], 8, 7, 14, 12], SEL_W = ["interpolate", ["linear"], ["zoom"], 8, 3, 14, 6];
+  const GAP_CASING_W = ["interpolate", ["linear"], ["zoom"], 8, 5, 14, 8], GAP_W = ["interpolate", ["linear"], ["zoom"], 8, 2, 14, 4];
   M.initSelection = () => {
     const map = M.map;
+    // lines: the feature (gap 0) and, for a section, the bridged reaches between its pieces (gap 1, dashed)
+    const lines = (gap) => ["all", ["in", ["geometry-type"], ["literal", ["LineString", "MultiLineString"]]], ["==", ["coalesce", ["get", "gap"], 0], gap]];
     map.addSource("sel", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-    M.addLayer({ id: "sel-casing", type: "line", source: "sel", filter: ["in", ["geometry-type"], ["literal", ["LineString", "MultiLineString"]]],
+    M.addLayer({ id: "sel-gap-casing", type: "line", source: "sel", filter: lines(1),
+      layout: { "line-cap": "butt", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": GAP_CASING_W, "line-opacity": 0.9 } }, "select");
+    M.addLayer({ id: "sel-gap", type: "line", source: "sel", filter: lines(1),
+      layout: { "line-cap": "butt", "line-join": "round" }, paint: { "line-color": M.token("--accent"), "line-width": GAP_W, "line-dasharray": [2, 1.5] } }, "select");
+    M.addLayer({ id: "sel-casing", type: "line", source: "sel", filter: lines(0),
       layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": CASING_W, "line-opacity": 0.9 } }, "select");
-    M.addLayer({ id: "sel-line", type: "line", source: "sel", filter: ["in", ["geometry-type"], ["literal", ["LineString", "MultiLineString"]]],
+    M.addLayer({ id: "sel-line", type: "line", source: "sel", filter: lines(0),
       layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": M.token("--accent"), "line-width": SEL_W } }, "select");
     M.addLayer({ id: "sel-point", type: "circle", source: "sel", filter: ["in", ["geometry-type"], ["literal", ["Point", "MultiPoint"]]],
       paint: { "circle-radius": 9, "circle-color": "rgba(0,0,0,0)", "circle-stroke-color": M.token("--accent"), "circle-stroke-width": 3 } }, "select");
-    M.onTheme(() => { if (map.getLayer("sel-line")) { map.setPaintProperty("sel-line", "line-color", M.token("--accent")); map.setPaintProperty("sel-point", "circle-stroke-color", M.token("--accent")); } });
+    M.onTheme(() => {
+      if (!map.getLayer("sel-line")) return;
+      ["sel-line", "sel-gap"].forEach((l) => map.setPaintProperty(l, "line-color", M.token("--accent")));
+      map.setPaintProperty("sel-point", "circle-stroke-color", M.token("--accent"));
+    });
     // On the aerial photos a selected river is drawn as two rails either side of its line, so the channel itself shows.
     const gap = ["interpolate", ["linear"], ["zoom"], 12, 0, 14, 8, 17, 30];
     const selStyle = (use) => {
@@ -54,6 +71,10 @@
       map.setPaintProperty("sel-casing", "line-gap-width", photo ? gap : 0);
       map.setPaintProperty("sel-line", "line-width", photo ? 2.5 : SEL_W);
       map.setPaintProperty("sel-casing", "line-width", photo ? 5 : CASING_W);
+      map.setPaintProperty("sel-gap", "line-gap-width", photo ? gap : 0);
+      map.setPaintProperty("sel-gap-casing", "line-gap-width", photo ? gap : 0);
+      map.setPaintProperty("sel-gap", "line-width", photo ? 2 : GAP_W);
+      map.setPaintProperty("sel-gap-casing", "line-width", photo ? 4 : GAP_CASING_W);
     };
     M.onBasemap(selStyle);
     selStyle(document.querySelector(".map-root")?.dataset.basemap);
@@ -138,7 +159,7 @@
   };
 
   M.zoomTo = (f) => {
-    const cs = coordsOf(M.geometryOf(f)); if (!cs.length) return;
+    const cs = [...coordsOf(M.geometryOf(f)), ...coordsOf(M.gapGeometry(f))]; if (!cs.length) return;
     const pad = M.padding(); if (M.isPhone()) pad.bottom = Math.max(pad.bottom, (cardEl?.offsetHeight || 0) + 24);
     if (cs.length === 1) M.map.easeTo({ center: cs[0], zoom: Math.max(M.map.getZoom(), 14), padding: pad, duration: 600 });
     else M.map.fitBounds(M.bboxOf(cs), { padding: pad, maxZoom: 15, duration: 600 });
@@ -147,8 +168,9 @@
   /** Highlight a feature, show its card, and optionally zoom to it. */
   M.select = (f, opts = {}) => {
     if (!M.catchment?.shown(f)) M.catchment?.clear(); // a shaded catchment belongs to its selection
-    const g = M.geometryOf(f);
-    M.map.getSource("sel")?.setData({ type: "FeatureCollection", features: g ? [{ type: "Feature", properties: {}, geometry: g }] : [] });
+    const g = M.geometryOf(f), gap = M.gapGeometry(f);
+    M.map.getSource("sel")?.setData({ type: "FeatureCollection", features: [g ? { type: "Feature", properties: { gap: 0 }, geometry: g } : null,
+      gap ? { type: "Feature", properties: { gap: 1 }, geometry: gap } : null].filter(Boolean) });
     renderCard(f);
     RF.select(f);
     if (opts.fit) M.zoomTo(f);

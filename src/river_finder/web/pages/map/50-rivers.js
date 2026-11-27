@@ -18,9 +18,29 @@
   M.gradeColor = (bin) => bin ? M.colorOf(`known-g${bin}`) : M.colorOf("known-g0");
   let runs = [], runToken = 0, scored = null; // scored: {R, model} the predicted runs were found with
 
+  /**
+   * A known section's reaches (sec.m) and the reaches bridged between its pieces (sec.gap: flatter or smaller
+   * reaches on its path, not part of the section; webdata.py). line: both, so pieces are drawn and counted as one
+   * line down the river; gapKm: the bridged length. Indices outside the region's reaches are dropped.
+   */
+  M.sectionLine = (S, sec) => {
+    const n = S.d.length, members = (sec.m || []).filter((i) => i >= 0 && i < n), own = new Set(members);
+    const gap = [...new Set(sec.gap || [])].filter((i) => i >= 0 && i < n && !own.has(i));
+    return { members, gap, line: gap.length ? members.concat(gap) : members, gapKm: gap.reduce((t, i) => t + S.len[i], 0) / 1000 };
+  };
+  /** "Approximate: placed by river name, 1 of 3 pieces kept, 2.4 km left out (...)" for a section whose name match
+   *  was cut to one path (sec.dropped = {pieces, branches, km}); "" when nothing was left out. */
+  M.approxText = (sec) => {
+    const d = sec?.dropped; if (!d) return "";
+    const kept = [d.pieces ? `1 of ${d.pieces + 1} pieces` : "", d.branches ? `1 of ${d.branches + 1} branches` : ""].filter(Boolean).join(" and ");
+    const why = [d.pieces ? `${d.pieces > 1 ? "stretches" : "a stretch"} with the same name that ${d.pieces > 1 ? "do" : "does"} not join this one` : "",
+      d.branches ? `${d.branches > 1 ? "other forks" : "another fork"} with the name` : ""].filter(Boolean).join("; ");
+    return `Approximate: placed by river name, ${kept || "one path"} kept, ${(+d.km || 0).toFixed(1)} km left out${why ? ` (${why})` : ""}.`;
+  };
+
   // ---------- layer tree ----------
   M.defineGroup({ id: "rivers", label: "Rivers" });
-  M.defineGroup({ id: "known", parent: "rivers", label: "Known rivers", note: "Sections in the guides" });
+  M.defineGroup({ id: "known", parent: "rivers", label: "Known rivers", note: "Sections in the guides (dashed: the reaches between the pieces of one)" });
   M.defineGroup({ id: "known-grade", parent: "known", label: "By grade" });
   GRADES.forEach((g) => M.defineLayer({ id: `known-g${g}`, parent: "known-grade", label: `Grade ${ROMAN[g]}`, defaultOn: true,
     colors: [{ key: "c", token: `--grade-${g}` }], legend: `Known river, grade ${ROMAN[g]}`,
@@ -66,6 +86,11 @@
       paint: { "line-color": casing(), "line-width": predWidth(2), "line-opacity": 0.85 } }, "rivers");
     M.addLayer({ id: "pred-line", type: "line", source: "src-pred", layout: { "line-cap": "round", "line-join": "round" },
       paint: { "line-color": "#888", "line-width": predWidth() } }, "rivers");
+    // the reaches bridged between the pieces of a section (sec.gap): dashed and thinner, under the sections
+    M.addLayer({ id: "known-gap-casing", type: "line", source: "src-known", filter: ["==", ["get", "gap"], 1], layout: { "line-cap": "butt", "line-join": "round" },
+      paint: { "line-color": casing(), "line-width": width(2.2, 2), "line-opacity": 0.9 } }, "rivers");
+    M.addLayer({ id: "known-gap", type: "line", source: "src-known", filter: ["==", ["get", "gap"], 1], layout: { "line-cap": "butt", "line-join": "round" },
+      paint: { "line-color": "#888", "line-width": width(2.2), "line-dasharray": [2, 1.5] } }, "rivers");
     M.addLayer({ id: "known-casing", type: "line", source: "src-known", layout: { "line-cap": "round", "line-join": "round" },
       paint: { "line-color": casing(), "line-width": width(4, 2.5), "line-opacity": 0.9 } }, "rivers");
     M.addLayer({ id: "known-line", type: "line", source: "src-known", layout: { "line-cap": "round", "line-join": "round" },
@@ -75,7 +100,7 @@
         "symbol-spacing": 350, "text-max-angle": 50, "text-padding": 4, "text-letter-spacing": 0.03, "text-offset": [0, -0.8] },
       paint: { "text-color": "#1f5fa8", "text-halo-color": "#fff", "text-halo-width": 1.6 } }, "labels");
     M.onTheme(() => {
-      ["pred-casing", "known-casing"].forEach((l) => map.getLayer(l) && map.setPaintProperty(l, "line-color", casing()));
+      ["pred-casing", "known-casing", "known-gap-casing"].forEach((l) => map.getLayer(l) && map.setPaintProperty(l, "line-color", casing()));
       if (map.getLayer("names-label")) {
         map.setPaintProperty("names-label", "text-color", M.isDark() ? "#9cc4f2" : "#1f5fa8");
         map.setPaintProperty("names-label", "text-halo-color", M.isDark() ? "#111513" : "#ffffff");
@@ -83,13 +108,13 @@
     });
     if (M.isDark()) { map.setPaintProperty("names-label", "text-color", "#9cc4f2"); map.setPaintProperty("names-label", "text-halo-color", "#111513"); }
     // On the LINZ aerial photos the river lines fade from zoom 13, so the channel shows through them (still a guide).
-    const OPACITY = { "linz-line": 0.95, "net-line": 0.9, "pred-casing": 0.85, "pred-line": 1, "known-casing": 0.9, "known-line": 1 };
+    const OPACITY = { "linz-line": 0.95, "net-line": 0.9, "pred-casing": 0.85, "pred-line": 1, "known-casing": 0.9, "known-line": 1, "known-gap-casing": 0.9, "known-gap": 1 };
     const fade = (use) => Object.entries(OPACITY).forEach(([l, o]) => map.getLayer(l) && map.setPaintProperty(l, "line-opacity",
       use === "linz-aerial" ? ["interpolate", ["linear"], ["zoom"], M.AERIAL_MIN_ZOOM, o, 16, +(o * 0.3).toFixed(2)] : o));
     M.onBasemap(fade);
     fade(document.querySelector(".map-root")?.dataset.basemap);
 
-    M.clickable({ layers: ["known-line", "known-casing"], priority: 90, feature: (f) => sectionFeature(f.properties.i) });
+    M.clickable({ layers: ["known-line", "known-casing", "known-gap", "known-gap-casing"], priority: 90, feature: (f) => sectionFeature(f.properties.i) });
     M.clickable({ layers: ["pred-line", "pred-casing"], priority: 80, feature: (f) => runs[f.properties.i] || null });
     M.clickable({ layers: ["net-line"], priority: 40, feature: (f) => reachFeature(f.properties.i) });
     M.clickable({ layers: ["linz-line"], priority: 45, feature: (f, e) => linzFeature(f, e) });
@@ -98,10 +123,16 @@
   // ---------- data per region ----------
   const multi = (S, members) => ({ type: "MultiLineString", coordinates: RF.runs.chains(S, members) });
 
+  // Each section's reaches (gap 0), then the reaches bridged between its pieces (gap 1, drawn dashed).
   function buildKnown(R) {
     const S = R.segments; if (!S) return EMPTY;
-    return { type: "FeatureCollection", features: (R.sections || []).map((sec, i) => ({
-      type: "Feature", properties: { i, g: M.gradeBin(sec), src: sec.src }, geometry: multi(S, sec.m) })) };
+    const feats = [];
+    (R.sections || []).forEach((sec, i) => {
+      const props = { i, g: M.gradeBin(sec), src: sec.src }, { members, gap } = M.sectionLine(S, sec);
+      feats.push({ type: "Feature", properties: Object.assign({ gap: 0 }, props), geometry: multi(S, members) });
+      if (gap.length) feats.push({ type: "Feature", properties: Object.assign({ gap: 1 }, props), geometry: multi(S, gap) });
+    });
+    return { type: "FeatureCollection", features: feats };
   }
 
   function buildNet(R) {
@@ -203,11 +234,13 @@
     if (!M.ready || !M.map.getLayer("known-line")) return;
     const bins = [0, ...GRADES].filter((g) => M.isVisible(`known-g${g}`));
     const srcs = SOURCES.map(([k]) => k).filter((k) => M.isVisible(`known-src-${k}`));
-    const filter = ["all", ["in", ["get", "g"], ["literal", bins]], ["in", ["get", "src"], ["literal", srcs]]];
+    const filter = (gap) => ["all", ["in", ["get", "g"], ["literal", bins]], ["in", ["get", "src"], ["literal", srcs]], ["==", ["get", "gap"], gap]];
     const color = ["match", ["get", "g"], ...GRADES.flatMap((g) => [g, M.gradeColor(g)]), M.gradeColor(0)];
     const on = M.isVisible("known") && bins.length > 0 && srcs.length > 0;
-    ["known-line", "known-casing"].forEach((l) => { M.map.setFilter(l, filter); M.vis(l, on); });
+    ["known-line", "known-casing"].forEach((l) => { M.map.setFilter(l, filter(0)); M.vis(l, on); });
+    ["known-gap", "known-gap-casing"].forEach((l) => { M.map.setFilter(l, filter(1)); M.vis(l, on); });
     M.map.setPaintProperty("known-line", "line-color", color);
+    M.map.setPaintProperty("known-gap", "line-color", color);
     M.flow?.sync();
   }
   function applyPred() {
@@ -274,15 +307,21 @@
 
   const SRC_LABEL = Object.fromEntries(SOURCES.map(([k, l]) => [k, l]));
   // The numbers a predicted run shows, from the section's reaches and the model the runs were found with
-  // (no score until those scores have loaded). A section placed by river name can be separate pieces.
+  // (no score until those scores have loaded). A section placed by river name can be separate pieces; the
+  // bridged reaches between them (sec.gap) join them into one line but are not counted.
   M.card.section = (f) => {
     const s = f.sec, ready = scored?.R === M.R, st = RF.runs.measure(M.R, s.m, { model: ready ? scored.model : null });
+    const L = M.R?.segments ? M.sectionLine(M.R.segments, s) : null, apart = st && L ? RF.runs.pieces(M.R.segments, L.line).length : 0;
+    const approx = M.approxText(s);
     return {
       eyebrow: `Known river · ${SRC_LABEL[s.src] || s.srcName}`, title: s.section ? `${s.river}: ${s.section}` : s.river,
       lines: [el("span", { class: "rf-row" },
-        el("span", { class: "rf-pill", style: `background:${M.gradeColor(M.gradeBin(s))};color:#fff;border-color:transparent`, text: s.grade ? `Grade ${s.grade}` : "Grade not recorded" })),
+        el("span", { class: "rf-pill", style: `background:${M.gradeColor(M.gradeBin(s))};color:#fff;border-color:transparent`, text: s.grade ? `Grade ${s.grade}` : "Grade not recorded" }),
+        approx ? el("span", { class: "rf-pill rf-pill--warn", text: "Approximate" }) : null),
       st ? M.runLine(ready ? st : Object.assign(st, { score: null }), { mapped: true }) : el("span", { class: "rf-note", text: "No modelled reaches here." }),
-      st?.pieces > 1 ? el("span", { class: "rf-note", text: `Mapped as ${st.pieces} separate pieces: length is their total, flow and area are for the largest.` }) : null],
+      apart > 1 ? el("span", { class: "rf-note", text: `Mapped as ${apart} separate pieces: length is their total, flow and area are for the largest.` })
+        : st?.pieces > 1 && L.gapKm ? el("span", { class: "rf-note", text: `Mapped as ${st.pieces} pieces along one line; the ${L.gapKm.toFixed(1)} km between them (dashed) is not counted.` }) : null,
+      approx ? el("span", { class: "rf-note", text: approx }) : null],
     };
   };
   M.card.reach = (f) => {

@@ -27,23 +27,34 @@
   /**
    * The numbers each predicted run gets (RF.runs.measure: same parameters and model), plus the elevation range,
    * the median Melton ratio and the reaches the profile follows. A known section placed by river name can be
-   * several separate pieces (n > 1): then the profile follows the main stem of the longest piece. Null: no reaches.
+   * several separate pieces (n > 1): then the profile follows the main stem of the longest piece. Its bridged
+   * reaches (gap: flatter or smaller reaches between its pieces, not part of it) join pieces into one line: the
+   * numbers stay those of the section's reaches (mp pieces, gapKm left out), while top, bottom, catchment, flood,
+   * road access at the ends and the profile follow the whole line. Null: no reaches.
    */
-  function stats(R, ms, model) {
+  function stats(R, ms, model, gap = []) {
     const S = R.segments, st = RF.runs.measure(R, ms, { model });
     if (!st) return null;
-    const parts = RF.runs.pieces(S, ms), longest = parts.reduce((b, q) => (q.len > b.len ? q : b)), stem = longest.stem;
+    const own = new Set(ms), bridge = [...new Set(gap)].filter((m) => m >= 0 && m < S.g.length && !own.has(m)), all = bridge.length ? ms.concat(bridge) : ms;
+    const parts = RF.runs.pieces(S, all), longest = parts.reduce((b, q) => (q.len > b.len ? q : b)), stem = longest.stem;
+    if (bridge.length) {
+      const P = parts[0];
+      Object.assign(st, { top: P.top, bottom: P.bottom, aTop: S.a[P.top], aBot: S.a[P.bottom], maf: S.maf[P.bottom] });
+      if (st.acc) Object.assign(st.acc, { putIn: S.dRoad[P.top], takeOut: S.dRoad[P.bottom] });
+    }
     return Object.assign(st, {
-      n: st.pieces, simple: parts.length === 1 && stem.length === longest.members.length, stem, wholePiece: stem.length === longest.members.length,
+      n: parts.length, mp: st.pieces, gapKm: bridge.reduce((t, m) => t + S.len[m], 0) / 1000,
+      simple: parts.length === 1 && stem.length === longest.members.length && !bridge.length, stem, wholePiece: stem.length === longest.members.length,
       stemKm: stem.reduce((t, m) => t + S.len[m], 0) / 1000, zTop: S.zt[st.top], zBot: S.zb[st.bottom],
-      zMax: Math.max(...ms.map((m) => S.zt[m])), zMin: Math.min(...ms.map((m) => S.zb[m])), mel: median(ms.map((m) => S.mel[m])) });
+      zMax: Math.max(...all.map((m) => S.zt[m])), zMin: Math.min(...all.map((m) => S.zb[m])), mel: median(ms.map((m) => S.mel[m])) });
   }
 
   function statsTable(st, score, air) {
     // not one joined stretch: no single top → bottom, so say what each figure covers
-    const many = st.n > 1, over = many ? `${st.n} separate pieces` : "the main stem and its side branches";
+    const many = st.n > 1, gapped = !many && st.gapKm > 0;
+    const over = many ? `${st.n} separate pieces` : gapped ? `the ${st.mp} pieces` : "the main stem and its side branches";
     const rows = [
-      ["Length", `${st.len.toFixed(1)} km`, st.simple ? "" : `Total of ${over}`],
+      ["Length", `${st.len.toFixed(1)} km`, st.simple ? "" : gapped ? `Total of the ${st.mp} pieces; not the ${st.gapKm.toFixed(1)} km between them` : `Total of ${over}`],
       ["Average gradient", `${fmt.grad(st.grad)} m/km`, st.simple ? `${fmt.int(st.drop)} m drop over the length` : `Length-weighted over ${over}`],
       ["Max gradient", `${fmt.grad(st.s50)} m/km`, "Steepest 50 m of channel"],
       ["Height-to-area", isFinite(st.mel) ? st.mel.toFixed(3) : "–", "Melton ratio: catchment relief ÷ √area (median)"],
@@ -175,9 +186,9 @@
     else { ms = stretch(S, f.seg); highlight = f.seg; }
     // scored like the predicted runs on the map: the current model's best reach
     const sc = RF.state.model ? await RF.data.scores(R.id, RF.state.model) : null;
-    const st = stats(R, ms, sc?.pct?.length ? sc : null);
+    const st = stats(R, ms, sc?.pct?.length ? sc : null, sec?.gap || []);
     if (!st) return { title: f.name, subtitle: R.title, body: el("p", { class: "rf-muted", text: "No modelled reaches here." }) };
-    const many = st.n > 1;
+    const many = st.n > 1, gapped = !many && st.gapKm > 0, approx = sec ? M.approxText(sec) : "";
     const score = sc?.pct?.length ? { pct: st.score,
       model: sc.fallback ? "Pooled regression (this build has no per-model scores)" : RF.models.get(RF.state.model)?.title || RF.state.model } : null;
     const onSection = f.kind !== "section" ? R.sections.find((x) => ms.some((m) => x.m.includes(m))) : null;
@@ -199,6 +210,7 @@
     if (sec) pills.append(el("span", { class: "rf-pill det-grade", style: `--g:${M.gradeColor(M.gradeBin(sec))}`, text: sec.grade ? `Grade ${sec.grade}` : "Grade not recorded" }));
     if (f.kind === "run" && !(onSection && f.status === "candidate")) pills.append(el("span", { class: `rf-pill ${f.status === "candidate" ? "rf-pill--ok" : f.status === "heldout" ? "rf-pill--warn" : ""}`, text: f.status === "candidate" ? "Not in the guides" : f.status === "heldout" ? "Test river (held out)" : "In the guides" }));
     if (onSection) pills.append(el("span", { class: "rf-pill rf-pill--accent", text: `In the guides: overlaps ${onSection.river}${onSection.section ? ` (${onSection.section})` : ""}` }));
+    if (approx) pills.append(el("span", { class: "rf-pill rf-pill--warn", text: "Approximate placement" }));
     if (hy && hy.frac >= 0.5) pills.append(el("span", { class: `rf-pill${hy.cls === "regulated" ? "" : " rf-pill--warn"}`, text: HYDRO_PILL[hy.cls] || hy.cls }));
     if (sec?.popularity) pills.append(el("span", { class: "rf-pill", text: sec.popularity }));
     if (sec?.time) pills.append(el("span", { class: "rf-pill", text: sec.time }));
@@ -207,10 +219,14 @@
         : f.kind === "run" && f.status === "listed" ? "The river is in the guides, but no guide section covers this stretch." : "Not in the guides." })];
     const gen = el("p", { class: "rf-note", text: many
       ? `${st.len.toFixed(1)} km mapped in ${st.n} separate pieces, at an average ${fmt.grad(st.grad)} m/km. The largest drains ${fmt.km2(st.aBot)} km², with a mean annual flood of ${fmt.flow(st.maf)} m³/s at its bottom.`
-      : `${st.len.toFixed(1)} km${st.simple ? "" : " with side branches"} at an average ${fmt.grad(st.grad)} m/km, ${st.simple ? `dropping ${fmt.int(st.drop)} m` : "the main stem dropping"} from ${fmt.int(st.zTop)} m to ${fmt.int(st.zBot)} m. Catchment ${fmt.km2(st.aTop)} → ${fmt.km2(st.aBot)} km²; mean annual flood ${fmt.flow(st.maf)} m³/s at the bottom.${f.kind === "reach" ? ` The profile covers ${f.name === "Unnamed stream" ? "the main stem around the reach" : `the ${f.name} channel`}.` : ""}` });
-    const apart = many ? el("p", { class: "rf-note", text: "The pieces are not joined, so the section has no single drop, top or bottom. The long profile shows the longest piece." }) : null;
+      : gapped ? `${st.len.toFixed(1)} km mapped in ${st.mp} pieces along ${(st.len + st.gapKm).toFixed(1)} km of river, at an average ${fmt.grad(st.grad)} m/km on the pieces. The river drops from ${fmt.int(st.zTop)} m to ${fmt.int(st.zBot)} m. Catchment ${fmt.km2(st.aTop)} → ${fmt.km2(st.aBot)} km²; mean annual flood ${fmt.flow(st.maf)} m³/s at the bottom.`
+        : `${st.len.toFixed(1)} km${st.simple ? "" : " with side branches"} at an average ${fmt.grad(st.grad)} m/km, ${st.simple ? `dropping ${fmt.int(st.drop)} m` : "the main stem dropping"} from ${fmt.int(st.zTop)} m to ${fmt.int(st.zBot)} m. Catchment ${fmt.km2(st.aTop)} → ${fmt.km2(st.aBot)} km²; mean annual flood ${fmt.flow(st.maf)} m³/s at the bottom.${f.kind === "reach" ? ` The profile covers ${f.name === "Unnamed stream" ? "the main stem around the reach" : `the ${f.name} channel`}.` : ""}` });
+    const apart = many ? el("p", { class: "rf-note", text: "The pieces are not joined, so the section has no single drop, top or bottom. The long profile shows the longest piece." })
+      : gapped ? el("p", { class: "rf-note", text: `The pieces are joined by ${st.gapKm.toFixed(1)} km of flatter or smaller reaches (dashed on the map). They are not part of the section, so the length and gradient leave them out.` }) : null;
+    const approxNote = approx ? el("p", { class: "rf-note", text: `${approx} Check the source for the real put-in and take-out.` }) : null;
     const stemNote = st.simple ? null : el("p", { class: "rf-note",
-      text: `The profile shows ${st.stemKm.toFixed(1)} of the ${st.len.toFixed(1)} km mapped: ${many ? (st.wholePiece ? "the longest piece" : "the main stem of the longest piece") : "the main stem"}.` });
+      text: gapped ? `The profile follows the whole line, ${st.stemKm.toFixed(1)} km${st.wholePiece ? "" : " of main stem"}, including the ${st.gapKm.toFixed(1)} km between the pieces.`
+        : `The profile shows ${st.stemKm.toFixed(1)} of the ${st.len.toFixed(1)} km mapped: ${many ? (st.wholePiece ? "the longest piece" : "the main stem of the longest piece") : "the main stem"}.` });
 
     // coordinates: published put-in and take-out, else the ends of the profiled stretch
     const top = st.stem[0], bot = st.stem[st.stem.length - 1], topLL = S.c[top][0], botLL = S.c[bot][S.c[bot].length - 1];
@@ -223,7 +239,7 @@
     const midC = S.c[st.stem[st.stem.length >> 1]][0];
 
     const body = [
-      el("div", { class: "det-summary" }, pills, ...desc, gen, apart, hy ? hydroNote(hy) : null),
+      el("div", { class: "det-summary" }, pills, ...desc, gen, apart, approxNote, hy ? hydroNote(hy) : null),
       section("Key numbers", statsTable(st, score, air)),
       section("Long profile", ...profile(S, st.stem, highlight), stemNote),
       M.rain?.section(f, R), // 57-rain.js: live rain at the outlet (null without live rain)

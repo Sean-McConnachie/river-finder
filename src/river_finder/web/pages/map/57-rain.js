@@ -32,11 +32,11 @@
 
   // ---------- helpers ----------
   /** The reach whose rain describes a selection: the reach itself, or the bottom of a run or section (of its
-   *  largest piece when it is mapped in several). */
+   *  largest piece when it is mapped in several; a section's pieces joined across its bridged reaches, sec.gap). */
   function outlet(f, R) {
     const S = R?.segments; if (!S) return null;
     if (f.kind === "reach") return f.seg >= 0 && f.seg < S.d.length ? { reach: f.seg, pieces: 1 } : null;
-    const ms = (f.members || f.sec?.m || []).filter((m) => m >= 0 && m < S.d.length);
+    const ms = (f.kind === "section" && f.sec && M.sectionLine ? M.sectionLine(S, f.sec).line : f.members || f.sec?.m || []).filter((m) => m >= 0 && m < S.d.length);
     if (!ms.length) return null;
     const parts = RF.runs.pieces(S, ms);
     return { reach: parts[0].bottom, pieces: parts.length };

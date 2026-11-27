@@ -59,12 +59,13 @@
   }
 
   // ---------- which reaches drain out where ----------
-  /** The outlet reaches of a feature: the bottom of each connected piece of a run or section, the reach
-   *  itself, or for a LINZ line or a point the modelled reach its ground first drains into. */
+  /** The outlet reaches of a feature: the bottom of each connected piece of a run or section (a section's pieces
+   *  joined across its bridged reaches, sec.gap), the reach itself, or for a LINZ line or a point the modelled
+   *  reach its ground first drains into. */
   function outlets(f, L) {
     const R = L.R, S = R.segments, n = S.d.length;
     if (f.kind === "run" || f.kind === "section") {
-      const ms = (f.members || []).filter((m) => m >= 0 && m < n);
+      const ms = (f.kind === "section" && f.sec && M.sectionLine ? M.sectionLine(S, f.sec).line : f.members || []).filter((m) => m >= 0 && m < n);
       return ms.length ? RF.runs.pieces(S, ms).map((p) => p.bottom) : [];
     }
     if (f.kind === "reach") return f.seg >= 0 && f.seg < n ? [f.seg] : [];
