@@ -73,6 +73,36 @@ def test_map_section_put_in_to_take_out_and_name():
     assert list(rows) == [6, 7, 8, 9] and how == "name"
 
 
+def test_section_labels_research_grades_and_regions():
+    """The packed sta/gr/lho (viewer_nz.national_labels): every known section, research included, with its grade;
+    the highest grade and not-runnable win; a section across a region edge labels both regions (rf-7km)."""
+    from river_finder.viewer_nz import national_labels
+
+    f, xs, ys = _frame()
+    f["region"] = ["Waikato"] * 3 + ["Bay of Plenty"] * 3 + ["Waikato"] * 4
+    f["seg_id"] = [0, 1, 2, 0, 1, 2, 3, 4, 5, 6]
+    pt = lambda i, dy=0: _LL.transform(xs[i], ys[i] + dy)  # noqa: E731
+    research = {"id": "rg-1", "section": "Gorge", "primary_source": "NZ RiverGuide"}
+    secs = [Section("Waikato", "Alpha River", "runnable", grade="4-4+", put_in=pt(1, 50), take_out=pt(4, -50),
+                    extra=dict(research)),                                   # rows 1-4, across the region edge
+            Section("Waikato", "Alpha River", "not_runnable", put_in=pt(3, 50), take_out=pt(4, -50)),
+            Section("Waikato", "Beta Stream", "runnable", grade="III", extra={"id": "rg-2"}),   # name rule: 6-9
+            Section("Waikato", "Beta Stream", "runnable", grade="2", held_out=True),
+            Section("Waikato", "Nowhere Creek", "runnable", grade="5")]       # not placed
+    status, grade, held, placed = M.section_labels(f, secs)
+    assert status.tolist() == [0, 1, 1, 2, 2, 0, 1, 1, 1, 1]
+    assert np.allclose(grade[1:5], 4 + 1 / 6) and np.isnan(grade[[0, 5]]).all() and (grade[6:] == 3).all()
+    assert held.tolist() == [False] * 6 + [True] * 4
+    assert [m.section.river for m in placed] == ["Alpha River", "Alpha River", "Beta Stream", "Beta Stream"]
+    L = national_labels(f, secs)
+    assert set(L) == {"Waikato", "Bay of Plenty"}
+    w, b = L["Waikato"], L["Bay of Plenty"]
+    assert w.status.tolist() == [0, 1, 1, 1, 1, 1, 1] and w.seg_id.tolist() == [0, 1, 2, 3, 4, 5, 6]
+    assert b.status.tolist() == [2, 2, 0] and np.allclose(b.grade[:2], 4 + 1 / 6) and np.isnan(b.grade[2])
+    assert [s.extra.get("id") for s in w.sections] == ["rg-1", "rg-2", None]
+    assert len(b.sections) == 2   # the research gorge and the not-runnable piece both reach Bay of Plenty
+
+
 def test_map_section_snap_river_override(tmp_path):
     """'Alpha River' (rows 0-3) drains into 'Main River' (rows 4-7); an unnamed creek (rows 8-9) joins row 2.
     A take-out on the main river snaps to the nearest Alpha reach unless ``take_out_river`` names the main river;

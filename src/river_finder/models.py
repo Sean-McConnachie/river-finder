@@ -981,6 +981,30 @@ def guide_mask(f: pd.DataFrame, sections: list[Section] | None = None) -> np.nda
     return out
 
 
+def section_labels(f: pd.DataFrame, sections: list[Section] | None = None):
+    """The label status, grade and held-out flag of every row of ``f``, from every known section (``all_sections``:
+    known_runs.toml and the guide research) placed with ``map_section``, as ``webdata.write_sections`` places the
+    sections the web app draws. Status: ``labels.RUNNABLE`` (1) or ``NOT_RUNNABLE`` (2, wins) on a section, else
+    ``UNKNOWN`` (0); grade: the highest stated grade (``labels.parse_grade``) of the sections on the row, NaN none;
+    held: on a known_runs.toml ``held_out`` section. Returns ``(status, grade, held, placed)``, ``placed`` the
+    ``Mapped`` sections that cover at least one row."""
+    from .labels import NOT_RUNNABLE, RUNNABLE
+
+    status = np.zeros(len(f), dtype=np.uint8)
+    grade = np.full(len(f), np.nan)
+    held = np.zeros(len(f), dtype=bool)
+    placed = [m for m in map_sections(f, sections if sections is not None else all_sections(), group=False)
+              if len(m.rows)]
+    for m in placed:
+        r = m.rows
+        status[r] = np.maximum(status[r], NOT_RUNNABLE if m.section.status == "not_runnable" else RUNNABLE)
+        g = parse_grade(m.section.grade)
+        if np.isfinite(g):
+            grade[r] = np.fmax(grade[r], g)
+        held[r] |= bool(m.section.held_out)
+    return status, grade, held, placed
+
+
 def score_blob(card: dict, f: pd.DataFrame, guides: np.ndarray | None = None) -> str:
     """Base64 of [uint16 percentile x 100] + [uint8 flags] for the reaches the viewer shows.
     Flags: bits 0-1 role (1 trained on, 2 test river), bit 2 on a guide-listed section."""

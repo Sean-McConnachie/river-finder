@@ -402,6 +402,9 @@ trained on / test river, bit 2 on a guide section) so adding a model needs no re
 `river-finder models viewer` writes them for every card and re-renders the page. Top runs carry
 Training river / Test river / Prediction and In guides pills that follow the selected model; the
 Models tab shows every model on each test set, per-river and per-region tables and coefficients.
+The packed reaches' label status, grade and held-out flag (`sta`, `gr`, `lho`) come from the same placed
+sections, research included (`viewer_nz.national_labels`, rf-7km; before, known_runs.toml only), so the 3D
+separation colours research runs by their grade.
 
 Workflow for a new model: `models train --name v3 --split guides-v1 [--variant sourced]`, then
 `models evaluate`, then `models viewer`, then publish the new `*_m_v3.txt` files and the page.

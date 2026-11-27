@@ -14,6 +14,7 @@ import base64
 import io
 import json
 import math
+from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
 
@@ -81,8 +82,29 @@ def _rec2_features(path: Path, min_order: int) -> list[dict]:
     return out
 
 
-def _segments(region: Region, min_area_km2: float = 1.0, sections=None) -> dict | None:
-    """Columnar segment table for the run finder and score overlays (WGS84, simplified)."""
+@dataclass
+class ReachLabels:
+    """Label status (0 unknown, 1 runnable, 2 not runnable), grade (NaN unknown) and held-out flag of every reach of a
+    region's ``segments_scored.gpkg`` (file order, ``seg_id`` to check it), and the sections on them."""
+    status: np.ndarray
+    grade: np.ndarray
+    held: np.ndarray
+    seg_id: np.ndarray
+    sections: list = field(default_factory=list)
+
+
+def _section_info(s) -> dict:
+    """``S.sections`` entry of a section: a research section (it has an ``id``) names its primary source."""
+    ex = s.extra or {}
+    source = (ex.get("primary_source") or "") if ex.get("id") else s.source
+    return {"river": s.river, "section": ex.get("section") or "", "status": s.status, "grade": s.grade,
+            "source": source}
+
+
+def _segments(region: Region, min_area_km2: float = 1.0, labels: ReachLabels | None = None) -> dict | None:
+    """Columnar segment table for the run finder and score overlays (WGS84, simplified). ``labels``: the reaches'
+    label status and grade (``viewer_nz.national_labels``: every known section, guide research included); without,
+    the region's known_runs.toml sections (``labels.segment_labels``: the 5 m reference areas)."""
     import geopandas as gpd
 
     path = region.data_dir() / "segments_scored.gpkg"
@@ -91,7 +113,13 @@ def _segments(region: Region, min_area_km2: float = 1.0, sections=None) -> dict 
     from .labels import segment_labels
 
     g = gpd.read_file(path)
-    status, grade, held, _, secs = segment_labels(g, region.name, sections)
+    if labels is None:
+        status, grade, held, _, secs = segment_labels(g, region.name)
+    else:
+        if len(labels.status) != len(g) or not np.array_equal(labels.seg_id, g["seg_id"].to_numpy()):
+            raise ValueError(f"{region.name}: the reach labels come from another build of {path.name} "
+                             "(rebuild the national table: river-finder models table)")
+        status, grade, held, secs = labels.status, labels.grade, labels.held, labels.sections
     g["lab_status"], g["lab_grade"], g["lab_held"] = status, grade, held
     g = g[g["area_km2"] >= min_area_km2].copy()
     num = ["length_m", "grad_s", "steepest_50m_m_per_km", "area_km2", "maf_m3s", "gorge_depth_m", "z_top", "z_bot",
@@ -125,7 +153,7 @@ def _segments(region: Region, min_area_km2: float = 1.0, sections=None) -> dict 
         "sta": [int(v) for v in g["lab_status"]],
         "gr": [None if not np.isfinite(v) else round(float(v), 2) for v in g["lab_grade"]],
         "lho": [int(v) for v in g["lab_held"]],
-        "sections": [{"river": x.river, "status": x.status, "grade": x.grade, "source": x.source} for x in secs],
+        "sections": [_section_info(x) for x in secs],
         "mel": [round(float(v), 4) for v in g["melton"]],
         "hw": [round(float(v), 3) for v in g["height_to_width"]],
         "r": [rix.get(v, -1) for v in g["river"]],

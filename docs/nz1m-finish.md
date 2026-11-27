@@ -163,6 +163,15 @@ for the 8 m scan and for older merges. The cells of a dropped gid count for the 
   4 tiles hold a dropped gid (4 mapped copies, none left in them); the truncation mask paints all 53,839 cells (no
   data before). Viewer: 3,438 (Waikato) and 11,609 (Bay of Plenty) more labelled `_catch.png` pixels of 22 m, no
   other label changed; Waikato's `_trunc.png` 1,657 pixels more. Export 10.4 s (6.4 s before: the 4 copies).
+- **Guide research in the packs** (rf-7km; `inputs` to `viewer` on the same re-merge into
+  `data/nz1m_sample/finish_rf7km/`, against the packs of `finish_lxa13/`). The packed `sta`, `gr` and `lho` now come
+  from every known section (known_runs.toml and the guide research) placed on the national table as the web app's
+  sections are (`viewer_nz.national_labels`), no longer from known_runs.toml alone. Bay of Plenty: labelled reaches
+  34 -> 367 (8.1 -> 90.3 km), graded 11 -> 366 (II 17, III 147, IV 48, V 154), runnable without a grade 23 -> 1,
+  held out 12 -> 12; 15 sections (12 research). Waikato: 0 -> 14 reaches (two RiverGuide sections, II and III-IV).
+  Every other packed column is byte-identical, and the labelled reaches and their grades are exactly those of
+  `<region>_sections.json` (`webdata.write_sections`). In the legacy viewer's 3D separation (Bay of Plenty, every
+  reach) "Runnable, graded" goes from 11 to 366 points and "Runnable, grade unknown" from 23 to 1.
 - **CV and v5 on the sample** only prove the steps run (12 rivers, 411 positive reaches); their numbers say
   nothing about the national recipes.
 
@@ -218,5 +227,9 @@ uv run river-finder nz1m status --root data/nz1m_sample/finish_full
 uv run river-finder nz1m finish --root data/nz1m_sample/finish_lxa13 --merge data/nz1m_sample/merge_x12y16_lxa12 \
     --tiles-dir data/nz1m_sample/tiles --inputs data/nz1m_sample/finish_full --models-dir <a copy of models/> \
     --steps inputs joins score table viewer lidar rain export
+# rf-7km: the guide research in the packed labels (input layers symlinked from finish_full first, as in finish_lxa13)
+uv run river-finder nz1m finish --root data/nz1m_sample/finish_rf7km --merge data/nz1m_sample/merge_x12y16_lxa12 \
+    --tiles-dir data/nz1m_sample/tiles --inputs data/nz1m_sample/finish_full --models-dir <a copy of models/> \
+    --steps inputs joins score table viewer
 uv run pytest -q tests/test_nz1mfinish.py
 ```

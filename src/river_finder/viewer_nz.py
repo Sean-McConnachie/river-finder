@@ -14,6 +14,10 @@ The same files come from the 8 m scan (64 km tiles ``x05y07``, ``truncated_core.
 the reaches' ``truncated`` through the local catchments). On the 1 m rebuild the packed reaches also carry
 ``PACK_1M`` (steps, steepest 100 m, lake, DEM source, LiDAR year).
 
+The packed label status, grade and held-out flag (``sta``, ``gr``, ``lho``) come from every known section, the guide
+research included, placed on the national table (``models table``) as the web app's sections are
+(``national_labels``, rf-7km).
+
 The three 5 m reference regions are included as ``<id>.json`` files holding their full
 single-file payload (images as data URIs).
 """
@@ -24,7 +28,6 @@ import base64
 import io
 import json
 import math
-from dataclasses import replace
 from importlib import resources
 from pathlib import Path
 
@@ -39,7 +42,6 @@ from rasterio.warp import reproject
 
 from . import viewer
 from .areacode import CODE_LOG_MIN, CODE_STEP  # shared with nz.encode_area
-from .labels import load_sections
 from .national import FILTER_ORDER, is_1m, merged_gids, nz_dir, region_filters
 from .nz import Tile
 from .nzscore import region_dir, slug
@@ -185,22 +187,23 @@ def national_region(name: str) -> Region:
                   bbox_wgs84=(0, 0, 0, 0), dem_coarse="", known_runs=runs, root=region_dir(name))
 
 
-def national_sections(name: str):
-    """Label sections that apply to a river-guide region, limited to their reference box."""
-    poly = region_filters().set_index("region").loc[name, "geometry"]
-    to_nztm = Transformer.from_crs("EPSG:4326", "EPSG:2193", always_xy=True)
-    from shapely.geometry import Point
+def national_labels(table=None, sections=None) -> dict[str, viewer.ReachLabels]:
+    """Label status, grade and held-out flag of the reaches of every river-guide region (``segments_scored.gpkg``
+    order), the packed ``sta``, ``gr`` and ``lho``: every known section (known_runs.toml and the guide research in
+    ``labels/guide_research.json``, ``models.all_sections``) placed on the national table (``models table``) with
+    ``models.map_section``, as ``webdata.write_sections`` places the sections the web app draws (``Region.sections``)
+    and the score files flag (bit 2). A section across a region edge labels its reaches on both sides."""
+    from .models import national_table, section_labels
 
-    refs = {n: load_region(n) for n in list_regions()}
-    out = []
-    for s in load_sections():
-        ref = refs.get(s.region)
-        if ref is None:
-            continue
-        x0, y0, x1, y1 = ref.bbox_wgs84
-        if poly.intersects(Point(*to_nztm.transform((x0 + x1) / 2, (y0 + y1) / 2)).buffer(30_000)):
-            # the reference region stays in extra: the name rule looks up the river's mouth by it
-            out.append(replace(s, region=name, bbox=ref.bbox_wgs84, extra={**s.extra, "reference_region": s.region}))
+    t = national_table() if table is None else table
+    status, grade, held, placed = section_labels(t, sections)
+    reg = t["region"].to_numpy().astype(str)
+    seg = t["seg_id"].to_numpy()
+    out = {}
+    for name in dict.fromkeys(reg):
+        rows = np.flatnonzero(reg == name)
+        secs = [m.section for m in placed if (reg[m.rows] == name).any()]
+        out[name] = viewer.ReachLabels(status[rows], grade[rows], held[rows], seg[rows], secs)
     return out
 
 
@@ -240,11 +243,15 @@ def _tile_stats(stats: list[dict]) -> dict:
                                          if k.endswith("_s")))}
 
 
-def region_files(name: str, out_dir: Path, max_px: int = 4000, min_area_km2: float = 2.0) -> dict:
+def region_files(name: str, out_dir: Path, max_px: int = 4000, min_area_km2: float = 2.0,
+                 labels: viewer.ReachLabels | None = None) -> dict:
+    """One river-guide region's files. ``labels``: its entry of ``national_labels()`` (computed when not given)."""
     sl = slug(name)
     reg = national_region(name)
     d = region_dir(name)
-    S = viewer._segments(reg, min_area_km2=min_area_km2, sections=national_sections(name))
+    if labels is None:
+        labels = national_labels()[name]
+    S = viewer._segments(reg, min_area_km2=min_area_km2, labels=labels)
     import pyogrio
 
     have = set(pyogrio.read_info(d / "segments_scored.gpkg")["fields"])
@@ -363,10 +370,11 @@ def build(out_dir: Path, regions: list[str] | None = None, refs: list[str] | Non
     if page_only:
         return write_page(out_dir, json.loads((out_dir / "regions_index.json").read_text()))
     index = []
-    for name in regions or FILTER_ORDER:
-        if (region_dir(name) / "segments_scored.gpkg").exists():
-            index.append(region_files(name, out_dir, max_px))
-            print(f"viewer: {name} ({index[-1]['segments']} segments)", flush=True)
+    names = [n for n in regions or FILTER_ORDER if (region_dir(n) / "segments_scored.gpkg").exists()]
+    labels = national_labels() if names else {}   # loads the national table once (freed before the rasters)
+    for name in names:
+        index.append(region_files(name, out_dir, max_px, labels=labels[name]))
+        print(f"viewer: {name} ({index[-1]['segments']} segments)", flush=True)
     for rid in refs if refs is not None else list_regions():
         reg = load_region(rid)
         if not (reg.data_dir() / "segments_scored.gpkg").exists():

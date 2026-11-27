@@ -207,7 +207,8 @@ out of new leads (Top rivers files those runs under "Hydro-affected"). `RF.data.
 | `gorge`, `head`, `ksn`, `pow`, `hard` | gorge depth m, head m, steepness index, stream power kW/m, hard bed (0/1) |
 | `r` | index into `S.rivers` (REC2 name), -1 unnamed |
 | `reg`, `sig` | packed scores (pooled regression percentile, similarity to known runs) |
-| `sta`, `gr`, `lab`, `ho`, `lho` | label status, grade, training label, held out (legacy v1 labels) |
+| `sta`, `gr`, `lho` | label status (0 unknown, 1 runnable, 2 not runnable), highest stated grade (null: none) and held-out flag (known_runs.toml `held_out`) from every known section, guide research included: the reaches of `Region.sections` (`viewer_nz.national_labels`; the 5 m reference areas: known_runs.toml only) |
+| `lab`, `ho` | training label and hold-out of the legacy v1 labels |
 | `z[i]` | standardised features, names in `S.features` |
 | `dRoad`, `dTrack`, `dFoot` | distance to road / 4WD or private road / foot track, m (when external data exist) |
 | `fallsN`, `fallsH` | mapped waterfalls on the reach, tallest height m |
