@@ -1059,9 +1059,7 @@ def build_reaches(d, cnt, ext_c, ext_v, tf, core, min_area_km2: float = MIN_AREA
             continue
         r, c = np.divmod(path, nc)
         xy = np.column_stack([tf.c + (c + 0.5) * CELL, tf.f - (r + 0.5) * CELL])
-        sm = P.smooth_distance(xy, SMOOTH_M, CELL)
-        if sm[-1] <= 0:   # 3-6 cells: the moving average puts every vertex on the centroid; the cell path (rf-lxa.12)
-            sm = np.r_[0.0, np.cumsum(np.hypot(*np.diff(xy, axis=0).T))]
+        sm = P.smooth_distance(xy, SMOOTH_M, CELL)   # 3-6 cells: the cell path's length, not 0 (rf-lxa.12)
         total = float(sm[-1])
         nseg = max(1, int(round(total / seg_len_m)))
         bnd = np.searchsorted(sm, np.linspace(0, total, nseg + 1))

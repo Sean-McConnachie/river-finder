@@ -1219,10 +1219,14 @@ def burn(z: np.ndarray, lines, transform, depth: float) -> int:
 # ---------------------------------------------------------------------------------------------- profiles
 def smooth_distance(xy: np.ndarray, window_m: float = 20.0, cell: float = 1.0) -> np.ndarray:
     """Distance along a D8 cell path after a moving average of its coordinates over ``window_m`` (shrinking at the
-    ends), one value per vertex: removes the D8 staircase (~8 % at any resolution) before lengths and gradients."""
+    ends), one value per vertex: removes the D8 staircase (~8 % at any resolution) before lengths and gradients.
+
+    A path of at most ``k + 1`` vertices (``k`` = half the window in cells: 6 at 2 m, 11 at 1 m, 3 at 5 m) takes
+    its cell-step distance instead: every vertex's window would hold the whole path, so all of them would sit on its
+    centroid and the path would have length 0 (rf-lxa.12, rf-lxa.13). Longer paths are smoothed as before."""
     n = len(xy)
     k = max(1, int(round(window_m / 2 / cell)))
-    if n < 3:
+    if n <= k + 1:
         return np.r_[0.0, np.cumsum(np.hypot(*np.diff(xy, axis=0).T))] if n > 1 else np.zeros(n)
     c = np.vstack([np.zeros((1, 2)), np.cumsum(xy, axis=0)])
     lo = np.clip(np.arange(n) - k, 0, n)

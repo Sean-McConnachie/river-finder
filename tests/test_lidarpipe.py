@@ -241,6 +241,25 @@ def test_smooth_distance_removes_the_d8_staircase():
     assert len(sm) == len(xy) and np.all(np.diff(sm) >= 0)
 
 
+@pytest.mark.parametrize("cell", [1.0, 2.0, 5.0, 8.0])
+def test_smooth_distance_short_paths_keep_their_cell_length(cell):
+    """rf-lxa.13: a path of at most k + 1 vertices (k = half the window in cells) would collapse to its centroid
+    (length 0): it takes its cell-step length. A path one vertex longer is smoothed as before."""
+    k = max(1, round(10.0 / cell))
+    steps = np.array([[1, 1], [1, 0]] * 20, float) * cell
+    xy = np.vstack([[0, 0], np.cumsum(steps, axis=0)])
+    for n in range(2, k + 2):
+        p = xy[:n]
+        sm = P.smooth_distance(p, 20.0, cell)
+        assert sm[-1] > 0 and sm == pytest.approx(np.r_[0.0, np.cumsum(np.hypot(*np.diff(p, axis=0).T))])
+    p = xy[:k + 2]
+    c = np.vstack([np.zeros((1, 2)), np.cumsum(p, axis=0)])
+    lo, hi = np.clip(np.arange(k + 2) - k, 0, None), np.clip(np.arange(k + 2) + k + 1, None, k + 2)
+    ref = (c[hi] - c[lo]) / (hi - lo)[:, None]
+    assert P.smooth_distance(p, 20.0, cell) == pytest.approx(np.r_[0.0, np.cumsum(np.hypot(*np.diff(ref, axis=0).T))])
+    assert P.smooth_distance(xy[:1], 20.0, cell).tolist() == [0.0] and P.smooth_distance(xy[:0], 20.0, cell).size == 0
+
+
 def test_profile_metrics():
     s = np.arange(0, 1001, 1.0)
     z = np.where(s < 500, 100 - 0.01 * s, 95.0)                     # 10 m/km then flat
