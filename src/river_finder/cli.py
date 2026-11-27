@@ -512,6 +512,18 @@ def main(argv: list[str] | None = None) -> None:
                          "routing DEM, for the resolution comparison")
     pc.add_argument("--xsec-dir", type=Path, default=None,
                     help="write <dir>/<region>_xsec_<dem>.pkl instead of data/<region>/xsec_<dem>.pkl")
+    p1 = sub.add_parser("xsec1m", help="1 m LiDAR cross-sections (rf-lxa.4): tiles (sections of national tiles' "
+                                       "LiDAR reaches >= 2 km2, resumable) | merge | check (re-centring against the "
+                                       "1 m channel, bench sub-area) | study (feature separation, CV, LORO) | select "
+                                       "(backward elimination by group) | spacing (25 vs 50 m) | storage (bytes per "
+                                       "section) | figure -> data/analysis/lidar-xsec (src/river_finder/xsec1m.py, "
+                                       "docs/cross-sections-1m.md)")
+    p1.add_argument("step", choices=["tiles", "merge", "check", "study", "select", "spacing", "storage", "figure"])
+    p1.add_argument("tiles", nargs="*", help="tiles: national tile ids (default: the 14 sample tiles of rf-zmy.10)")
+    p1.add_argument("--keep-profiles", nargs="*", default=["x05y07", "x12y16"],
+                    help="tiles: keep the stored profiles (<tile>_prof.npz) of these tiles")
+    p1.add_argument("--threads", type=int, default=32, help="tiles: read threads")
+    p1.add_argument("--repeats", type=int, default=10, help="study: CV repeats")
     pv = sub.add_parser("viewer", help="build the browser viewer for the given regions")
     pv.add_argument("regions", nargs="*")
     pv.add_argument("-o", "--out", type=Path, default=REPO_ROOT / "data" / "viewer")
@@ -584,6 +596,30 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.cmd == "rain":
         _rain(args)
+        return
+    if args.cmd == "xsec1m":
+        from . import xsec1m, xsec1mstudy
+
+        if args.step == "tiles":
+            xsec1m.run_tiles(args.tiles or xsec1mstudy.SAMPLE_TILES, threads=args.threads,
+                             keep_profiles=args.keep_profiles)
+        elif args.step == "merge":
+            xsec1m.merge()
+        elif args.step == "check":
+            xsec1mstudy.check()
+        elif args.step == "storage":
+            xsec1mstudy.storage()
+        elif args.step == "select":
+            xsec1mstudy.select(repeats=args.repeats)
+            xsec1mstudy.select({k: xsec1mstudy.PRUNED[k] for k in xsec1mstudy.ROUND2}, repeats=args.repeats)
+        elif args.step == "spacing":
+            xsec1mstudy.spacing(xsec1mstudy.VALLEY + xsec1mstudy.KEEP_LOW, repeats=args.repeats)
+        elif args.step == "figure":
+            from . import xsec1mfig
+
+            print(xsec1mfig.figure(REPO_ROOT / "docs" / "img" / "cross-sections-1m.png"))
+        else:
+            xsec1mstudy.study(repeats=args.repeats)
         return
     regions = [load_region(n) for n in (args.regions or list_regions())]
 

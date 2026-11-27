@@ -1,5 +1,8 @@
 # Cross-sections per reach (rf-zmy.10)
 
+*The 1 m LiDAR version, its channel-shape features and the storage spec for the national rebuild:
+[`cross-sections-1m.md`](cross-sections-1m.md) (rf-lxa.4).*
+
 The question: does a reach's cross-section (how high and how narrow the channel is, as opposed to the valley-floor
 width the model already has) add information? A constricted channel carries the same flood faster and deeper than a
 wide one. `src/river_finder/xsec.py` measures DEM cross-sections along every reach, and `ml.py` turns them into

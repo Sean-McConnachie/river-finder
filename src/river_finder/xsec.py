@@ -315,11 +315,12 @@ def reach_table(sec: dict, n_reaches: int, stages=STAGES, res_m: float = np.nan)
 
 
 def hydraulics(t: pd.DataFrame, q_col: str = "maf_m3s", s_col: str = "grad_s", stages=STAGES,
-               n: float = MANNING_N) -> pd.DataFrame:
+               n: float = MANNING_N, h_min: float = 0.25, h_max: float = 60.0) -> pd.DataFrame:
     """Flood stage, width, mean velocity and unit stream power at the reach's flood ``q_col`` (m3/s) on its median
     section, by Manning: ``Q(h) = A(h) R(h)^(2/3) S^(1/2) / n`` with ``R = A / P`` from the median area and wetted
     perimeter per stage, ``S`` = gradient (``s_col``, m/km; floored at 0.1 m/km). The stage where ``Q(h)`` reaches the
-    flood is found by log-log interpolation between stages (extrapolated beyond them, clipped to 0.25-60 m).
+    flood is found by log-log interpolation between stages (extrapolated beyond them, clipped to
+    ``h_min``-``h_max``, default 0.25-60 m).
     Returns ``xs_h_q`` (m), ``xs_w_q`` (m), ``xs_a_q`` (m2), ``xs_v_q`` = Q / A (m/s) and ``xs_omega_q`` =
     rho g Q S / w (W/m2). On the 8 m DEM most floods sit below its resolvable stages, so these are indices of how
     confined the section is at the flood, not field hydraulics."""
@@ -340,7 +341,7 @@ def hydraulics(t: pd.DataFrame, q_col: str = "maf_m3s", s_col: str = "grad_s", s
         r = np.arange(len(t))
         f = (lQ - lq[r, j]) / (lq[r, j + 1] - lq[r, j])
         lh = hs[j] + f * (hs[j + 1] - hs[j])
-        lh = np.clip(lh, math.log(0.25), math.log(60.0))
+        lh = np.clip(lh, math.log(h_min), math.log(h_max))
         f = (lh - hs[j]) / (hs[j + 1] - hs[j])
 
         def at(M):

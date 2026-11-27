@@ -8,6 +8,7 @@
 
 # Data and Python
 data/
+/data
 __pycache__/
 .venv/
 *.tif
