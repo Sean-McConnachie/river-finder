@@ -157,6 +157,21 @@ def test_fill_holes_matches_fill_lakes_and_skips_the_sea():
     assert len(lake) == 1 and lake[0]["level"] == pytest.approx(105.0) and lake[0]["land_share"] == 1.0
 
 
+def test_mask_sea_only_surveyed_water_outside_the_8m_land():
+    z = np.full((16, 16), 5.0, np.float32)
+    wc = np.full((16, 16), 4 * 25, np.uint8)            # four valid 1 m cells, dry
+    wc[:, :8] = 4 * 25 + 4 * 5                           # flattened water on the left half ...
+    z[:, :8] = -0.8
+    z8 = np.full((4, 4), 3.0, np.float32)
+    z8[:, :1] = np.nan                                   # ... the 8 m DEM's sea covers columns 0-3
+    wc[0:4, 0:4] = 4 * 25                                # a dry beach outside the 8 m land: kept
+    z[12:16, 0:4] = 15.0                                 # water above the sea limit: kept
+    n = N._mask_sea(z, wc, z8, 4, N.SEA_MAX_Z)
+    assert n == 8 * 4 and np.isnan(z[4:12, :4]).all() and (wc[4:12, :4] == P.W2_SEA).all()
+    assert np.isfinite(z[:4, :4]).all() and np.isfinite(z[12:, :4]).all()
+    assert np.isfinite(z[:, 4:]).all()                   # inside the 8 m land: a lake or river, not the sea
+
+
 def test_seam_fill_is_continuous_like_seam_correct():
     H, W = 200, 240
     r, c = np.mgrid[0:H, 0:W]

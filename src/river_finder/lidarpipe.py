@@ -151,6 +151,7 @@ def _wflag(z, r, c, flat_tol, planar_tol):
 # block (valid cells, hydro-flattened, planar; 0..124), or what the tile job put in a no-data cell.
 W2_LAKE = np.uint8(250)       # lake hole filled at the rim's water level
 W2_FALLBACK = np.uint8(251)   # 8 m fallback (seam-corrected)
+W2_SEA = np.uint8(252)        # surveyed sea (water outside the 8 m DEM's land), set to no data
 
 
 @njit(cache=True, nogil=True)
@@ -275,14 +276,15 @@ class _Handles(threading.local):
 def window_reader(gdal_env: dict | None = None, tries: int = 3):
     """``read(job) -> (z, box_row0, box_col0)`` for the jobs of ``sheet_windows``: one rasterio handle per thread and
     sheet, ``z`` float32 with NaN for nodata. A failed read is retried ``tries`` times (GDAL retries HTTP errors
-    itself; this catches dropped connections)."""
+    itself; this catches dropped connections). A request that hangs fails after 60 s (``GDAL_HTTP_TIMEOUT``; one
+    read of the rf-lxa.6 test tile waited 115 s without it)."""
     import rasterio
     from rasterio.windows import Window
 
     from .stac import GDAL_ENV
     from .stac import NODATA as NODATA_Z
 
-    env = dict(GDAL_ENV, GDAL_CACHEMAX=64, VSI_CACHE="FALSE")
+    env = dict(GDAL_ENV, GDAL_CACHEMAX=64, VSI_CACHE="FALSE", GDAL_HTTP_TIMEOUT="60", GDAL_HTTP_CONNECTTIMEOUT="15")
     env.update(gdal_env or {})
     tl = _Handles()
 

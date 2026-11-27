@@ -6,8 +6,10 @@ One 32 km tile (``q<ix>y<iy>``, a quarter of a 64 km tile of ``nz.py``) with a 3
    the 2 m block mean and a per-cell code of valid, hydro-flattened and planar 1 m cells
    (``lidarpipe.agg2_into``, run inside the reader threads: rf-lxa.7). The 8 m contour DEM of the box is fetched at
    the same time (memory only).
-2. **Lakes**: no-data holes whose rim is hydro-flattened water and which are land in the 8 m DEM (the sea is not) are
-   filled flat at the rim's LiDAR water level (``lidarpipe.fill_lakes`` rule, ``fill_holes``).
+2. **Sea and lakes**: surveyed water outside the 8 m DEM's land (harbours the survey flattened) becomes no data, so
+   it is an outlet (``_mask_sea``); no-data holes whose rim is hydro-flattened water and which are land in the 8 m
+   DEM (the sea is not) are filled flat at the rim's LiDAR water level (``lidarpipe.fill_lakes`` rule,
+   ``fill_holes``).
 3. **Fallback**: other land holes from the 8 m DEM (bilinear), corrected towards the LiDAR by the seam rule with the
    edge blend (``seam_fill``: ``lidarpipe.seam_correct(..., edge_m=25)`` worked in 2 m chunks).
 4. A float32 copy of this DEM is kept (the router fills in place): gorge depth and the 2 m part of the sections
@@ -69,6 +71,7 @@ HAND_TH = (1.0, 2.0, 5.0, 10.0, 20.0)
 GORGE_M = 150.0
 SEAM_CAP_M = 5000.0
 LAKE_MIN_KM2 = 0.1          # hydro-flattened water bodies kept as lakes
+SEA_MAX_Z = 10.0            # surveyed water outside the 8 m land below this is sea
 BUILD = "lidar1m-dev"
 W_LAKE = int(P.W2_LAKE)
 W_FALLBACK = int(P.W2_FALLBACK)
@@ -321,6 +324,29 @@ def _bilin(a, r, c, f):
                 s += w * x
                 ws += w
     return s / ws if ws > 1e-9 else np.nan
+
+
+@njit(cache=True)
+def _mask_sea(z, wc, z8, f8, max_z):
+    """Surveyed sea to no data, in place: cells outside the 8 m DEM's land (it has no sea) whose 1 m cells are
+    mostly hydro-flattened or planar water and which lie below ``max_z`` (harbours and coastal water the survey
+    flattened: left as data, they are not an outlet and the channels run on across them). Returns the count."""
+    H, W = z.shape
+    n = 0
+    for r in range(H):
+        for c in range(W):
+            v = z[r, c]
+            if not np.isfinite(v) or v >= max_z or np.isfinite(z8[r // f8, c // f8]):
+                continue
+            w = wc[r, c]
+            if w >= 125:
+                continue
+            k = w // 25
+            if k > 0 and 2 * ((w % 25) // 5 + w % 5) >= k:
+                z[r, c] = np.nan
+                wc[r, c] = 252
+                n += 1
+    return n
 
 
 @njit(cache=True)
@@ -1105,8 +1131,9 @@ def process(tile: Tile32, src, dem8, rec2, geology, od: Path, threads: int = 32,
     with meter.step("dem8_wait"):
         z8 = f8.result()
         ex.shutdown()
-    # 2. lakes, 3. fallback
+    # 2. surveyed sea to no data, lakes, 3. fallback
     with meter.step("lakes"):
+        info["sea_masked_km2"] = round(_mask_sea(z, wc, z8, F8, SEA_MAX_Z) * CELL * CELL / 1e6, 3)
         holes = fill_holes(z, wc, z8, tf, lake_table=lake_table)
         info["holes"] = {"examined": len(holes), "filled": int(sum(h["filled"] for h in holes)),
                          "filled_km2": round(sum(h["km2"] for h in holes if h["filled"]), 3)}
