@@ -69,7 +69,8 @@ uv run river-finder nz1m merge [qid ...] [--out DIR]   # all done tiles by defau
      (head and outlet) is dropped with its area (`lost_km2`). Lake outlets move to the reach that took them.
      The reaches leave `network.parquet`, `reaches.parquet`, `x1.arrow` and `steps.arrow`. `merge.json`
      `zero_length.merged` lists `[dropped gid, gid that took it]`, for readers of the tiles'
-     `local_catchment_core.tif`, whose cells still name the dropped gid.
+     `local_catchment_core.tif`, whose cells still name the dropped gid: they map them with
+     `national.merged_gids` (rf-lxa.13, [`nz1m-finish.md`](nz1m-finish.md)).
 4. **Accumulate** `local_km2` and the other `local_*` sums down the network: `area_km2`, `area_mid_km2`,
    `area_check`, `head_m`, `relief_m`, `melton`, `ksn`, `knick_ratio`, `upstream_*_frac`, `catch_lidar_share`,
    `karst_up_frac`, `sinuosity_1km`.
@@ -243,7 +244,9 @@ index and the REC layers; `x1.arrow` is concatenated in memory, ~1 GB). Outputs:
 - **`lake`** in the national table is False on tidal water (the older tiles counted flattened water below 1 m as a
   lake).
 - **Zero-length reaches are not in the national files** (rf-lxa.12; above). The tiles still hold them.
-  `merge.json` `zero_length` gives their count, the area moved and `merged` (dropped gid -> gid).
+  `merge.json` `zero_length` gives their count, the area moved and `merged` (dropped gid -> gid); the readers of
+  `local_catchment_core.tif` map their cells to the receiving gid (rf-lxa.13). Tiles run with 4cc040a or later have
+  none (a 3-6 cell link takes its cell length).
 - **The stitch accepts an exact cell match whatever the areas.** The spec's area ratio (0.7-3) refused the Waiomou's
   crossing on the Mamaku plateau, where the receiving tile's REC2 inflow (30 km2) was far below the real 43 km2.
 - **Files**: `reaches.parquet` (the national reach table) and `merge.json` are added to `lidarspec.NATIONAL_FILES`;

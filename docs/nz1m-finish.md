@@ -61,11 +61,12 @@ skipped; a step that runs again resets the steps that need it.
 | `scores` | v5, viewer | `viewer_nz/<region>_m_<card>.txt` for the 1 m cards, page | 1.6 / 1.0 | 3-6 min, 6 GB |
 | `web` | scores, external, hydro | web data (sections, access, gauges, LINZ, hydro, aerial, satellite) into `viewer_nz/`, then a preview site in `web/` (no Basemaps key, no live rain) | 52 / 1.2 | 20-40 min, 4 GB |
 | `rain` | viewer | `rain/weights_gsmap/ecmwf.npz`, `scaling_zones.npz`, `network.npz`; `rain-inputs/` (what the `rain-inputs` branch holds) | 2.8 / 1.0 | 5-8 min, 2-3 GB |
-| `export` | score | `gis/`: GeoPackage, VRTs, the truncation mask per tile | 6.4 / 1.4 | 15-25 min, 4 GB, ~2 GB disk |
+| `export` | score | `gis/`: GeoPackage, VRTs, the truncation mask per tile, the local catchments of the tiles that hold a dropped gid (below) | 6.4 / 1.4 | 15-25 min, 4 GB, ~2 GB disk (+1.2 MB per tile with a dropped gid) |
 | `compare` | table | `analysis/reference_compare.json` | 0.4 / 1.1 | 1-2 min, 2 GB |
 | `sections` | table | `analysis/sections_audit.json`, `.csv` | 1.5 / 1.1 | 3-6 min, 4 GB |
 
-Sample: the four tiles of x12y16 (21,161 reaches), `data/nz1m_sample/finish_full/`, all 18 steps in one run in
+Sample: the four tiles of x12y16 (21,161 reaches, the merge before the zero-length drop; 21,149 after it),
+`data/nz1m_sample/finish_full/`, all 18 steps in one run in
 2 min 54 s, at most 1.5 GB (process memory, so later steps also hold what earlier ones left). Country: ~1.2-1.4 M
 reaches (57-66 times the sample), scaled from the sample and from today's 8 m runs of the same commands; **about
 3-4 hours, peak 7-8 GB** (score, ml, cv). Run it only after the tile run has ended: the tile job peaks at 8 GB.
@@ -112,8 +113,29 @@ The ten items of the spec's "What consumers lose or must change":
     exposing the new columns on the map is the core owner's call (rf-aq6). The viewer texts say "1 m LiDAR".
 
 Also changed: `nzscore` reads `reaches.parquet` + `joins.parquet` (the merge has the regions); `scoring.prepare`
-and the viewer leave reaches without a profile out of the smoothed gradient (9 reaches of zero length in x12y16,
-from the tile job); `ml.add_geology` takes the karst share from `local_km2`.
+and the viewer leave reaches without a profile out of the smoothed gradient; `ml.add_geology` takes the karst share
+from `local_km2`.
+
+**Zero-length reaches** (rf-lxa.12, rf-lxa.13). Tiles run before 4cc040a hold reaches of 20 m-smoothed length 0: a
+channel link of 3-6 path cells, whose moving average put every vertex on one point (12 in x12y16: 9 heads just
+above a confluence, 3 links between two confluences). The merge now drops them into the reach below
+([`nz1m-merge.md`](nz1m-merge.md)), so no national file holds them. The tile job of 4cc040a makes none (a 3-6
+cell link takes its cell length); `lidarpipe.smooth_distance` now does the same for every caller (a path of at
+most k + 1 vertices, k being half the window in cells, keeps its cell-step length; longer paths are smoothed as
+before). The tiles' `local_catchment_core.tif` still name the dropped gids. Every reader maps them with
+`national.merged_gids(root)`: a `GidMap` from `merge.json` `zero_length.merged`, read once per file, the identity
+for the 8 m scan and for older merges. The cells of a dropped gid count for the gid that took its area (none,
+`-1`, if the merge lost the area with it):
+
+- rain weights (`rainfall.weights._row_lookup`: the dropped gid's lut entry points at the receiving reach's row, in
+  any tile; `build_weights(gid_map=...)`, passed by `pipeline.run_weights`) and the gauge locator
+  (`rainfall.validate.locate_gauges`);
+- viewer `_catch.png` and `_trunc.png` (`viewer_nz.gid_lookup`);
+- lidar coverage (`lidar.tile_coverage`; `catchment_cells.npz` has one row per gid, summed over the tiles; the
+  land and gap grid count every cell);
+- GIS: the truncation mask (`nz.truncation_rasters`) and `local_catchment_core.vrt`, which reads a mapped copy
+  (`gis/local_catchment/<tile>.tif`, `nz.local_catchment_rasters`) of each tile that holds a dropped gid;
+- the 8 m relink's pixel areas (`relink.tile_local_km2`; nothing to map on the 8 m scan).
 
 ## Sample results (x12y16)
 
@@ -132,6 +154,15 @@ from the tile job); `ml.add_geology` takes the karst share from `local_km2`.
   of REC2 on 80 % of reaches of 5 km² or more (n 2,719), the 5 m outlet snap on 72 % (n 564). Named runs:
   Tuakopae 8.19 km² (REC2 8.49, 5 m 9.28), Mangakarengorengo 109.7 (REC2 108.4, 5 m 109.6); the Wairoa outlet is
   outside x12y16. Karangahake and Tutamoe are outside the sample.
+- **Dropped gids** (rf-lxa.13; `joins` to `export` again on the re-merge `merge_x12y16_lxa12/`, 21,149 reaches,
+  into `data/nz1m_sample/finish_lxa13/`; each reader against the same computation with an empty map). The 12
+  dropped gids hold 53,839 of the 10 m cells, 5.384 km² (the merge moved 5.386 km² of 2 m cells). Rain weights:
+  53,839 pixels of unknown gid before, 0 now; pixel area 3,985.24 -> 3,990.62 km² against 3,990.63 km² of local
+  area in the table; the 12 receiving reaches hold 0.30 -> 0.9985 of their local area (each within 0.01 km²), every
+  other row is unchanged. Lidar: the receivers' local area 2.29 -> 7.68 km² (7.69 in `reaches.parquet`). GIS: all
+  4 tiles hold a dropped gid (4 mapped copies, none left in them); the truncation mask paints all 53,839 cells (no
+  data before). Viewer: 3,438 (Waikato) and 11,609 (Bay of Plenty) more labelled `_catch.png` pixels of 22 m, no
+  other label changed; Waikato's `_trunc.png` 1,657 pixels more. Export 10.4 s (6.4 s before: the 4 copies).
 - **CV and v5 on the sample** only prove the steps run (12 rivers, 411 positive reaches); their numbers say
   nothing about the national recipes.
 
@@ -183,5 +214,9 @@ cp -r models data/nz1m_sample/finish_full/models     # a registry of its own: th
 uv run river-finder nz1m finish --root data/nz1m_sample/finish_full --merge data/nz1m_sample/merge_x12y16 \
     --tiles-dir data/nz1m_sample/tiles --models-dir data/nz1m_sample/finish_full/models
 uv run river-finder nz1m status --root data/nz1m_sample/finish_full
+# rf-lxa.13: the readers of the local catchments on the re-merge with the zero-length drop (inputs from finish_full)
+uv run river-finder nz1m finish --root data/nz1m_sample/finish_lxa13 --merge data/nz1m_sample/merge_x12y16_lxa12 \
+    --tiles-dir data/nz1m_sample/tiles --inputs data/nz1m_sample/finish_full --models-dir <a copy of models/> \
+    --steps inputs joins score table viewer lidar rain export
 uv run pytest -q tests/test_nz1mfinish.py
 ```
