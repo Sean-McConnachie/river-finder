@@ -81,6 +81,7 @@ geology, starting from three reference regions (Kaimai Range, Karangahake Gorge,
 - Plan: `docs/PLAN.md` · data: `docs/data-sources.md` · algorithms: `docs/flow-routing-algorithms.md`
 - Region definitions: `regions/*.toml` (bbox in WGS84, processing in EPSG:2193 NZTM)
 - Known runnability labels (status, grade, extent): `labels/known_runs.toml` (`labels.py`)
+- National data root: `config/national.toml` (`nz_dir()`; `data/nz` until the 1 m switch, `$RIVER_FINDER_NZ` overrides)
 
 ## Build & Test
 
@@ -105,6 +106,10 @@ uv run river-finder nz1m plan|tile <qid...>|check  # 1 m rebuild per 32 km tile 
 uv run river-finder nz1m lakes survey <qid|x0,y0,x1,y1...>|build; nz1m merge [qid...] [--out DIR]  # rf-lxa.5: national lake
                                           # table (one level/outlet per lake, re-run list) and merge (stitch, lakes as nodes, network areas)
                                           # -> data/nz1m/lakes.gpkg, network.parquet, reaches.parquet, merge.json (~5 min; docs/nz1m-merge.md)
+uv run river-finder nz1m finish [--steps ...]; nz1m status; nz1m switch [--back]  # after the 1 m merge: joins (LINZ
+                                          # names, geology, survey), nz score, models table, viewer, external, hydro, lidar,
+                                          # ml table + CV + card v5, scores, web data, rain inputs, GIS, reference comparison,
+                                          # section audit -> data/nz1m (~3-4 h, < 8 GB, resumable; docs/nz1m-finish.md)
 uv run river-finder xsec1m tiles|check|study|select|spacing|storage|figure  # 1 m LiDAR cross-sections (rf-lxa.4): sections every
                                           # 25 m re-centred on the 1 m channel, channel-shape features, keep list, rf-lxa.3 storage
                                           # spec -> data/analysis/lidar-xsec/ (14 tiles ~25 min, < 6 GB; docs/cross-sections-1m.md)
