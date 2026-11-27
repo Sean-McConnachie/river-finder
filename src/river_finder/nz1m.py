@@ -72,6 +72,7 @@ GORGE_M = 150.0
 SEAM_CAP_M = 5000.0
 LAKE_MIN_KM2 = 0.1          # hydro-flattened water bodies kept as lakes
 SEA_MAX_Z = 10.0            # surveyed water outside the 8 m land below this is sea
+TIDAL_MAX_M = 1.0           # lakes (holes or flattened water) whose level is below this are tidal water: sea
 BUILD = "lidar1m-dev"
 W_LAKE = int(P.W2_LAKE)
 W_FALLBACK = int(P.W2_FALLBACK)
@@ -730,14 +731,34 @@ def _station_heights(z, x0, y1, xs, ys, rad):
 
 
 # ---------------------------------------------------------------------------------------------- lakes and fallback
+def _table_lake(lake_table, xs: np.ndarray, ys: np.ndarray):
+    """The national lake (``(polygon, level, kind)``) holding at least half of the points, or None."""
+    import shapely
+
+    for t in lake_table:
+        poly, lev = t[0], t[1]
+        kind = t[2] if len(t) > 2 else "hole"
+        if poly is None or poly.is_empty:
+            continue
+        if float(np.mean(shapely.contains_xy(poly, xs, ys))) >= 0.5:
+            return poly, float(lev), str(kind)
+    return None
+
+
 def fill_holes(z: np.ndarray, wc: np.ndarray, z8: np.ndarray, tf, min_cells: int = 4, rim_flat: float = 0.5,
-               rim_mode: float = 0.4, tol: float = 0.02, min_land: float = 0.5, lake_table=None) -> list[dict]:
+               rim_mode: float = 0.4, tol: float = 0.02, min_land: float = 0.5, lake_table=None,
+               tidal_max: float = TIDAL_MAX_M) -> list[dict]:
     """``lidarpipe.fill_lakes`` on the 2 m grid, in place: a no-data hole is a lake when at least ``rim_flat`` of its
     rim is hydro-flattened (half the rim cell's 1 m cells), the modal rim level (to ``tol``) holds ``rim_mode`` of
     those cells and at least ``min_land`` of the hole is land in the 8 m DEM (``z8``, 4 x 4 cells per 8 m cell; the
-    sea is not). Lakes are filled flat at that level (or at the level of the ``lake_table`` lake holding the hole:
-    ``[(polygon, level), ...]``, the national table of rf-lxa.5) and coded ``W2_LAKE``. Returns one record per hole of
-    ``min_cells`` or more, the filled ones with their mask (``mask``: packed bits over ``slice``)."""
+    sea is not). Lakes are filled flat at that level and coded ``W2_LAKE``. A hole whose level is below
+    ``tidal_max`` is tidal water (a coastal lagoon or estuary): it stays no data, like the sea (``tidal``).
+
+    ``lake_table``: the national lake table (rf-lxa.5, ``[(polygon, level, kind), ...]``; ``(polygon, level)`` means
+    a hole lake). A hole with at least half of its cells in a table lake takes that lake's level and decision: filled
+    at ``level`` (also when the tile's own rim test fails on its part of the rim: ``forced``), or left as no data when
+    the table lake is ``tidal``. Returns one record per hole of ``min_cells`` or more, the filled ones with their mask
+    (``mask``: packed bits over ``slice``)."""
     from scipy import ndimage
 
     H, W = z.shape
@@ -770,37 +791,117 @@ def fill_holes(z: np.ndarray, wc: np.ndarray, z8: np.ndarray, tf, min_cells: int
                "x": float(tf.c + (b0 + cc + 0.5) * CELL), "y": float(tf.f - (a0 + rr + 0.5) * CELL),
                "bbox": [float(tf.c + b0 * CELL), float(tf.f - a1 * CELL), float(tf.c + b1 * CELL),
                         float(tf.f - a0 * CELL)]}
-        if not rim.any():
-            out.append(dict(rec, filled=False, rim_flat_share=0.0))
-            continue
-        _, nf, _ = P.w2_counts(wc[s2][rim])
-        nv, _, _ = P.w2_counts(wc[s2][rim])
-        fr = (nv > 0) & (2 * nf >= nv)
-        rec["rim_flat_share"] = round(float(fr.mean()), 3)
-        if fr.mean() >= rim_flat and land >= min_land:
-            zr = sub[rim][fr]
-            q = np.round(zr / tol).astype(np.int64)
-            vals, cts = np.unique(q, return_counts=True)
-            j = int(np.argmax(cts))
-            share = cts[j] / fr.sum()
-            level = float(np.median(zr[q == vals[j]]))
-            rec.update(level=round(level, 3), rim_mode_share=round(float(share), 3))
-            if lake_table is not None:
-                from shapely.geometry import Point
-
-                pt = Point(rec["x"], rec["y"])
-                for poly, lev in lake_table:
-                    if poly.contains(pt):
-                        rec.update(level=round(float(lev), 3), level_from="lake_table")
-                        level = float(lev)
-                        break
-            if share >= rim_mode:
-                sub[m] = np.float32(level)
-                wc[s2][m] = W_LAKE
-                rec.update(filled=True, slice=[a0, a1, b0, b1], mask=np.packbits(m))
+        table = None
+        if lake_table:
+            ij = np.flatnonzero(m.ravel())
+            ij = ij[:: max(1, len(ij) // 400)]
+            pr, pc = np.divmod(ij, m.shape[1])
+            table = _table_lake(lake_table, tf.c + (b0 + pc + 0.5) * CELL, tf.f - (a0 + pr + 0.5) * CELL)
+        own, fill_level = False, np.nan
+        if rim.any():
+            _, nf, _ = P.w2_counts(wc[s2][rim])
+            nv, _, _ = P.w2_counts(wc[s2][rim])
+            fr = (nv > 0) & (2 * nf >= nv)
+            rec["rim_flat_share"] = round(float(fr.mean()), 3)
+            if fr.mean() >= rim_flat and land >= min_land:
+                zr = sub[rim][fr]
+                q = np.round(zr / tol).astype(np.int64)
+                vals, cts = np.unique(q, return_counts=True)
+                j = int(np.argmax(cts))
+                share = cts[j] / fr.sum()
+                level = float(np.median(zr[q == vals[j]]))
+                rec.update(level=round(level, 3), rim_mode_share=round(float(share), 3), rim_flat_cells=int(fr.sum()))
+                own, fill_level = share >= rim_mode, level
+        else:
+            rec["rim_flat_share"] = 0.0
+        if own:
+            rec["own_level"] = rec["level"]
+        fill = own and rec["level"] >= tidal_max
+        if own and not fill:
+            rec["tidal"] = True
+        if table is not None:
+            rec.update(level_from="lake_table", table_kind=table[2])
+            if table[2] == "tidal":
+                fill = False
+                rec["tidal"] = True
+            else:
+                rec["level"] = round(table[1], 3)
+                rec["forced"] = not own
+                fill, fill_level = True, table[1]
+        if fill:
+            sub[m] = np.float32(fill_level)
+            wc[s2][m] = W_LAKE
+            rec.update(filled=True, slice=[a0, a1, b0, b1], mask=np.packbits(m))
         rec.setdefault("filled", False)
         out.append(rec)
     return out
+
+
+def _polygon(mask: np.ndarray, x0: float, y1: float, cell: float):
+    """The cells of ``mask`` as one (multi)polygon, simplified at one cell, on a 1 m grid."""
+    import shapely
+    from rasterio.features import shapes
+    from rasterio.transform import from_origin
+
+    geoms = [shapely.geometry.shape(g) for g, v in shapes(mask.astype(np.uint8), mask=mask,
+                                                           transform=from_origin(x0, y1, cell, cell)) if v]
+    if not geoms:
+        return None
+    return shapely.set_precision(shapely.union_all(geoms).simplify(cell), 1.0)
+
+
+def label_lakes(flatw: np.ndarray, nlake10: np.ndarray, z10: np.ndarray, holes: list[dict], box,
+                min_km2: float = LAKE_MIN_KM2, tidal_max: float = TIDAL_MAX_M):
+    """Lakes on the 10 m grid: components (8-connected) of hydro-flattened 10 m cells (``flatw``: at least half of
+    their 1 m cells flattened) and of filled lake holes (``nlake10`` > 0), kept when they hold a filled hole or cover
+    ``min_km2``. A component without a hole whose level (median 10 m height of its flattened cells) is below
+    ``tidal_max`` is tidal water (an estuary or a tidal reach the survey flattened): not a lake. Returns the lake id
+    raster (-1 none), the flattened-lake raster (uint8), one record per lake (id, kind ``hole`` / ``flat``, level, km2,
+    holes, bbox, ``touches_box``: the component reaches the box edge, so the tile sees part of it, ``wkt``: its
+    10 m cells as a polygon) and the tidal components (level, km2, bbox, wkt)."""
+    from scipy import ndimage
+
+    lab, nl = ndimage.label(flatw | (nlake10 > 0), structure=np.ones((3, 3), bool))
+    has_hole = np.bincount(lab.ravel(), weights=(nlake10 > 0).ravel(), minlength=nl + 1) > 0
+    size = np.bincount(lab.ravel(), minlength=nl + 1)
+    keep = has_hole | (size * 100e-6 >= min_km2)
+    keep[0] = False
+    objs = ndimage.find_objects(lab)
+    level = np.full(nl + 1, np.nan)
+    for k in np.flatnonzero(keep & ~has_hole):
+        sl = objs[k - 1]
+        level[k] = float(np.nanmedian(z10[sl][(lab[sl] == k) & flatw[sl]]))
+    tid = keep & ~has_hole & (level < tidal_max)
+    lake = keep & ~tid
+    ids = np.full(nl + 1, -1, np.int32)
+    ids[lake] = np.arange(int(lake.sum()), dtype=np.int32)
+    lake10 = ids[lab]
+    lakew10 = ((lake10 >= 0) & flatw).astype(np.uint8)
+    hole_of: dict[int, list] = {}
+    for h in holes:
+        if h["filled"]:
+            hole_of.setdefault(int(lake10[h["row"] // F10, h["col"] // F10]), []).append(h)
+    H, W = lab.shape
+    lakes, tidal = [], []
+    for k in np.flatnonzero(keep):
+        sl = objs[k - 1]
+        m = lab[sl] == k
+        bb = [box[0] + sl[1].start * 10.0, box[3] - sl[0].stop * 10.0, box[0] + sl[1].stop * 10.0,
+              box[3] - sl[0].start * 10.0]
+        poly = _polygon(m, bb[0], bb[3], 10.0)
+        wkt = poly.wkt if poly is not None else None
+        edge = bool(sl[0].start == 0 or sl[1].start == 0 or sl[0].stop == H or sl[1].stop == W)
+        if tid[k]:
+            tidal.append({"level": round(float(level[k]), 3), "km2": round(float((m & flatw[sl]).sum() * 100e-6), 3),
+                          "bbox": bb, "touches_box": edge, "wkt": wkt})
+            continue
+        lid = int(ids[k])
+        hs = hole_of.get(lid, [])
+        lev = max(hs, key=lambda q: q["cells"])["level"] if hs else float(level[k])
+        lakes.append({"lake": lid, "kind": "hole" if hs else "flat", "level": round(lev, 3),
+                      "km2": round(float((m & flatw[sl]).sum() * 100e-6 + sum(q["km2"] for q in hs)), 3),
+                      "holes": [q["hole"] for q in hs], "bbox": bb, "touches_box": edge, "wkt": wkt})
+    return lake10, lakew10, lakes, tidal
 
 
 def seam_fill(z: np.ndarray, wc: np.ndarray, z8: np.ndarray, band_m: float = 300.0, sigma_m: float = 150.0,
@@ -1110,7 +1211,8 @@ def process(tile: Tile32, src, dem8, rec2, geology, od: Path, threads: int = 32,
     meter = Meter(log)
     t0 = time.time()
     info: dict = {"tile": tile.id, "build": BUILD, "box": list(box), "core": list(core), "cell_m": CELL,
-                  "shape": [H, W], "cells": H * W}
+                  "shape": [H, W], "cells": H * W, "lake_table": lake_table is not None,
+                  "lake_table_n": len(lake_table) if lake_table else 0}
     ex = ThreadPoolExecutor(1)
     pool = ThreadPoolExecutor(threads)          # one reader pool for the tile: its threads keep their open sheets
     f8 = ex.submit(dem8)
@@ -1165,33 +1267,9 @@ def process(tile: Tile32, src, dem8, rec2, geology, od: Path, threads: int = 32,
                                    dtype="uint8")
         # lakes: filled holes and hydro-flattened water bodies (>= half of the 1 m cells flattened, >= 0.1 km2)
         flatw = (cnt1 > 0) & (2 * flat1 >= cnt1)
-        lab, nl = ndimage.label(flatw | (nlake10 > 0), structure=np.ones((3, 3), bool))
-        has_hole = np.bincount(lab.ravel(), weights=(nlake10 > 0).ravel(), minlength=nl + 1) > 0
-        size = np.bincount(lab.ravel(), minlength=nl + 1)
-        keep = has_hole | (size * 100e-6 >= LAKE_MIN_KM2)
-        keep[0] = False
-        ids = np.full(nl + 1, -1, np.int32)
-        ids[keep] = np.arange(int(keep.sum()), dtype=np.int32)
-        lake10 = ids[lab]
-        lakew10 = ((lake10 >= 0) & flatw).astype(np.uint8)
-        lakes = []
-        objs = ndimage.find_objects(lab)
-        hole_of = {}
-        for h in holes:
-            if h["filled"]:
-                hole_of.setdefault(int(lake10[h["row"] // F10, h["col"] // F10]), []).append(h)
-        for k in np.flatnonzero(keep):
-            sl = objs[k - 1]
-            m = lab[sl] == k
-            lid = int(ids[k])
-            hs = hole_of.get(lid, [])
-            lev = max(hs, key=lambda q: q["cells"])["level"] if hs else float(np.nanmedian(z10[sl][m & flatw[sl]]))
-            lakes.append({"lake": lid, "kind": "hole" if hs else "flat", "level": round(lev, 3),
-                          "km2": round(float((m & flatw[sl]).sum() * 100e-6 + sum(q["km2"] for q in hs)), 3),
-                          "holes": [q["hole"] for q in hs],
-                          "bbox": [box[0] + sl[1].start * 10.0, box[3] - sl[0].stop * 10.0,
-                                   box[0] + sl[1].stop * 10.0, box[3] - sl[0].start * 10.0]})
-        del lab, flatw, cnt1, flat1
+        lake10, lakew10, lakes, tidal = label_lakes(flatw, nlake10, z10, holes, box)
+        info["tidal"] = tidal
+        del flatw, cnt1, flat1
         # seam distance (10 m grid): from the 10 m cells where fallback meets LiDAR
         fb10 = nfb10 > 0
         if fb10.any():
@@ -1466,7 +1544,8 @@ def extract_1m(tid, src, links, R, zraw, wc, lake10, lakew10, seamd, box, tf, th
     miss = ~np.isfinite(zst)
     zst[miss] = zraw[rr[miss], cc[miss]]
     code[miss] = P.W_COARSE
-    in_lake = (wc[rr, cc] == W_LAKE) | (lakew10[rr // F10, cc // F10] > 0)
+    on_fill = wc[rr, cc] == W_LAKE
+    in_lake = on_fill | (lakew10[rr // F10, cc // F10] > 0)
     lake_id = np.where(in_lake, lake10[rr // F10, cc // F10], -1)
     sdist = seamd[rr // F10, cc // F10] if seamd is not None else np.full(len(sx), SEAM_CAP_M, np.float32)
     sec = pd.concat(secs, ignore_index=True).sort_values("sec").reset_index(drop=True) if secs else None
@@ -1483,7 +1562,8 @@ def extract_1m(tid, src, links, R, zraw, wc, lake10, lakew10, seamd, box, tf, th
              "sections_kept": int(((sec["flags"].to_numpy() & X1.DROP) == 0).sum()) if sec is not None else 0,
              "chunks": len(chunks), "read_1m_cells": int(cells), "read_1m_wait_s": round(t_read, 1),
              "measure_1m_s": round(t_meas, 1), "box_1m_cells": int((box[2] - box[0]) * (box[3] - box[1]))}
-    return {"sx": sx, "sy": sy, "own": sown, "z": zst, "code": code, "in_lake": in_lake, "lake_id": lake_id,
+    return {"sx": sx, "sy": sy, "own": sown, "z": zst, "code": code, "in_lake": in_lake, "on_fill": on_fill,
+            "lake_id": lake_id,
             "seam": sdist, "sec": sec, "sec_rows": sec_rows, "dprof": dprof, "nodata": nodata, "long": lp,
             "sec_station": (ri, ss, xx, yy), "stats": stats}
 
@@ -1523,6 +1603,9 @@ def reach_profiles(R: pd.DataFrame, links, r1: dict) -> dict:
             row = P.reach_profile(zl[m], zm[i0:min(i1 + 1, len(zm))], wl[m])
             row.update(P.reach_steps(mine[s], row.get("z_top", np.nan) - row.get("z_bot", np.nan)))
             g = a0 + m
+            # on a filled lake hole (no 1 m cell near, the fill at the lake level): dem_source "lake"
+            if float(np.mean(r1["on_fill"][g] & (wl[m] == P.W_COARSE))) >= 0.5:
+                row.update(dem_source="lake", dem_res_m=2.0)
             ls = float(np.mean(r1["in_lake"][g]))
             ids = r1["lake_id"][g]
             row.update(lake_share=ls, lake=bool(ls >= 0.5), seam_dist_m=float(np.min(r1["seam"][g])),
@@ -1682,14 +1765,22 @@ def run_tile(tid: str, root: Path | None = None, threads: int = 32, force: bool 
     src = MosaicSource(t.box)
     rec2 = rec2_near(t.box)
     geo = geology_near(t.box)
-    lake_table = None
-    lp = (root or root_dir()) / "lakes.gpkg"
-    if lp.exists():                         # the national lake table (rf-lxa.5): one level per lake
-        import geopandas as gpd
-
-        lk = gpd.read_file(lp, bbox=t.box)
-        lake_table = list(zip(lk.geometry, lk["level_m"], strict=True)) if len(lk) else None
+    lake_table = read_lake_table(t.box, root)
     return process(t, src, lambda: fetch_dem8(t.box), rec2, geo, od, threads=threads, log=log, lake_table=lake_table)
+
+
+def read_lake_table(box, root: Path | None = None) -> list | None:
+    """The hole and tidal lakes of the national lake table (``lakes.gpkg``, rf-lxa.5) near ``box``, as
+    ``fill_holes`` takes them: ``[(polygon, level_m, kind), ...]``; None when there is no table. Flattened lakes
+    (``flat``) need no fill level and are left out."""
+    lp = (root or root_dir()) / "lakes.gpkg"
+    if not lp.exists():
+        return None
+    import geopandas as gpd
+
+    lk = gpd.read_file(lp, bbox=tuple(box))
+    lk = lk[lk["kind"].isin(["hole", "tidal"])]
+    return list(zip(lk.geometry, lk["level_m"].astype(float), lk["kind"], strict=True))
 
 
 def run_tiles(tids: list[str], root: Path | None = None, threads: int = 32, force: bool = False, log=print) -> None:

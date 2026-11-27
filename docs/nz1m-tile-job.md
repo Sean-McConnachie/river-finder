@@ -24,8 +24,10 @@ One tile is a 32 km core on the national grid (`nz.X0`, `nz.Y0`) with a 3 km hal
 2. **Sea and lakes**: surveyed water outside the 8 m DEM's land and below 10 m (a harbour the survey flattened) is
    set to no data, so the coast drains to it. A no-data hole is a lake when half its rim is hydro-flattened water, one
    rim level (to 2 cm) holds 40 % of it and the hole is at least half land in the 8 m DEM (the sea is not). It is
-   filled flat at that level. A national lake table (`data/nz1m/lakes.gpkg`, `level_m`, from rf-lxa.5) overrides the
-   level when it exists.
+   filled flat at that level. A hole whose level is below 1 m is tidal water and stays no data, like the sea. When
+   the national lake table exists (`data/nz1m/lakes.gpkg`, rf-lxa.5, [`nz1m-merge.md`](nz1m-merge.md)), a hole with
+   at least half of its cells in a table lake takes that lake's level and decision: filled at `level_m` (also when
+   the tile's own rim test fails on its part of the rim), or left as sea when the table says `tidal`.
 3. **Fallback**: the other land holes take the 8 m DEM (bilinear), corrected by the seam rule with the edge blend
    (`seam_fill`: the rule of `lidarpipe.seam_correct(..., edge_m=25)`, its edge part worked in 2 m chunks so that no
    box-sized distance transform is made).
@@ -211,8 +213,11 @@ Lake Rotorua's 62.2 km2 hole is filled at 279.50 m (rim 99.7 % flattened, one le
 as the benchmark; with its flattened ring the lake record is 80.8 km2. Its outlet, (1,891,689, 5,783,831), carries
 the whole catchment (504 km2 in the tile) and lies 33 m from the benchmark's Ohau Channel point. Lake Rotoiti (33.9
 km2, flattened, no hole) drains at Okere into the Kaituna. 11 lakes in the tile, 1,219 core reaches on them.
-Reaches on a filled hole have no 1 m station nearby, so `lidar_share` is low and `dem_source` reads `8m` by the
-spec's rule (362 reaches); read `lake` with it.
+Reaches on a filled hole have no 1 m station nearby, so `lidar_share` is low. Since rf-lxa.5 their `dem_source` is
+`lake` (at least half of the stations on the fill; `dem_res_m` 2). The three tiles above ran before that and read
+`8m` there; the merge sets `lake` for them in the national table (348 reaches in `q25y32`). Each lake record in
+`tile.json` now also holds its polygon (`wkt`, the 10 m cells) and `touches_box`; flattened water below 1 m is listed
+under `tidal`, not as a lake. `nz1m lakes survey` gives the polygons of tiles that ran before (rf-lxa.5).
 
 ## Deviations from the spec, and why
 
@@ -225,7 +230,8 @@ spec's rule (362 reaches); read `lake` with it.
 - **`down_gid` is not written**: it is a merge field. The merge sets it from `down_seg`, `exits_core`, `end_x`,
   `end_y` and the lake records.
 - **Lakes before the national lake table**: each tile fills its holes at its own rim level and reports them. A lake
-  split by tiles can then get two levels until rf-lxa.5's table exists; the job reads it when it does.
+  split by tiles can then get two levels until rf-lxa.5's table exists; the job reads it when it does, and
+  `nz1m lakes build` lists the tiles to re-run ([`nz1m-merge.md`](nz1m-merge.md)).
 - **Hydro-flattened lakes** (no hole) are found per tile: 10 m cells with at least half of their 1 m cells
   flattened, in components of 0.1 km2 or more, or touching a filled hole. Wide flattened river treads can pass this
   test; they are `kind = flat` in the lake records, so the merge can drop them.
@@ -239,22 +245,13 @@ spec's rule (362 reaches); read `lake` with it.
 - **`seam_dist_m`** sees only seams inside the box: a seam more than 3 km outside the core is reported as farther
   than it is (capped at 5 km anyway).
 
-## What rf-lxa.5 (the merge) must do with these outputs
+## The merge (rf-lxa.5)
 
-- Read `segments_core.gpkg` of every tile (gids never change), stitch each core reach with `exits_core` to the
-  neighbour's reach whose line passes its `end_x`, `end_y` (8 m, area ratio 0.7-3 on `area_tile_km2`), and use the
-  lake records as single nodes: every reach in `lakes[].reaches`, and every reach ending in the lake, links to the
-  lake's outlet reach (`outlet_gid`; for lakes split by tiles, the outlet of the tile whose `drains` is `out`).
-- Accumulate `local_km2` and the other `local_*` sums down the stitched network (each cell is counted once: by the
-  tile whose core holds its first reach). `area_tile_km2` is the check (`area_check`).
-- Build the national lake table (one level and one outlet per lake) and re-run the tiles whose lake levels differ.
-- Treat `flat` lake records at sea level (level below ~1 m: flattened estuaries and tidal reaches) as tidal water,
-  not lakes.
-- Set `down_gid`, `stitch`, `outlet_kind`, `lake_id`, `area_km2`, `area_mid_km2` (= `area_tile_mid_km2 x area_km2 /
-  area_tile_km2`), `truncated`, then the other `merge` fields of the spec.
-- Only core reaches are written; a reach that leaves the core continues in the neighbour's file. Cells that drain to
-  halo reaches are counted by the neighbour (`halo_owned_km2`), cells that reach no reach before the sea or the box
-  edge are `lost_km2`.
+The national lake table and the merge that use these outputs are in [`nz1m-merge.md`](nz1m-merge.md): reaches that
+leave a core are stitched to the next tile's reach on the same 2 m cell, lakes are single nodes, and every reach's
+area comes from network accumulation of `local_km2` (`area_tile_km2` is the check). Cells that drain to halo
+reaches are counted by the neighbour (`halo_owned_km2`); cells that reach no reach before the sea or the box edge are
+`lost_km2`.
 
 ## Reproduce
 
