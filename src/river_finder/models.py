@@ -609,12 +609,13 @@ def checkpoint_v1(table: pd.DataFrame) -> dict:
     return card
 
 
-def baseline_card(table: pd.DataFrame) -> dict:
+def baseline_card(table: pd.DataFrame, mid: str = "baseline-flow") -> dict:
     """A one-feature yardstick: rank reaches by flood size (mean annual flood) alone. Guide runs sit on
-    bigger rivers than most reaches of 2 km2, so a model has to beat this to show it learnt more."""
+    bigger rivers than most reaches of 2 km2, so a model has to beat this to show it learnt more. Not trained, so
+    each national build has its own (``baseline-flow`` 8 m, ``baseline-flow-1m``: its pool quantiles differ)."""
     names = list(FEATURES)
     _, mean, std = _standardise(features(table, names))
-    card = {"id": "baseline-flow", "order": 0, "kind": "baseline", "title": "Baseline: flood size only",
+    card = {"id": mid, "order": 0, "kind": "baseline", "title": "Baseline: flood size only",
             "description": "Not trained. Ranks every reach by its mean annual flood alone. Any model "
                            "should beat this; the gap is what the terrain features add.",
             "created": dt.date.today().isoformat(), "features": names,
@@ -964,8 +965,8 @@ def viewer_models() -> dict:
     ("all" variant). Only the current build's cards are in ``models`` (they have score files); cards of another
     build (v1-v4 on the 1 m rebuild) are listed in ``archived``, their results in ``archived_evaluations``."""
     kind = data_kind()
-    other = "8m" if kind == "1m" else "1m"
-    arch = [_card_summary(c) for c in list_cards(other)]
+    other = "8m"   # the 8 m cards are history on the 1 m site; 1 m cards are not shown on the 8 m site at all
+    arch = [_card_summary(c) for c in list_cards(other)] if kind == "1m" else []
     aev = None
     if arch:
         ep = evaluations_path(other)

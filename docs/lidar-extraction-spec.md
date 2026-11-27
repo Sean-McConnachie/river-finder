@@ -589,6 +589,9 @@ Steps by catchment size:
 
 Nothing a consumer reads is lost without a named replacement.
 
+Done in rf-lxa.8: every item above, and the rebuild order below, is `river-finder nz1m finish`; see
+[`nz1m-finish.md`](nz1m-finish.md) (what each consumer does on the 1 m root, sample results, the switch).
+
 ## Gaps: 1 m information not in the spec
 
 - **Canopy** (DSM minus DEM): trees over the channel, forest on the walls, logjam hazard. It needs the 1 m DSM, a

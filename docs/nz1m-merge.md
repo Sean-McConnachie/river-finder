@@ -5,7 +5,8 @@ lake, and one national river network whose reach areas come from the network, no
 [`lidar-pipeline.md`](lidar-pipeline.md) ("Tiles, halo and edges"); fields and files:
 [`lidar-extraction-spec.md`](lidar-extraction-spec.md). Code: `src/river_finder/nz1mlakes.py` (lake table),
 `src/river_finder/nz1mmerge.py` (merge), the lake pieces of `nz1m.py` (`fill_holes`, `label_lakes`,
-`read_lake_table`). Tests: `tests/test_nz1mmerge.py`.
+`read_lake_table`). Tests: `tests/test_nz1mmerge.py`. Next: [`nz1m-finish.md`](nz1m-finish.md) (everything
+downstream of the merge, `river-finder nz1m finish`, and the switch of the site to the 1 m root).
 
 ```bash
 uv run river-finder nz1m lakes survey q24y33 1880000,5770000,1895000,5790000   # pre-pass: tile boxes or windows

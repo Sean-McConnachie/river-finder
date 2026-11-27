@@ -184,6 +184,21 @@ see `webdata.py`), `falls`
 | `dRoad`, `dTrack`, `dFoot` | distance to road / 4WD or private road / foot track, m (when external data exist) |
 | `fallsN`, `fallsH` | mapped waterfalls on the reach, tallest height m |
 
+On the 1 m LiDAR rebuild (`docs/nz1m-finish.md`) the packed reaches carry seven more columns
+(`viewer_nz.PACK_1M`). They are decoded like the others (the header lists them), so pages that do not read them
+are not affected; on the 8 m scan and the 5 m reference areas they are absent (`undefined`). Proposed for the
+core owner (rf-aq6) to expose; nothing in `core/` reads them yet.
+
+| column | meaning |
+|---|---|
+| `s100` | steepest 100 m, m/km (1 m long profile) |
+| `stp` | bed steps of 1 m or more on the reach (1 m profile) |
+| `smax` | tallest bed step, m |
+| `f1m` | steps of 5 m or more (waterfall candidates) |
+| `lake` | 1 = on a lake |
+| `dsrc` | DEM under the reach: 0 LiDAR, 1 mixed, 2 8 m fallback, 3 lake fill |
+| `ly` | end year of the LiDAR survey over the reach, null none |
+
 `S.rivers` (names), `S.listed` (rivers named in the guides), `S.sections` (known sections).
 
 ### Live rain: `RF.rain`
@@ -232,6 +247,11 @@ once a minute only so that shown ages can move on.
 `cv` (the cross-validated model zoo from `models/cv/results.json`: per recipe the mean, repeat sd and
 fold sd of each AUC and recall, plus the leave-one-region-out style-matched AUC; or null),
 `legacy` (pooled regression and run-finder defaults from `model.json`, or null).
+
+Cards belong to a national build (`data`: `"8m"` or `"1m"`). The registry's `models` holds only the cards of the
+build the site was made from: they have score files. From the 1 m switch on, v1-v4 are history: the registry also
+has `archived` (their summaries, same fields) and `archived_evaluations` (their 8 m results), and `data` (`"1m"`).
+Archived cards have no `<region>_m_<id>.txt`; a page must not offer them as map scores.
 
 ### Detail view: `RF.detail`
 

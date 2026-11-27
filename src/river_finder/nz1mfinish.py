@@ -35,6 +35,7 @@ INPUT_FILES = ["rec2.gpkg", "flood.gpkg", "geology.gpkg", "councils.gpkg", "larg
 INPUT_DIRS = ["linz", "aerial", "s2tiles", "rain/gauges", "rain/scaling", "rain/cache"]
 MERGE_FILES = ["network.parquet", "reaches.parquet", "x1.arrow", "steps.arrow", "lakes.gpkg", "merge.json"]
 V5_ID = "v5"
+BASELINE_1M = "baseline-flow-1m"
 V5_RECIPE = "gbm_xsec"
 SPLIT = "guides-v1"
 
@@ -73,10 +74,11 @@ class Ctx:
 
 # ---------------------------------------------------------------------------------------------- memory
 class PeakRSS:
-    """Peak resident memory of this process while a step runs (sampled from /proc every 0.2 s)."""
+    """Peak resident memory of this process while a step runs (sampled from /proc every 0.2 s), and at its start
+    (what earlier steps left: the step's own need is about ``peak - start``)."""
 
     def __init__(self):
-        self.peak, self._stop = 0.0, threading.Event()
+        self.peak, self.start, self._stop = 0.0, 0.0, threading.Event()
 
     @staticmethod
     def now_gb() -> float:
@@ -94,7 +96,7 @@ class PeakRSS:
             self._stop.wait(0.2)
 
     def __enter__(self):
-        self.peak = self.now_gb()
+        self.peak = self.start = self.now_gb()
         self._t = threading.Thread(target=self._run, daemon=True)
         self._t.start()
         return self
@@ -260,6 +262,8 @@ def step_v5(ctx: Ctx) -> dict:
     from . import ml
     from . import models as M
 
+    if not M.card_path(BASELINE_1M).exists():   # the untrained yardstick, with this build's pool quantiles
+        M.save_card(M.baseline_card(M.national_table(log=ctx.log), BASELINE_1M) | {"data": "1m"})
     p = M.card_path(ctx.v5_id)
     if p.exists():
         c = json.loads(p.read_text())
@@ -388,7 +392,7 @@ STEPS = [
     Step("lidar", step_lidar, ("table",), "lidar coverage on the 1 m tiles: <root>/analysis/lidar"),
     Step("ml", step_ml, ("external",), "ml table: ml_table.pkl (with x1_*)"),
     Step("cv", step_cv, ("ml",), "ml cv + page: models/cv-1m/, <root>/viewer_nz/ml.html"),
-    Step("v5", step_v5, ("ml",), "card v5 (gbm_xsec on guides-v1) + its audit"),
+    Step("v5", step_v5, ("ml",), "card v5 (gbm_xsec on guides-v1), its audit, the 1 m flood-size baseline"),
     Step("evaluate", step_evaluate, ("v5",), "models evaluate (1 m cards): models/evaluations-1m.json"),
     Step("scores", step_scores, ("v5", "viewer"), "models viewer: <region>_m_<card>.txt for the 1 m cards"),
     Step("web", step_web, ("scores", "external", "hydro"), "web data + web build -> <root>/web (preview)"),
@@ -472,7 +476,7 @@ def finish(root: Path | None = None, steps: list[str] | None = None, force: bool
             with PeakRSS() as mem:
                 summary = s.fn(ctx)
             rec = {"done": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"), "seconds": round(time.time() - t0, 1),
-                   "peak_rss_gb": round(mem.peak, 2), "summary": summary}
+                   "peak_rss_gb": round(mem.peak, 2), "start_rss_gb": round(mem.start, 2), "summary": summary}
             later = {x.name for x in todo[todo.index(s) + 1:]}
             for d in _dependents(s.name):   # what was built on the old result is not done any more
                 if st["steps"].pop(d, None) is not None and d not in later:
@@ -513,9 +517,10 @@ def switch(root: Path | None = None, back: bool = False, force: bool = False, lo
     if not any(ln.startswith("root =") for ln in lines):
         lines += ["[data]", f'root = "{target}"']
     ROOT_CONFIG.write_text("\n".join(lines) + "\n")
-    log(f"switch: {ROOT_CONFIG} root = {target}. Next: commit it (with models/{V5_ID}*.json, models/cv-1m/, "
-        f"models/evaluations-1m.json), then `river-finder web build`, `web pages --push`, and refresh the "
-        f"rain-inputs branch from {Path(target) / 'rain-inputs'} (docs/live-rain.md)")
+    log(f"switch: {ROOT_CONFIG} root = {target}. Next (docs/nz1m-finish.md): commit it with models/{V5_ID}.json, "
+        f"{V5_ID}.lgb.txt, {BASELINE_1M}.json, evaluations-1m.json, cv-1m/, then `river-finder web build`, "
+        f"`web pages --push`, and refresh the rain-inputs branch from {Path(target) / 'rain-inputs'} "
+        f"(docs/live-rain.md)")
     return ROOT_CONFIG
 
 

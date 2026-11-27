@@ -74,6 +74,9 @@ def _nz(args):
         print(f"[{(time.time() - t0) / 60:6.1f} min] {m}", flush=True)
 
     tiles = [nz.Tile.parse(t) for t in args.tiles] or None
+    if args.step in ("tiles", "relink", "xsec") and national.is_1m():
+        raise SystemExit(f"nz {args.step} is the 8 m scan's; {national.nz_dir()} holds the 1 m rebuild (its tiles, "
+                         "links and sections come from nz1m tile / merge)")
     if args.step == "fetch":
         national.fetch_all(log)
     elif args.step == "tiles":

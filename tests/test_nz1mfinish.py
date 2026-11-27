@@ -239,7 +239,7 @@ def test_cards_by_build(tmp_path, monkeypatch):
         monkeypatch.setattr(M, "cv_summary", lambda: None)
         reg8 = M.viewer_models()
         assert [c["id"] for c in reg8["models"]] == ["v1", "v4"] and reg8["default"] == "v4"
-        assert [c["id"] for c in reg8["archived"]] == ["v5"]
+        assert "archived" not in reg8                         # the 8 m site does not list the 1 m cards
         with national.using_root(_one_m_root(tmp_path)):
             reg = M.viewer_models()
             assert [c["id"] for c in reg["models"]] == ["v5"] and reg["default"] == "v5" and reg["data"] == "1m"

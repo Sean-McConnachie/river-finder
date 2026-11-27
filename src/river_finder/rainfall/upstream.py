@@ -428,6 +428,8 @@ def network_from_files(weights_path: Path, table_path: Path, relink_log: Path | 
         src["merge"] = {"outlet_kind_3_edge": int(edge.size),
                         "outlet_kind": {str(k): int(v) for k, v in pd.Series(ok[down < 0]).value_counts().items()},
                         "truncated": int(trunc.sum()) if trunc is not None else None}
+        if "stitch" in t:   # how each down link was made (0 in tile, 1 edge, 2 lake, 3 REC2 relink, 4 none)
+            src["merge"]["stitch"] = {str(k): int(v) for k, v in t["stitch"].value_counts().sort_index().items()}
         relink_log = unresolved = None
     if relink_log is not None and Path(relink_log).exists():
         lg = pd.read_csv(relink_log, usecols=["gid", "status"])
