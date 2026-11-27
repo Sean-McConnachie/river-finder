@@ -22,8 +22,8 @@ or dropped; `tests/test_lidarpipe.py` checks the profile pieces. Dry run outputs
 
 ## Summary
 
-- **263 per-reach fields**: 141 per tile from the 1 m DEM (119 of them cross-section summaries, 75 of those the stage
-  table), 29 per tile from the 2 m grid, 28 after the national merge, 28 from external data joined to the stored
+- **265 per-reach fields**: 141 per tile from the 1 m DEM (119 of them cross-section summaries, 75 of those the stage
+  table), 29 per tile from the 2 m grid, 29 after the national merge, 29 from external data joined to the stored
   lines, and 37 derived where they are used (scoring, MAF correction, reach types). Every field that today's
   consumers read is produced under its name, or replaced by a named field (the 8 m `xs_*` sections by `x1_*`; the
   relink logs by `stitch` and `outlet_kind`), or dropped (5 `xs_*` columns no consumer outside `xsec.py` reads).
@@ -169,10 +169,10 @@ cells/s). Country: ~200 tiles x ~75 s = **~4 h** on top of the ~15 h of streamin
 | `end_y` | m | float64 | 2m | NZTM y of the line's last vertex | same | merge |
 | `exits_core` |  | bool | 2m | the reach drains out of the tile's core | same | merge |
 | `inflow` |  | bool | 2m | a REC2 point inflow enters on the reach (in-tile area only) | lidarpipe.segments | area check |
-| `truncated` |  | bool | merge | part of the upstream network ends at a box edge with no stitch or inflow (its area is too small) | cell flag at the reach middle (truncated.tif) | viewer, rain flag 16 |
-| `outlet_kind` |  | uint8 | merge | 0 not an outlet, 1 sea, 2 inland sink or lake without an outlet, 3 unresolved box edge | relink_log.csv / unresolved_gt200.csv | rain, QA |
-| `stitch` |  | uint8 | merge | how down_gid was set: 0 inside the tile, 1 stitched at a tile edge, 2 through a lake node, 3 REC2 relink (fallback), 4 none | relink_log.csv status | rain, QA |
-| `lake_id` |  | int32 | merge | the national lake table's lake the reach lies in or ends in (-1) | new | merge, hydro, viewer |
+| `truncated` |  | bool | merge | part of the upstream network enters a tile's core (from its halo or a REC2 inflow, 0.25 km2 or more) where no reach of another tile links in, and that missing area (missing_up_km2) is more than 10 % of the true area (nz1mmerge.truncation) | cell flag at the reach middle (truncated.tif) | viewer, rain flag 16 |
+| `outlet_kind` |  | uint8 | merge | 0 not an outlet, 1 sea (ends at no data in its tile: the sea or tidal water), 2 inland sink or lake without an outlet, 3 unresolved box edge (no link into the next tile, or that tile is not merged) | relink_log.csv / unresolved_gt200.csv | rain, QA |
+| `stitch` |  | uint8 | merge | how down_gid was set: 0 inside the tile, 1 stitched at a tile edge (the same 2 m cell on the next tile's line, or that tile's first reach within 600 m), 2 through a lake node, 3 REC2 relink (fallback), 4 none | relink_log.csv status | rain, QA |
+| `lake_id` |  | int32 | merge | the national lake table's lake (lakes.gpkg) the reach lies in or ends in; -1 none (tidal water is not a lake) | new | merge, hydro, viewer |
 | `geometry` | m | line | 2m | the reach's 2 m cell-centre path (upstream to downstream, ending on the next reach's first cell), simplified at 1 m | 8 m D8 path, a vertex every ~25 m | viewer, external, aerial, lidar, labels, sections |
 | `region` |  | str | merge | river-guide region of the line midpoint (national.assign_regions) | same | nz score, viewer, rain, hydro |
 | `vi` |  | int32 | merge | index in the region's viewer arrays (reaches of 2 km2 or more), -1 not shown | same | viewer scores, rain, aerial, sections |
@@ -187,6 +187,7 @@ cells/s). Country: ~200 tiles x ~75 s = **~4 h** on top of the ~15 h of streamin
 | `area_tile_mid_km2` | km2 | float32 | 2m | in-tile mean area along the reach body | area_mid_km2 | area_mid_km2 |
 | `local_km2` | km2 | float32 | 2m | area of the box cells (core and halo) that first drain into the reach; each cell is counted once, by the tile whose core holds the reach (lidarpipe.local_areas) | relink.tile_local_km2 (pixels of the core only) | merge, relink, rain |
 | `area_check` | ratio | float32 | merge | area_tile_km2 / area_km2 (flag reaches off by > 10 %) | new | QA |
+| `missing_up_km2` | km2 | float32 | merge | area that enters a tile's core upstream of the reach with no reach of another tile linked in (a tile not merged, a failed link), summed down the network | new | truncated, QA |
 
 #### 1 m long profile
 
@@ -254,11 +255,11 @@ cells/s). Country: ~200 tiles x ~75 s = **~4 h** on top of the ~15 h of streamin
 
 | field | unit | dtype | stage | definition | today (8 m) | used by |
 |---|---|---|---|---|---|---|
-| `dem_source` |  | category | 1m (store) | lidar (>= 95 % of the stations on 1 m data), mixed, 8m (< 5 %) | lidar.source_flag (footprints) | QA, card v5 |
+| `dem_source` |  | category | 1m (store) | lidar (>= 95 % of the stations on 1 m data), mixed, 8m (< 5 %), lake (at least half of the stations on a filled lake hole: the fill at the national lake level) | lidar.source_flag (footprints) | QA, card v5 |
 | `lidar_share` | share | float32 | 1m (store) | share of the reach's stations with a 1 m cell within 2 m (the rest are on the 2 m grid: 8 m fallback or lake fill) | footprint share along the line (lidar.py) | QA, section domain |
-| `dem_res_m` | m | float32 | 1m (store) | resolution of the data the profile was measured on: 1 (lidar) or 8 (mixed, 8m) | new | QA, card v5 |
+| `dem_res_m` | m | float32 | 1m (store) | resolution of the data the profile was measured on: 1 (lidar), 2 (lake: the 2 m fill at the LiDAR level) or 8 (mixed, 8m) | new | QA, card v5 |
 | `seam_dist_m` | m | float32 | 2m | distance from the reach line to the nearest LiDAR / 8 m fallback seam (10 m work grid, capped at 5 km) | new | QA |
-| `lake` |  | bool | 2m | at least half of the reach's stations on a filled lake hole or a flattened lake of the national lake table | new | QA, viewer, hydro, scoring domain |
+| `lake` |  | bool | 2m | at least half of the reach's stations on a filled lake hole or a flattened lake of the national lake table (flattened water and holes below 1 m are tidal: sea, not lake) | new | QA, viewer, hydro, scoring domain |
 | `lake_share` | share | float32 | 2m | share of the reach's stations on a lake | new | QA |
 | `water_flat_share` | share | float32 | 1m (store) | share of the stations on hydro-flattened 1 m cells | new | QA, gradient and step reliability |
 | `water_planar_share` | share | float32 | 1m (store) | share of the stations on planar (interpolated) 1 m cells | new | QA |
@@ -278,6 +279,7 @@ cells/s). Country: ~200 tiles x ~75 s = **~4 h** on top of the ~15 h of streamin
 | `rec2_nzsegment` |  | int64 | merge | REC2 reach matched along the network (area ratio + line distance, rf-33a.4) | not kept (validate.py snaps at outlets) | validation, relink, names |
 | `rec2_area_km2` | km2 | float32 | ext | REC2 CUM_AREA of that reach | validate.py (reference areas) | validation |
 | `rec2_dist_m` | m | float32 | ext | distance from the reach midpoint to that REC2 line | new | validation |
+| `rec2_area_at_km2` | km2 | float32 | ext | REC2's area where the reach midpoint projects onto that REC2 line (its upstream end + the share of its own catchment): what the REC2 agreement compares with area_mid_km2 (rf-33a.4) | new | validation |
 
 #### Flood (MAF)
 
@@ -474,7 +476,7 @@ on 1 m data), `bed` (the rest). Per reach: `steps_n` (bed steps >= 1 m), `drops_
 | `xsec.arrow` | 1 / 2 m | Feather | yes | ~30 | raw sections | later section features |
 | `x1_reach.arrow` | | Feather | yes | ~1.5 | `x1_*` per reach | national `x1.arrow` |
 | `steps.arrow` | | Feather | yes | ~0.25 | steps | web map layer, ML |
-| `tile.json` | | json | yes | | done flag, build id, counts, timings, memory, inflows, lakes filled | resume, viewer |
+| `tile.json` | | json | yes | | done flag, build id, counts, timings, memory, inflows, lakes (level, polygon, outlet, reaches), tidal water, holes examined | resume, viewer |
 | `hand_10m.tif` | 10 m | uint8 | **optional** | ~3.5 | HAND at the 10 m cell centre, 0.25 m steps to 63.5 m | flood and valley map layers, later valley features |
 | `dem_10m.tif` | 10 m | float32 LERC 1 cm | **optional** | ~14 | 1 m block mean at 10 m (fallback in the gaps) | later catchment features (slope, relief, aspect per local catchment) without the 1 m data |
 | 2 m DEM, filled DEM, directions, accumulation | 2 m | | no | | memory only (rf-lxa.2) | |
@@ -488,8 +490,10 @@ catchment and accumulated down the network without re-routing.
 
 | file | content | MB |
 |---|---|---:|
-| `lakes.gpkg` | lake table: polygon, LiDAR level, outlet gid, km2, tiles (rf-lxa.5; needed before the tiles run) | ~20 |
+| `lakes.gpkg` | lake table: polygon, kind (hole, flat, tidal), LiDAR level, outlet point and gid, km2, tiles (rf-lxa.5, `nz1mlakes`; `lakes.json`: counts, tiles to re-run) | ~20 |
 | `network.parquet` | the `merge` fields per gid | ~60 |
+| `reaches.parquet` | the national reach table: every tile field, the merge fields and the line (GeoParquet; rf-lxa.5) | ~1,500 |
+| `merge.json` | the merge report: links and outlets by kind, unresolved exits, cycles, lake nodes (replaces `relink_log.csv`, `unresolved_gt200.csv`) | 0.1 |
 | `x1.arrow` | all `x1_reach.arrow` (replaces `xsec.pkl`) | ~300 |
 | `steps.arrow` | all tiles' steps | ~55 |
 | `regions/<slug>/segments_scored.gpkg`, `segments_table.pkl`, `ml_table.pkl`, `external.pkl`, `hydro.pkl`, `model.json`, `candidates.csv` | as today, with the new columns | ~3,500 |

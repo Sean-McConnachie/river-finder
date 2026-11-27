@@ -393,9 +393,16 @@ def main(argv: list[str] | None = None) -> None:
                                      "-> data/nz1m/plan.json) | tile (the tile job: stream 1 m -> 2 m, lakes, "
                                      "fallback, route, reaches, 2 m and 1 m extraction -> data/nz1m/tiles/<qid>/, "
                                      "resumable) | check (benchmark, OSM waterfall and riser checks of done tiles) "
-                                     "(src/river_finder/nz1m.py, docs/nz1m-tile-job.md)")
-    pq.add_argument("step", choices=["plan", "tile", "check"])
-    pq.add_argument("tiles", nargs="*", help="32 km tile ids such as q11y15 (a quarter of x05y07)")
+                                     "| lakes survey <qid | x0,y0,x1,y1 ...> (the lake pre-pass: rim levels and "
+                                     "polygons without routing -> data/nz1m/lakes/) | lakes build (the national lake "
+                                     "table and the re-run check -> data/nz1m/lakes.gpkg, lakes.json) | merge [qid...] "
+                                     "(stitch the done tiles, lakes as nodes, network areas -> network.parquet, "
+                                     "reaches.parquet, x1.arrow, steps.arrow, merge.json) (src/river_finder/nz1m.py, "
+                                     "nz1mlakes.py, nz1mmerge.py; docs/nz1m-tile-job.md, docs/nz1m-merge.md)")
+    pq.add_argument("step", choices=["plan", "tile", "check", "lakes", "merge"])
+    pq.add_argument("tiles", nargs="*", help="32 km tile ids such as q11y15 (a quarter of x05y07); lakes: survey "
+                                             "or build, then the tiles or windows")
+    pq.add_argument("--out", type=Path, default=None, help="merge: output directory (default: the root)")
     pq.add_argument("--threads", type=int, default=32, help="tile: 1 m read threads")
     pq.add_argument("--force", action="store_true", help="tile: run again even when done")
     pq.add_argument("--root", type=Path, default=None, help="output root (default data/nz1m)")
@@ -579,6 +586,19 @@ def main(argv: list[str] | None = None) -> None:
             if not args.tiles:
                 ap.error("nz1m tile: give the tile ids (no national run from here)")
             nz1m.run_tiles(args.tiles, args.root, threads=args.threads, force=args.force)
+        elif args.step == "lakes":
+            from . import nz1mlakes
+
+            if not args.tiles or args.tiles[0] not in ("survey", "build"):
+                ap.error("nz1m lakes: survey <qid | x0,y0,x1,y1 ...> | build [qid ...]")
+            if args.tiles[0] == "survey":
+                nz1mlakes.survey(args.tiles[1:], args.root)
+            else:
+                nz1mlakes.build(args.tiles[1:] or None, args.root)
+        elif args.step == "merge":
+            from . import nz1mmerge
+
+            nz1mmerge.merge(args.tiles or None, args.root, out=args.out)
         else:
             from . import nz1mcheck
 

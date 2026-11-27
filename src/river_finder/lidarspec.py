@@ -72,14 +72,18 @@ FIELDS: list[Field] = [
     _f("exits_core", "", "bool", "2m", "id", "the reach drains out of the tile's core", "same", "merge"),
     _f("inflow", "", "bool", "2m", "id", "a REC2 point inflow enters on the reach (in-tile area only)",
        "lidarpipe.segments", "area check"),
-    _f("truncated", "", "bool", "merge", "id", "part of the upstream network ends at a box edge with no stitch "
-       "or inflow (its area is too small)", "cell flag at the reach middle (truncated.tif)", "viewer, rain flag 16"),
-    _f("outlet_kind", "", "uint8", "merge", "id", "0 not an outlet, 1 sea, 2 inland sink or lake without an "
-       "outlet, 3 unresolved box edge", "relink_log.csv / unresolved_gt200.csv", "rain, QA"),
-    _f("stitch", "", "uint8", "merge", "id", "how down_gid was set: 0 inside the tile, 1 stitched at a tile edge, "
-       "2 through a lake node, 3 REC2 relink (fallback), 4 none", "relink_log.csv status", "rain, QA"),
-    _f("lake_id", "", "int32", "merge", "id", "the national lake table's lake the reach lies in or ends in (-1)",
-       used_by="merge, hydro, viewer"),
+    _f("truncated", "", "bool", "merge", "id", "part of the upstream network enters a tile's core (from its halo "
+       "or a REC2 inflow, 0.25 km2 or more) where no reach of another tile links in, and that missing area "
+       "(missing_up_km2) is more than 10 % of the true area (nz1mmerge.truncation)",
+       "cell flag at the reach middle (truncated.tif)", "viewer, rain flag 16"),
+    _f("outlet_kind", "", "uint8", "merge", "id", "0 not an outlet, 1 sea (ends at no data in its tile: the sea or "
+       "tidal water), 2 inland sink or lake without an outlet, 3 unresolved box edge (no link into the next tile, or "
+       "that tile is not merged)", "relink_log.csv / unresolved_gt200.csv", "rain, QA"),
+    _f("stitch", "", "uint8", "merge", "id", "how down_gid was set: 0 inside the tile, 1 stitched at a tile edge "
+       "(the same 2 m cell on the next tile's line, or that tile's first reach within 600 m), 2 through a lake node, "
+       "3 REC2 relink (fallback), 4 none", "relink_log.csv status", "rain, QA"),
+    _f("lake_id", "", "int32", "merge", "id", "the national lake table's lake (lakes.gpkg) the reach lies in or "
+       "ends in; -1 none (tidal water is not a lake)", used_by="merge, hydro, viewer"),
     _f("geometry", "m", "line", "2m", "id", "the reach's 2 m cell-centre path (upstream to downstream, ending on the "
        "next reach's first cell), simplified at 1 m", "8 m D8 path, a vertex every ~25 m",
        "viewer, external, aerial, lidar, labels, sections"),
@@ -103,6 +107,9 @@ FIELDS: list[Field] = [
        "relink.tile_local_km2 (pixels of the core only)", "merge, relink, rain"),
     _f("area_check", "ratio", "float32", "merge", "area", "area_tile_km2 / area_km2 (flag reaches off by > 10 %)",
        used_by="QA"),
+    _f("missing_up_km2", "km2", "float32", "merge", "area", "area that enters a tile's core upstream of the reach "
+       "with no reach of another tile linked in (a tile not merged, a failed link), summed down the network",
+       used_by="truncated, QA"),
 
     # --- 1 m long profile
     _f("length_m", "m", "float32", "1m", "profile", "length of the 2 m line after a 20 m moving average "
@@ -199,16 +206,18 @@ FIELDS: list[Field] = [
 
     # --- LiDAR source, lakes, water
     _f("dem_source", "", "category", "1m", "lidar", "lidar (>= 95 % of the stations on 1 m data), mixed, 8m "
-       "(< 5 %)", "lidar.source_flag (footprints)", "QA, card v5", True),
+       "(< 5 %), lake (at least half of the stations on a filled lake hole: the fill at the national lake level)",
+       "lidar.source_flag (footprints)", "QA, card v5", True),
     _f("lidar_share", "share", "float32", "1m", "lidar", "share of the reach's stations with a 1 m cell within "
        "2 m (the rest are on the 2 m grid: 8 m fallback or lake fill)", "footprint share along the line (lidar.py)",
        "QA, section domain", True),
-    _f("dem_res_m", "m", "float32", "1m", "lidar", "resolution of the data the profile was measured on: 1 (lidar) "
-       "or 8 (mixed, 8m)", used_by="QA, card v5", store=True),
+    _f("dem_res_m", "m", "float32", "1m", "lidar", "resolution of the data the profile was measured on: 1 (lidar), "
+       "2 (lake: the 2 m fill at the LiDAR level) or 8 (mixed, 8m)", used_by="QA, card v5", store=True),
     _f("seam_dist_m", "m", "float32", "2m", "lidar", "distance from the reach line to the nearest LiDAR / 8 m "
        "fallback seam (10 m work grid, capped at 5 km)", used_by="QA"),
     _f("lake", "", "bool", "2m", "lidar", "at least half of the reach's stations on a filled lake hole or a "
-       "flattened lake of the national lake table", used_by="QA, viewer, hydro, scoring domain"),
+       "flattened lake of the national lake table (flattened water and holes below 1 m are tidal: sea, not lake)",
+       used_by="QA, viewer, hydro, scoring domain"),
     _f("lake_share", "share", "float32", "2m", "lidar", "share of the reach's stations on a lake", used_by="QA"),
     _f("water_flat_share", "share", "float32", "1m", "lidar", "share of the stations on hydro-flattened 1 m cells",
        used_by="QA, gradient and step reliability", store=True),
@@ -234,6 +243,9 @@ FIELDS: list[Field] = [
        "validate.py (reference areas)", "validation"),
     _f("rec2_dist_m", "m", "float32", "ext", "names", "distance from the reach midpoint to that REC2 line",
        used_by="validation"),
+    _f("rec2_area_at_km2", "km2", "float32", "ext", "names", "REC2's area where the reach midpoint projects onto "
+       "that REC2 line (its upstream end + the share of its own catchment): what the REC2 agreement compares with "
+       "area_mid_km2 (rf-33a.4)", used_by="validation"),
 
     # --- flood
     _f("specific_maf", "m3/s/km2", "float32", "merge", "flood", "H&C 2018 MAF / area of the nearest REC1 reach "
@@ -452,7 +464,8 @@ TILE_FILES: list[dict] = [
     {"name": "steps.arrow", "res_m": 1.0, "dtype": "Feather v2 zstd", "kept": "yes", "mb": 0.25,
      "what": "one row per step (``STEP_STORE``)", "used_by": "web map layer, ML"},
     {"name": "tile.json", "res_m": None, "dtype": "json", "kept": "yes", "mb": 0.01,
-     "what": "done flag, build id, counts, timings, memory, inflows, lakes filled", "used_by": "resume, viewer"},
+     "what": "done flag, build id, counts, timings, memory, inflows, lakes (level, polygon, outlet, reaches), tidal "
+             "water, holes examined, lost and halo-owned areas", "used_by": "resume, viewer, lake table, merge"},
     {"name": "hand_10m.tif", "res_m": 10.0, "dtype": "uint8", "kept": "optional", "mb": 3.5,
      "what": "HAND of the 2 m grid at the 10 m cell centre, 0.25 m steps to 63.5 m (255 = higher)",
      "used_by": "flood/valley map layers, later valley features (user decision)"},
@@ -463,10 +476,17 @@ TILE_FILES: list[dict] = [
      "what": "in memory only (rf-lxa.2 decision)", "used_by": ""},
 ]
 NATIONAL_FILES: list[dict] = [
-    {"name": "lakes.gpkg", "what": "national lake table: polygon, LiDAR water level, outlet gid, km2, tiles "
-                                   "(rf-lxa.5)", "used_by": "tiles (fill level), merge", "mb": 20},
+    {"name": "lakes.gpkg", "what": "national lake table: polygon, kind (hole, flat, tidal), LiDAR water level, "
+                                   "outlet point and gid, km2, tiles (rf-lxa.5, nz1mlakes); lakes.json: counts and "
+                                   "the tiles to re-run", "used_by": "tiles (fill level), merge", "mb": 20},
     {"name": "network.parquet", "what": "every reach's merge fields (stage merge) keyed by gid", "used_by":
      "nz score", "mb": 60},
+    {"name": "reaches.parquet", "what": "the national reach table: every tile field, the merge fields and the line "
+                                        "(GeoParquet, streamed tile by tile; rf-lxa.5)", "used_by": "nz score, GIS",
+     "mb": 1500},
+    {"name": "merge.json", "what": "the merge report: links by kind, outlets by kind, unresolved exits, cycles, lake "
+                                   "nodes, timings (replaces relink_log.csv, unresolved_gt200.csv)", "used_by": "QA",
+     "mb": 0.1},
     {"name": "x1.arrow", "what": "all tiles' x1_reach.arrow (replaces xsec.pkl)", "used_by": "ml_table", "mb": 300},
     {"name": "steps.arrow", "what": "all tiles' steps", "used_by": "web, ML", "mb": 55},
     {"name": "regions/<slug>/segments_scored.gpkg, segments_table.pkl, ml_table.pkl, external.pkl, hydro.pkl, "
