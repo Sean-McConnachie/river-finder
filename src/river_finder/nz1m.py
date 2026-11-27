@@ -1031,6 +1031,11 @@ def _ext_at(cells: np.ndarray, ext_c: np.ndarray, ext_v: np.ndarray) -> np.ndarr
     return np.where(ext_c[j] == cells, ext_v[j], 0.0)
 
 
+REACH_DTYPES = {"seg_id": "int64", "link": "int64", "a": "int64", "b": "int64", "down_seg": "int64",
+                "length_m": "float64", "area_tile_km2": "float64", "area_tile_mid_km2": "float64", "inflow": "bool",
+                "core": "bool", "mid_x": "float64", "mid_y": "float64"}
+
+
 def build_reaches(d, cnt, ext_c, ext_v, tf, core, min_area_km2: float = MIN_AREA_KM2, seg_len_m: float = SEG_LEN_M):
     """Channel links (in-tile area plus inflows >= ``min_area_km2``) cut into reaches of about ``seg_len_m`` of
     20 m-smoothed length (the last reach of a link ends on the confluence cell below). Returns (links, reaches):
@@ -1087,6 +1092,8 @@ def build_reaches(d, cnt, ext_c, ext_v, tf, core, min_area_km2: float = MIN_AREA
         h = int(nxt[li])
         if h >= 0 and h in head and head[h] in first:
             rows[sid]["down_seg"] = first[head[h]]
+    if not rows:   # no channel in the box (a small island): an empty table with the columns and dtypes
+        return links, pd.DataFrame({k: pd.Series(dtype=t) for k, t in REACH_DTYPES.items()})
     return links, pd.DataFrame(rows)
 
 
@@ -1105,6 +1112,8 @@ def seg_of_cell(shape, links, R: pd.DataFrame) -> np.ndarray:
 def body_cells(links, R: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
     a, b, li = R["a"].to_numpy(), R["b"].to_numpy(), R["link"].to_numpy()
     cells = [links[li[k]]["path"][a[k]:max(b[k], a[k] + 1)] for k in range(len(R))]
+    if not cells:   # no reach in the box
+        return np.zeros(0, np.int64), np.zeros(0, np.int64)
     return np.concatenate(cells), np.repeat(np.arange(len(R)), [len(c) for c in cells])
 
 
@@ -1402,7 +1411,9 @@ def process(tile: Tile32, src, dem8, rec2, geology, od: Path, threads: int = 32,
             np.bincount(br_[ok], minlength=nseg), 1)
         R["height_to_width"] = R["gorge_depth_m"] / R["valley_width_m"]
         del bc_, br_, rr, cc, gd, zmax150
-        lc_gid = np.where(lc10 >= 0, R["gid"].to_numpy()[np.maximum(lc10, 0)], -1).astype(np.int64)
+        g_ = np.r_[R["gid"].to_numpy(np.int64), -1]   # -1 also for a box with no reach (lc10 all -1)
+        lc_gid = np.where(lc10 >= 0, g_[np.where(lc10 >= 0, lc10, len(R))], -1).astype(np.int64)
+        del g_
         del lc10
         write_raster(od / "local_catchment_core.tif", lc_gid, box, 10.0, -1,
                      description="gid of the reach each 10 m cell (its centre 2 m cell) first drains into, over the "

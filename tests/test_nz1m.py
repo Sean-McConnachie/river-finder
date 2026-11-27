@@ -289,3 +289,25 @@ def test_tile_with_no_core_reach_writes_empty_outputs(tmp_path):
     assert len(pyogrio.read_dataframe(od / "segments_core.gpkg")) == 0
     assert feather.read_table(od / "profiles.arrow").num_rows == 0
     assert feather.read_table(od / "x1_reach.arrow").num_rows == 0
+
+
+def test_tile_with_no_reach_in_the_box_writes_empty_outputs(tmp_path):
+    """A tile whose whole box holds no channel (a small island, like q24y38) finishes with empty stores."""
+    import pyarrow.feather as feather
+    import pyogrio
+
+    z1, _, z8, _ = SY.terrain()
+    n = z1.shape[0]
+    island = np.zeros(z1.shape, bool)
+    island[n // 2 - 60:n // 2 + 60, n // 2 - 60:n // 2 + 60] = True          # 120 m of land in the sea
+    z1 = np.where(island, np.float32(5.0) + np.float32(0.01) * np.arange(n, dtype=np.float32)[None, :], np.nan)
+    z1 = z1.astype(np.float32)
+    m8 = island.reshape(n // 8, 8, n // 8, 8).any(axis=(1, 3))
+    z8 = np.where(m8, np.float32(6.0), np.nan).astype(np.float32)
+    od = tmp_path / "q00y00"
+    od.mkdir()
+    info = N.process(N.Tile32(0, 0), N.ArraySource(z1, SY.BOX), lambda: z8, None, None, od, threads=2,
+                     log=lambda *a: None, core=SY.CORE, box=SY.BOX)
+    assert info["done"] and info["reaches_box"] == 0 and info["stations"] == 0
+    assert len(pyogrio.read_dataframe(od / "segments_core.gpkg")) == 0
+    assert feather.read_table(od / "profiles.arrow").num_rows == 0
