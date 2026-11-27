@@ -50,7 +50,9 @@
    "hazards": "Keyword tags extracted from the description; read the description for detail.",
    "deaths": "Known fatalities linked to the section. People are not named; see sources. section_match \"approximate\" means the report did not state the exact section.",
    "popularity": "'classic' = well-known, frequently paddled; 'niche' = rarely paddled, exploratory, or packraft-focused; 'standard' = everything else.",
-   "packraftingtrips grades": "Packraft grades, which can differ from hardshell grades."
+   "packraftingtrips grades": "Packraft grades, which can differ from hardshell grades.",
+   "put_in_river / take_out_river": "Optional. The river name a point snaps to when it is not the section's river: e.g. a take-out on the main river below a confluence, or REC2's spelling ('Windon Burn'). '' = the nearest reach whatever its name (REC2 leaves the reach unnamed). Read by models.map_section (snap_river).",
+   "rf-bl3": "2026-11-27: 45 sections re-placed (data_notes 'rf-bl3'); points from the riverguide API and its descriptions, DOC hut and campsite grid references, LINZ river lines and waterfall points, and OSM road/track crossings on the 8 m reach network. See docs/audits/sections-bl3-2026-11.md."
   },
   "safety_disclaimer": "River features, wood and access change after every flood. This is a planning aid compiled from public sources, not current beta. Check recent local information, flows and land access before paddling.",
   "unattached_incidents": [
@@ -507,12 +509,12 @@
    "put_in_coord_accuracy": "as published",
    "take_out_description": "SH29 bridge",
    "take_out_coords": [
-    -37.775,
-    176.01
+    -37.81733,
+    176.01602
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from directions and geography: SH29 Ngamuwahine bridge",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: SH29 bridge over the Ngamuwahine (OSM State Highway 29 x LINZ river line), the riverguide take-out 'at the SH29 bridge'",
+   "take_out_coord_accuracy": "high",
    "gauge": null,
    "flow_notes": null,
    "description": "Fun class IV run when water is up; passes under SH29 about 10km north of the Wairoa put-in.",
@@ -539,8 +541,10 @@
    "primary_source": "riverguide",
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
-   "data_notes": null,
-   "straight_line_km": 3.58,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): take-out moved from a rounded point on the Mangatarata Stream to the SH29 bridge (2.2 km, the guide's 'about 2 km up Ngamuwahine Rd')."
+   ],
+   "straight_line_km": 1.55,
    "distance_check": "no stated length to compare"
   },
   {
@@ -894,12 +898,12 @@
    "put_in_coord_accuracy": "as published",
    "take_out_description": "range of options, see text",
    "take_out_coords": [
-    -38.172,
-    176.507
+    -38.16304,
+    176.52044
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from directions and geography: Above the sump upstream of Tarawera Falls",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: Tarawera Falls (LINZ waterfall point); the guide takes out above the sump just upstream",
+   "take_out_coord_accuracy": "high",
    "gauge": null,
    "flow_notes": null,
    "description": "About 3.5 km of class II-IV from the lake outlet, then the river sinks underground at a sump and reappears as a 30m waterfall (Tarawera Falls). Linking the sump is a major challenge.",
@@ -928,8 +932,10 @@
    "primary_source": "riverguide",
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
-   "data_notes": null,
-   "straight_line_km": 1.26,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): take-out moved to Tarawera Falls (3.8 km; the description says about 3.5 km, the stated 7 km does not fit the map)."
+   ],
+   "straight_line_km": 2.72,
    "distance_check": "ok"
   },
   {
@@ -1075,20 +1081,20 @@
    "time": "2-3 hours",
    "put_in_description": "Contact landowner first (fee per person); park on driveway and use his track.",
    "put_in_coords": [
-    -37.8501,
-    175.9606
+    -37.85018,
+    175.96046
    ],
-   "inferred_put_in_coords": false,
-   "put_in_coord_source": "riverguide section location point (treated as put-in)",
-   "put_in_coord_accuracy": "as published",
+   "inferred_put_in_coords": true,
+   "put_in_coord_source": "inferred: SH29 Tuakopae Bridge (OSM State Highway 29 x LINZ Tuakopae Stream), the riverguide put-in ('continue south on SH29 ... until you reach the Tuakopae Bridge'); the riverguide point is 2 km away on a side stream",
+   "put_in_coord_accuracy": "high",
    "take_out_description": "Next bridge on SH29",
    "take_out_coords": [
-    -37.83,
-    175.955
+    -37.8242,
+    175.99634
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from directions and geography: Next SH29 bridge",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: SH29 Kaukaumoutiti Stream bridge (OSM x LINZ), the riverguide take-out",
+   "take_out_coord_accuracy": "high",
    "gauge": null,
    "flow_notes": null,
    "description": "Creek needing 60-80mm of rain over 6 hours. Waterfalls including Corkscrew, Spa Falls, Douglas Falls and Curtain Falls, plus slides. Scout for new logs. Douglas Falls has caused serious injuries.",
@@ -1121,9 +1127,12 @@
    "primary_source": "riverguide",
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
-   "data_notes": null,
-   "straight_line_km": 2.29,
-   "distance_check": "ok"
+   "data_notes": [
+    "rf-bl3 (2026-11-27): put-in and take-out at the two SH29 bridges the guide names (6 km vs the guide's 5.5 km). Snaps to the REC2/LINZ spelling Tuakopae (put_in_river)."
+   ],
+   "straight_line_km": 4.27,
+   "distance_check": "ok",
+   "put_in_river": "Tuakopae Stream"
   },
   {
    "id": "riverguide:5d16ba7a7b83b60017c66825",
@@ -1478,12 +1487,12 @@
    "put_in_coord_accuracy": "as published",
    "take_out_description": "Ruahihi Powerstation",
    "take_out_coords": [
-    -37.778,
-    176.073
+    -37.78672,
+    176.05159
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from directions and geography: Ruahihi Power Station paddock",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: 2.7 km down the river from the put-in (the guide's length), as the Kaimai Wairoa fix in known_runs.toml (rf-aq6.27): the Ruahihi take-out point snaps onto the Omanawa",
+   "take_out_coord_accuracy": "high",
    "gauge": null,
    "flow_notes": null,
    "description": "Classic dam-release run (summer Sunday releases): Humpty Dumpty, Mothers Nightmare, Devils Elbow, Roller Coaster (undercut wall below). Lower part has rock garden and 2m ledge. Commercially rafted.",
@@ -1516,8 +1525,10 @@
    "primary_source": "riverguide",
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
-   "data_notes": null,
-   "straight_line_km": 3.91,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): take-out as in known_runs.toml (2.8 km, was 5.6 km)."
+   ],
+   "straight_line_km": 2.17,
    "distance_check": "ok"
   },
   {
@@ -1536,20 +1547,20 @@
    "time": "6 hours",
    "put_in_description": "Leave a car at the take-out (Walford Rd), then drive up to the put-in on Work Rd.",
    "put_in_coords": [
-    -37.68799684733366,
-    175.93445520469666
+    -37.690515,
+    175.932524
    ],
    "inferred_put_in_coords": false,
-   "put_in_coord_source": "riverguide section location point (treated as put-in)",
+   "put_in_coord_source": "riverguide description: put-in where the Whatakao and Waitioka converge (-37.690515, 175.932524)",
    "put_in_coord_accuracy": "as published",
    "take_out_description": "Walford Road",
    "take_out_coords": [
-    -37.64,
-    175.99
+    -37.632834,
+    175.943976
    ],
-   "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from directions and geography: Walford Rd",
-   "take_out_coord_accuracy": "low",
+   "inferred_take_out_coords": false,
+   "take_out_coord_source": "riverguide description: take-out park on Walford Road (-37.632834, 175.943976)",
+   "take_out_coord_accuracy": "as published",
    "gauge": "Waipapa",
    "flow_notes": null,
    "description": "Pool-drop flood run, easy or hard depending on portages. Three river-right portages including Baby Back Ribs and Cosmos Falls (both 5+). Good at 3-6 cumecs on the Waipapa gauge.",
@@ -1581,8 +1592,10 @@
    "primary_source": "riverguide",
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
-   "data_notes": null,
-   "straight_line_km": 7.24,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): put-in and take-out from the coordinates written in the riverguide description (the old put-in was the Work Rd parking, the take-out a rounded guess)."
+   ],
+   "straight_line_km": 6.49,
    "distance_check": "no stated length to compare"
   },
   {
@@ -1810,12 +1823,12 @@
    "put_in_coord_accuracy": "as published",
    "take_out_description": "McVicars Rd",
    "take_out_coords": [
-    -39.29,
-    176.57
+    -39.1942,
+    176.61376
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from directions and geography: McVicars Rd / SH5 Mohaka bridge",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: McVicar Road at the Mohaka (OSM road on the 8 m reach network (data/nz)), the riverguide exit 'McVicars Road'; the SH5 bridge is 2.7 km further down",
+   "take_out_coord_accuracy": "medium",
    "gauge": "Mohaka River at McVicars Bridge",
    "flow_notes": null,
    "description": "No run description in riverguide (placeholder).",
@@ -1842,8 +1855,10 @@
    "primary_source": "riverguide",
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
-   "data_notes": null,
-   "straight_line_km": 11.23,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): take-out moved from a rounded point 3 km off the river to McVicar Road."
+   ],
+   "straight_line_km": 8.88,
    "distance_check": "no stated length to compare"
   },
   {
@@ -4090,9 +4105,12 @@
    "primary_source": "riverguide",
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
-   "data_notes": null,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): the take-out (Whakapapa Dam) is on the Whakapapa: it now snaps to the Whakapapa (take_out_river), 9.3 km vs the guide's 9 km (was 5.4 km)."
+   ],
    "straight_line_km": 6.5,
-   "distance_check": "ok"
+   "distance_check": "ok",
+   "take_out_river": "Whakapapa River"
   },
   {
    "id": "riverguide:5d16ba7b7b83b60017c6684d",
@@ -4157,9 +4175,12 @@
    "primary_source": "riverguide",
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
-   "data_notes": null,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): the take-out (Whakapapa Dam) is on the Whakapapa below the Whakapapanui: it now snaps to the Whakapapa (take_out_river), 6.2 km vs the guide's 6 km (was 2.6 km)."
+   ],
    "straight_line_km": 4.45,
-   "distance_check": "ok"
+   "distance_check": "ok",
+   "take_out_river": "Whakapapa River"
   },
   {
    "id": "riverguide:5d16ba7b7b83b60017c668d2",
@@ -4996,12 +5017,12 @@
    "put_in_coord_accuracy": "as published",
    "take_out_description": "Bertrand Rd",
    "take_out_coords": [
-    -39.02,
-    174.3
+    -39.04797,
+    174.25503
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from directions and geography: Bertrand Rd",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: Bertrand Road crossing of the Waitara (OSM on the 8 m reach network (data/nz))",
+   "take_out_coord_accuracy": "high",
    "gauge": null,
    "flow_notes": null,
    "description": "No description in riverguide.",
@@ -5029,9 +5050,10 @@
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
    "data_notes": [
-    "riverguide has no real description for this section yet (placeholder)."
+    "riverguide has no real description for this section yet (placeholder).",
+    "rf-bl3 (2026-11-27): take-out moved from a rounded point on the Parahaki Stream to Bertrand Rd (8.5 km)."
    ],
-   "straight_line_km": 5.64,
+   "straight_line_km": 4.02,
    "distance_check": "no stated length to compare"
   },
   {
@@ -5437,12 +5459,12 @@
    "put_in_coord_accuracy": "as published",
    "take_out_description": "Mokau bridge",
    "take_out_coords": [
-    -38.55,
-    174.85
+    -38.57051,
+    174.90313
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from directions and geography: Mokau bridge",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: first bridge over the Mokau below the Mangaotaki confluence (Totoro Road, OSM); riverguide: 'another trip from the picnic area to the bridge over the Mokau River'",
+   "take_out_coord_accuracy": "high",
    "gauge": null,
    "flow_notes": null,
    "description": "No description in riverguide (placeholder).",
@@ -5470,9 +5492,10 @@
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
    "data_notes": [
-    "riverguide has no real description for this section yet (placeholder)."
+    "riverguide has no real description for this section yet (placeholder).",
+    "rf-bl3 (2026-11-27): take-out moved from a rounded point on the Mangaorongo Stream to the Totoro Rd bridge."
    ],
-   "straight_line_km": 7.47,
+   "straight_line_km": 6.79,
    "distance_check": "no stated length to compare"
   },
   {
@@ -5499,12 +5522,12 @@
    "put_in_coord_accuracy": "as published",
    "take_out_description": "Bridge over the river on Totoro Gorge Rd",
    "take_out_coords": [
-    -38.565,
-    174.96
+    -38.57051,
+    174.90313
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from directions and geography: Totoro Gorge Rd bridge",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: Totoro Road bridge over the Mokau (OSM road on the 8 m reach network (data/nz))",
+   "take_out_coord_accuracy": "high",
    "gauge": "40720",
    "flow_notes": null,
    "description": "Grade 4 gorge run; riverguide refers to NZ Whitewater 5th ed. for details.",
@@ -5531,9 +5554,12 @@
    "primary_source": "riverguide",
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
-   "data_notes": null,
-   "straight_line_km": 5.65,
-   "distance_check": "no stated length to compare"
+   "data_notes": [
+    "rf-bl3 (2026-11-27): take-out moved to the Totoro Rd bridge; the put-in snaps to the reach at Wairere Falls, which REC2 leaves unnamed (put_in_river = '')."
+   ],
+   "straight_line_km": 10.16,
+   "distance_check": "no stated length to compare",
+   "put_in_river": ""
   },
   {
    "id": "riverguide:5d16ba7b7b83b60017c6684c",
@@ -5737,20 +5763,20 @@
    "time": "1 hours",
    "put_in_description": "Park at small clearing on SH1 opposite Tongariro access 10 get-out; follow overgrown track into forest to gravel road.",
    "put_in_coords": [
-    -39.0565,
-    175.8165
+    -39.07828,
+    175.77854
    ],
-   "inferred_put_in_coords": false,
-   "put_in_coord_source": "riverguide section location point (treated as put-in)",
-   "put_in_coord_accuracy": "as published",
+   "inferred_put_in_coords": true,
+   "put_in_coord_source": "inferred: Poutu Falls (LINZ waterfall point); the riverguide point is the SH1 parking 3.5 km away",
+   "put_in_coord_accuracy": "high",
    "take_out_description": "Poutu Falls",
    "take_out_coords": [
-    -39.062,
-    175.826
+    -39.07828,
+    175.77854
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from directions and geography: Poutu Falls",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: pool below Poutu Falls (same point)",
+   "take_out_coord_accuracy": "high",
    "gauge": null,
    "flow_notes": null,
    "description": "Lake outlet to Poutu Falls is rough and grovelly. Technical gorge below falls has trapped wood; portaging debated. Poutu Falls is a clean 10m drop into a plunge pool, worth the 20-minute walk.",
@@ -5782,9 +5808,11 @@
    "primary_source": "riverguide",
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
-   "data_notes": null,
-   "straight_line_km": 1.02,
-   "distance_check": "no stated length to compare"
+   "data_notes": [
+    "rf-bl3 (2026-11-27): the section is the falls: both points at Poutu Falls."
+   ],
+   "straight_line_km": 0.0,
+   "distance_check": "take-out at put-in (park-and-play, waterfall or out-and-back)"
   },
   {
    "id": "riverguide:5d16ba7b7b83b60017c668da",
@@ -6522,12 +6550,12 @@
    "put_in_coord_accuracy": "as published",
    "take_out_description": "Lake Aratiatia",
    "take_out_coords": [
-    -38.641,
-    176.095
+    -38.64875,
+    176.08992
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from directions and geography: Lake Aratiatia below Huka Falls",
-   "take_out_coord_accuracy": "medium",
+   "take_out_coord_source": "inferred: Huka Falls (LINZ waterfall point); the riverguide take-out is 100-200 m below the falls on river left",
+   "take_out_coord_accuracy": "high",
    "gauge": null,
    "flow_notes": null,
    "description": "Waterfall run with lead-in, weir and final falls, eddies to regroup. Typical first-time flows 40-60 cumecs. Planned outflow info often inaccurate, so check flow before putting on. Swimmer helicopter rescues have occurred.",
@@ -6561,8 +6589,10 @@
    "primary_source": "riverguide",
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
-   "data_notes": null,
-   "straight_line_km": 1.18,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): take-out moved from Lake Aratiatia (1.4 km down) to the falls: the guide takes out 100-200 m below them."
+   ],
+   "straight_line_km": 0.21,
    "distance_check": "ok"
   },
   {
@@ -7630,10 +7660,13 @@
    "put_in_coord_source": "riverguide section location point (treated as put-in)",
    "put_in_coord_accuracy": "as published",
    "take_out_description": "Weir area",
-   "take_out_coords": null,
-   "inferred_take_out_coords": false,
-   "take_out_coord_source": null,
-   "take_out_coord_accuracy": null,
+   "take_out_coords": [
+    -40.89542,
+    175.53324
+   ],
+   "inferred_take_out_coords": true,
+   "take_out_coord_source": "inferred: Atiwhakatu Stream confluence (8 m reach network (data/nz)), the riverguide take-out ('continue to the confluence with the Atiwhakatu Stream')",
+   "take_out_coord_accuracy": "high",
    "gauge": "Waingawa River at Kaituna",
    "flow_notes": null,
    "description": "Popular short run near Masterton needing rain (over 10 cumecs); rises and drops quickly. Nice features at 15-30 cumecs. Hazard at the weir near the take-out.",
@@ -7665,10 +7698,10 @@
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
    "data_notes": [
-    "Take-out coordinates not placed: Take-out not described (weir area near the take-out)."
+    "rf-bl3 (2026-11-27): take-out added from the riverguide description (it had none)."
    ],
-   "straight_line_km": null,
-   "distance_check": "missing coordinates"
+   "straight_line_km": 2.2,
+   "distance_check": "no stated length to compare"
   },
   {
    "id": "riverguide:5d16ba7a7b83b60017c6681d",
@@ -8259,20 +8292,20 @@
    "time": "1 day",
    "put_in_description": "Cave Stream track carpark north of the SH73 bridge, walk to river.",
    "put_in_coords": [
-    -43.1915,
-    171.746
+    -43.19797,
+    171.7447
    ],
    "inferred_put_in_coords": true,
-   "put_in_coord_source": "inferred from the written access description and geography",
-   "put_in_coord_accuracy": "low",
+   "put_in_coord_source": "inferred: Cave Stream / Broken River confluence (8 m reach network (data/nz)), below the Cave Stream track carpark",
+   "put_in_coord_accuracy": "high",
    "take_out_description": "Avoca exit via old vehicle track, or continue to the Waimakariri Gorge",
    "take_out_coords": [
-    -43.15,
-    171.8
+    -43.20865,
+    171.93248
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from the written access description and geography",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: Broken River / Waimakariri confluence (8 m reach network (data/nz)), the guide's 'or continue to the Waimakariri'; the Avoca exit track is about 5 km above it",
+   "take_out_coord_accuracy": "medium",
    "gauge": null,
    "flow_notes": "Spring melt or after light-moderate rain; scrapes at normal flows.",
    "description": "Limestone gorge trip; often needs scraping and portaging.",
@@ -8303,9 +8336,11 @@
    "primary_source": "packraftingtrips.nz",
    "attribution": "Summarised in our own words from packraftingtrips.nz; see link for the original.",
    "licence": "Summary only; original content remains under its own copyright",
-   "data_notes": null,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): old points were rounded (take-out on Rata Stream); now the two confluences (21 km)."
+   ],
    "grading_note": "Packrafting grade; hardshell kayak grade may differ.",
-   "straight_line_km": 6.36,
+   "straight_line_km": 15.27,
    "distance_check": "no stated length to compare"
   },
   {
@@ -8776,20 +8811,20 @@
    "time": "1-2 days (Hawdon Hut overnight option)",
    "put_in_description": "Discovery Stream confluence, walking in from the DOC Hawdon campsite road end (Arthur's Pass NP).",
    "put_in_coords": [
-    -43.05,
-    171.75
+    -42.91291,
+    171.73563
    ],
    "inferred_put_in_coords": true,
-   "put_in_coord_source": "inferred from the written access description and geography",
-   "put_in_coord_accuracy": "low",
+   "put_in_coord_source": "inferred: Discovery Stream / Hawdon River confluence by Hawdon Hut (LINZ river lines)",
+   "put_in_coord_accuracy": "high",
    "take_out_description": "True left in the final km near the Hawdon shelter/campsite",
    "take_out_coords": [
-    -43.1,
-    171.82
+    -42.98787,
+    171.74789
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from the written access description and geography",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "DOC Hawdon Shelter campsite, NZTM E1497922 N5239772 (-42.98787, 171.74789)",
+   "take_out_coord_accuracy": "high",
    "gauge": null,
    "flow_notes": "Spring snowmelt or after decent rain; normal flows too low.",
    "description": "Beginner-intermediate scenic run; crux grade III avoidable via a true-right portage.",
@@ -8816,14 +8851,20 @@
     {
      "title": "packraftingtrips.nz: Hawdon River - Discovery Stream confluence to Hawdon shelter",
      "url": "https://www.packraftingtrips.nz/hawdon/"
+    },
+    {
+     "title": "DOC: Hawdon Shelter campsite",
+     "url": "https://www.doc.govt.nz/parks-and-recreation/places-to-go/canterbury/places/arthurs-pass-national-park/things-to-do/campsites/hawdon-shelter-campsite"
     }
    ],
    "primary_source": "packraftingtrips.nz",
    "attribution": "Summarised in our own words from packraftingtrips.nz; see link for the original.",
    "licence": "Summary only; original content remains under its own copyright",
-   "data_notes": null,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): old points were rounded (put-in on the East Hawdon); now the Discovery confluence and the shelter."
+   ],
    "grading_note": "Packrafting grade; hardshell kayak grade may differ.",
-   "straight_line_km": 7.95,
+   "straight_line_km": 8.39,
    "distance_check": "no stated length to compare"
   },
   {
@@ -9343,20 +9384,20 @@
    "time": "Overnight out-and-back",
    "put_in_description": "Just above Huxley Forks Huts.",
    "put_in_coords": [
-    -43.9,
-    169.7
+    -44.00762,
+    169.74325
    ],
    "inferred_put_in_coords": true,
-   "put_in_coord_source": "inferred from the written access description and geography",
-   "put_in_coord_accuracy": "low",
+   "put_in_coord_source": "DOC Huxley Forks Hut, NZTM E1338921 N5122123 ('just above Huxley Forks Huts')",
+   "put_in_coord_accuracy": "high",
    "take_out_description": "Hopkins River below the Huxley confluence, to Ram Hill 2WD carpark",
    "take_out_coords": [
-    -44.0,
-    169.82
+    -44.0003,
+    169.81942
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from the written access description and geography",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: Huxley/Hopkins confluence on the 8 m reach network (data/nz); the trip goes on down the Hopkins to Ram Hill carpark (not pinned)",
+   "take_out_coord_accuracy": "medium",
    "gauge": null,
    "flow_notes": "Needs rain; no gauge (Ahuriri at SH8 as proxy).",
    "description": "Beautiful valley; best after rain when it runs as continuous wave trains.",
@@ -9380,14 +9421,20 @@
     {
      "title": "packraftingtrips.nz: Huxley River - Huxley Forks to Hopkins (Ram Hill carpark)",
      "url": "https://www.packraftingtrips.nz/huxley/"
+    },
+    {
+     "title": "DOC: Huxley Forks Hut",
+     "url": "https://www.doc.govt.nz/parks-and-recreation/places-to-go/canterbury/places/ruataniwha-conservation-park/things-to-do/huts/huxley-forks-hut/"
     }
    ],
    "primary_source": "packraftingtrips.nz",
    "attribution": "Summarised in our own words from packraftingtrips.nz; see link for the original.",
    "licence": "Summary only; original content remains under its own copyright",
-   "data_notes": null,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): old points were rounded to 0.1 deg (12 km off); put-in at the DOC hut, take-out at the Hopkins."
+   ],
    "grading_note": "Packrafting grade; hardshell kayak grade may differ.",
-   "straight_line_km": 14.69,
+   "straight_line_km": 6.15,
    "distance_check": "no stated length to compare"
   },
   {
@@ -9721,20 +9768,20 @@
    "time": "~2.5 h paddle",
    "put_in_description": "Nina Hut (approx 3 h walk in from SH7); marked trail drops steeply ~20 min to river.",
    "put_in_coords": [
-    -42.4,
-    172.4
+    -42.46607,
+    172.32146
    ],
    "inferred_put_in_coords": true,
-   "put_in_coord_source": "inferred from the written access description and geography",
-   "put_in_coord_accuracy": "low",
+   "put_in_coord_source": "DOC Nina Hut, NZTM E1544217 N5298251",
+   "put_in_coord_accuracy": "high",
    "take_out_description": "Lewis River confluence near SH7 (Nina Valley carpark), below the gorge",
    "take_out_coords": [
-    -42.459,
-    172.369
+    -42.47849,
+    172.38521
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from the written access description and geography",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: Nina/Lewis confluence on the 8 m reach network (data/nz)",
+   "take_out_coord_accuracy": "high",
    "gauge": null,
    "flow_notes": "Visual; Hope at Glynn Wye gauge median ~0.5 m; trips at 0.5-0.76 m, more water better.",
    "description": "Forested packraft trip, class I-II with a short II-III gorge of about four rapids; portage options; harder at higher flows.",
@@ -9758,14 +9805,20 @@
     {
      "title": "packraftingtrips.nz: Nina River - Nina Hut to Lewis River (SH7)",
      "url": "https://www.packraftingtrips.nz/nina-river-i-iii-from-nina-hut-to-state-highway-6/"
+    },
+    {
+     "title": "DOC: Nina Hut",
+     "url": "https://www.doc.govt.nz/parks-and-recreation/places-to-go/canterbury/places/lake-sumner-forest-park/things-to-do/huts/nina-hut"
     }
    ],
    "primary_source": "packraftingtrips.nz",
    "attribution": "Summarised in our own words from packraftingtrips.nz; see link for the original.",
    "licence": "Summary only; original content remains under its own copyright",
-   "data_notes": null,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): put-in was rounded (snapped to Goings Creek); now the DOC hut."
+   ],
    "grading_note": "Packrafting grade; hardshell kayak grade may differ.",
-   "straight_line_km": 7.04,
+   "straight_line_km": 5.41,
    "distance_check": "no stated length to compare"
   },
   {
@@ -10308,20 +10361,20 @@
    "time": "Approach 2.5-4 h; paddle 1 h to multi-day",
    "put_in_description": "South Temple Hut via South Temple track from Temple campsite carpark, Hopkins Valley road.",
    "put_in_coords": [
-    -43.95,
-    169.83
+    -44.1337,
+    169.75256
    ],
    "inferred_put_in_coords": true,
-   "put_in_coord_source": "inferred from the written access description and geography",
-   "put_in_coord_accuracy": "low",
+   "put_in_coord_source": "DOC South Temple Hut, NZTM E1340220 N5108148",
+   "put_in_coord_accuracy": "high",
    "take_out_description": "Hopkins Valley road bridge near Temple campsite carpark",
    "take_out_coords": [
-    -44.01,
-    169.87
+    -44.115,
+    169.83367
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from the written access description and geography",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: Lake Ohau Road bridge over the Temple Stream (OSM x LINZ river line), the 'Hopkins Valley road bridge near Temple campsite'",
+   "take_out_coord_accuracy": "high",
    "gauge": null,
    "flow_notes": "Spring melt plus rain; thigh-deep hut crossing means the lower run is on.",
    "description": "Fast, continuous, narrow and technical alpine rain-run (Ohau/Hopkins area); scout from the walking track. Competent paddlers only.",
@@ -10347,14 +10400,20 @@
     {
      "title": "packraftingtrips.nz: South Temple Stream - South Temple Hut to Hopkins Valley road bridge",
      "url": "https://www.packraftingtrips.nz/south-temple/"
+    },
+    {
+     "title": "DOC: South Temple Hut",
+     "url": "https://www.doc.govt.nz/parks-and-recreation/places-to-go/canterbury/places/ruataniwha-conservation-park/things-to-do/huts/south-temple-hut"
     }
    ],
    "primary_source": "packraftingtrips.nz",
    "attribution": "Summarised in our own words from packraftingtrips.nz; see link for the original.",
    "licence": "Summary only; original content remains under its own copyright",
-   "data_notes": null,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): old points were rounded (20 km off, on the North Branch); now the DOC hut and the road bridge."
+   ],
    "grading_note": "Packrafting grade; hardshell kayak grade may differ.",
-   "straight_line_km": 7.4,
+   "straight_line_km": 6.8,
    "distance_check": "no stated length to compare"
   },
   {
@@ -10768,12 +10827,12 @@
    "put_in_coord_accuracy": "as published",
    "take_out_description": "Awapiri bridge",
    "take_out_coords": [
-    -41.85,
-    173.65
+    -41.81635,
+    173.76349
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from directions and geography: Awapiri bridge",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: Awatere Valley Road crossing ~21 km below the Mt Gladstone bridge (OSM), taken as the Awapiri bridge: riverguide and packraftingtrips.nz give ~20 km; the road also crosses at ~17 km",
+   "take_out_coord_accuracy": "medium",
    "gauge": "Awatere River at Awapiri",
    "flow_notes": null,
    "description": "Swift intermediate rapids with small holes, waves and boulders; surfing and eddy hopping. Bluffs where water piles up. Best above normal flow (paddled at 100-120 cumecs). Unsealed road access.",
@@ -10802,8 +10861,10 @@
    "primary_source": "riverguide",
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
-   "data_notes": null,
-   "straight_line_km": 6.68,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): take-out moved from a rounded point (7.9 km) to the bridge ~21 km down."
+   ],
+   "straight_line_km": 16.3,
    "distance_check": "ok"
   },
   {
@@ -11137,20 +11198,20 @@
    "time": "~4 h paddle",
    "put_in_description": "Chloris Stream, walking ~4 h upstream on the Catlins River Walk from Tawanui campsite.",
    "put_in_coords": [
-    -46.43,
-    169.42
+    -46.40324,
+    169.44231
    ],
    "inferred_put_in_coords": true,
-   "put_in_coord_source": "inferred from the written access description and geography",
-   "put_in_coord_accuracy": "low",
+   "put_in_coord_source": "inferred: Chloris Stream / Catlins River confluence (LINZ river lines)",
+   "put_in_coord_accuracy": "high",
    "take_out_description": "Tawanui campsite",
    "take_out_coords": [
-    -46.37,
-    169.45
+    -46.45836,
+    169.49317
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from the written access description and geography",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "DOC Tawanui campsite, NZTM E1330818 N4848999 (-46.45836, 169.49317)",
+   "take_out_coord_accuracy": "high",
    "gauge": null,
    "flow_notes": "Rain run: 7-15.5 cumecs run.",
    "description": "Pretty beech-forest rain run with continuous rapids and II-III drops off papa shelves; easy scouting from the track.",
@@ -11174,14 +11235,20 @@
     {
      "title": "packraftingtrips.nz: Catlins River - Chloris Stream to Tawanui campsite (middle section)",
      "url": "https://www.packraftingtrips.nz/catlins-river-ii-iii-middle-section/"
+    },
+    {
+     "title": "DOC: Tawanui campsite",
+     "url": "https://www.doc.govt.nz/parks-and-recreation/places-to-go/otago/places/catlins-coastal-area/things-to-do/tawanui-campsite/"
     }
    ],
    "primary_source": "packraftingtrips.nz",
    "attribution": "Summarised in our own words from packraftingtrips.nz; see link for the original.",
    "licence": "Summary only; original content remains under its own copyright",
-   "data_notes": null,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): old points were rounded (take-out 10 km off); now the Chloris confluence and the DOC campsite."
+   ],
    "grading_note": "Packrafting grade; hardshell kayak grade may differ.",
-   "straight_line_km": 7.06,
+   "straight_line_km": 7.26,
    "distance_check": "no stated length to compare"
   },
   {
@@ -11200,20 +11267,20 @@
    "time": "2 days",
    "put_in_description": "Upper Dingle Burn a few km below Top Dingle Hut (2-3 h hike).",
    "put_in_coords": [
-    -44.3,
-    169.5
+    -44.28,
+    169.56
    ],
    "inferred_put_in_coords": true,
-   "put_in_coord_source": "inferred from the written access description and geography",
-   "put_in_coord_accuracy": "low",
+   "put_in_coord_source": "Top Dingle Hut: Mountain-Forecast 44.28 S 169.56 E (rounded); the guide puts in a few km below",
+   "put_in_coord_accuracy": "medium",
    "take_out_description": "Silver Island Bay, Lake Hawea, then road walk to the public carpark",
    "take_out_coords": [
-    -44.45,
-    169.27
+    -44.41702,
+    169.38118
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from the written access description and geography",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: Dingle Burn mouth at Lake Hawea (lowest reach of the named river, 8 m reach network (data/nz))",
+   "take_out_coord_accuracy": "high",
    "gauge": null,
    "flow_notes": "Ahuriri gauge ~18-20 cumecs as reference; extra 10-15% ideal.",
    "description": "Two-day through trip with a technical Cotters Gorge crux and 30 km of paddling; tricky to time.",
@@ -11239,14 +11306,20 @@
     {
      "title": "packraftingtrips.nz: Dingle Burn - Below Top Dingle Hut to Lake Hawea",
      "url": "https://www.packraftingtrips.nz/dingle-burn-iii/"
+    },
+    {
+     "title": "Mountain-Forecast: Top Dingle Hut",
+     "url": "https://www.mountain-forecast.com/huts-and-lodges/Top-Dingle-Hut"
     }
    ],
    "primary_source": "packraftingtrips.nz",
    "attribution": "Summarised in our own words from packraftingtrips.nz; see link for the original.",
    "licence": "Summary only; original content remains under its own copyright",
-   "data_notes": null,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): old points were rounded; now 31 km vs the guide's 30 km."
+   ],
    "grading_note": "Packrafting grade; hardshell kayak grade may differ.",
-   "straight_line_km": 24.75,
+   "straight_line_km": 20.84,
    "distance_check": "ok"
   },
   {
@@ -12451,20 +12524,20 @@
    "time": "5-8 h paddle (weekend loop)",
    "put_in_description": "Blue Creek on the Polnoon Burn, Branches Station pastoral lease (station permission required).",
    "put_in_coords": [
-    -44.65,
-    168.68
+    -44.68051,
+    168.78771
    ],
    "inferred_put_in_coords": true,
-   "put_in_coord_source": "inferred from the written access description and geography",
-   "put_in_coord_accuracy": "low",
+   "put_in_coord_source": "inferred: Blue Creek / Polnoon Burn confluence (LINZ river lines)",
+   "put_in_coord_accuracy": "high",
    "take_out_description": "Branches Station carpark on the Shotover, via the Neck portage",
    "take_out_coords": [
-    -44.69,
-    168.74
+    -44.72322,
+    168.72957
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from the written access description and geography",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: lowest Polnoon Burn reach above the Shotover confluence (LINZ -44.72593, 168.72072); the Branches Station carpark is on the Shotover",
+   "take_out_coord_accuracy": "medium",
    "gauge": null,
    "flow_notes": "Medium; avoid spring melt highs and dry lows.",
    "description": "Steep low-volume creeking in the Shotover headwaters; IV rapids portageable (III with portages).",
@@ -12492,9 +12565,11 @@
    "primary_source": "packraftingtrips.nz",
    "attribution": "Summarised in our own words from packraftingtrips.nz; see link for the original.",
    "licence": "Summary only; original content remains under its own copyright",
-   "data_notes": null,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): old points were rounded; now the Blue Creek and Shotover confluences."
+   ],
    "grading_note": "Packrafting grade; hardshell kayak grade may differ.",
-   "straight_line_km": 6.5,
+   "straight_line_km": 6.61,
    "distance_check": "no stated length to compare"
   },
   {
@@ -13670,20 +13745,20 @@
    "time": null,
    "put_in_description": "Upper Cromel, ~10 min walk from Cromel Branch Hut (Mataura headwaters).",
    "put_in_coords": [
-    -45.38,
-    168.6
+    -45.47379,
+    168.35894
    ],
    "inferred_put_in_coords": true,
-   "put_in_coord_source": "inferred from the written access description and geography",
-   "put_in_coord_accuracy": "low",
+   "put_in_coord_source": "DOC Cromel Branch Hut, NZTM E1237247 N4953930 (the put-in is a 10 min walk from the hut)",
+   "put_in_coord_accuracy": "high",
    "take_out_description": "Selbie Rd (Cromel) bridge",
    "take_out_coords": [
-    -45.45,
-    168.62
+    -45.53848,
+    168.35374
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from the written access description and geography",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "DOC Cromel Base Hut, NZTM E1237257 N4946720: the Selbie Rd bridge (end of Selbie Rd, about 1 h walk below the Base Hut) is not on the map data, and packraftingtrips.nz says the lower river is choked with flood debris, so the mapped section stops at the Base Hut",
+   "take_out_coord_accuracy": "medium",
    "gauge": null,
    "flow_notes": "Oreti at Three Kings; scrappy below ~17 cumecs.",
    "description": "Grade III gorge then grade II braids; farmland permission needed.",
@@ -13708,14 +13783,20 @@
     {
      "title": "packraftingtrips.nz: Cromel Stream - Cromel Branch Hut to Selbie Rd bridge",
      "url": "https://www.packraftingtrips.nz/cromel-stream/"
+    },
+    {
+     "title": "DOC: Cromel Base Hut",
+     "url": "https://www.doc.govt.nz/parks-and-recreation/places-to-go/southland/places/eyre-mountains-taka-ra-haka-conservation-park/things-to-do/cromel-base-hut"
     }
    ],
    "primary_source": "packraftingtrips.nz",
    "attribution": "Summarised in our own words from packraftingtrips.nz; see link for the original.",
    "licence": "Summary only; original content remains under its own copyright",
-   "data_notes": null,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): old points were 20 km off (rounded); put-in and take-out at the DOC huts."
+   ],
    "grading_note": "Packrafting grade; hardshell kayak grade may differ.",
-   "straight_line_km": 7.94,
+   "straight_line_km": 7.2,
    "distance_check": "no stated length to compare"
   },
   {
@@ -13734,20 +13815,20 @@
    "time": null,
    "put_in_description": "Small footbridge over the Eglinton at Cascade Creek campground (SH94).",
    "put_in_coords": [
-    -44.975,
-    168.0725
+    -44.89421,
+    168.07529
    ],
    "inferred_put_in_coords": true,
-   "put_in_coord_source": "inferred from the written access description and geography",
-   "put_in_coord_accuracy": "low",
+   "put_in_coord_source": "Cascade Creek campsite (DOC), NZTM E1211142 N5016992 (Wild Things and Waymarking listings)",
+   "put_in_coord_accuracy": "high",
    "take_out_description": "Mistake Creek swing bridge (SH94)",
    "take_out_coords": [
-    -45.025,
-    168.03
+    -44.90972,
+    168.0432
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from the written access description and geography",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: Mistake Creek Track crossing of the Eglinton (OSM), i.e. the Mistake Creek swing bridge",
+   "take_out_coord_accuracy": "high",
    "gauge": null,
    "flow_notes": "Not after heavy rain; ~30 cm below the bridge girder as a reference.",
    "description": "Roadside Fiordland run through bush with tight technical lines; frequent portages around strainers; experienced parties only.",
@@ -13772,14 +13853,20 @@
     {
      "title": "packraftingtrips.nz: Eglinton River - Cascade Creek to Mistake Creek (upper West Branch)",
      "url": "https://www.packraftingtrips.nz/upper-eglinton-iiiii-cascade-creek-to-mistake-creek/"
+    },
+    {
+     "title": "DOC: Cascade Creek campsite",
+     "url": "https://www.doc.govt.nz/parks-and-recreation/places-to-go/fiordland/places/fiordland-national-park/things-to-do/campsites/cascade-creek-campsite"
     }
    ],
    "primary_source": "packraftingtrips.nz",
    "attribution": "Summarised in our own words from packraftingtrips.nz; see link for the original.",
    "licence": "Summary only; original content remains under its own copyright",
-   "data_notes": null,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): old points were 9 km south (on the East Branch); now the campsite and the swing bridge (4.5 km)."
+   ],
    "grading_note": "Packrafting grade; hardshell kayak grade may differ.",
-   "straight_line_km": 6.49,
+   "straight_line_km": 3.06,
    "distance_check": "no stated length to compare"
   },
   {
@@ -14441,21 +14528,18 @@
    "gradient_m_per_km": null,
    "time": null,
    "put_in_description": "Mistake Creek track off SH94 (Eglinton valley), bush sidle to creek near the 600 m contour.",
-   "put_in_coords": [
-    -44.98,
-    168.05
-   ],
-   "inferred_put_in_coords": true,
-   "put_in_coord_source": "inferred from the written access description and geography",
-   "put_in_coord_accuracy": "low",
+   "put_in_coords": null,
+   "inferred_put_in_coords": false,
+   "put_in_coord_source": null,
+   "put_in_coord_accuracy": null,
    "take_out_description": "SH94 roadside (scope and mark beforehand)",
    "take_out_coords": [
-    -45.025,
-    168.03
+    -44.91037,
+    168.04044
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from the written access description and geography",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: Mistake Creek at its Eglinton confluence beside SH94, where the Mistake Creek Track starts (OSM, 8 m reach network (data/nz))",
+   "take_out_coord_accuracy": "high",
    "gauge": null,
    "flow_notes": "After a day of steady rain in Te Anau.",
    "description": "Steep bouldery creek needing rain; III+ at lower flows, harder when high. Clean gear (didymo).",
@@ -14486,10 +14570,12 @@
    "primary_source": "packraftingtrips.nz",
    "attribution": "Summarised in our own words from packraftingtrips.nz; see link for the original.",
    "licence": "Summary only; original content remains under its own copyright",
-   "data_notes": null,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): old points were 7-12 km south of the creek. The put-in ('near the 600 m contour') cannot be placed without contours, so it is left out (the section is placed by name near the take-out)."
+   ],
    "grading_note": "Packrafting grade; hardshell kayak grade may differ.",
-   "straight_line_km": 5.25,
-   "distance_check": "no stated length to compare"
+   "straight_line_km": null,
+   "distance_check": "missing coordinates"
   },
   {
    "id": "riverguide:5d16ba7b7b83b60017c668f3",
@@ -14839,20 +14925,20 @@
    "time": "2 days",
    "put_in_description": "Approach via the Oreti at Mt Nicholas Rd crossing, over the tops to the Windley (5-6 h hike).",
    "put_in_coords": [
-    -45.25,
-    168.3
+    -45.51,
+    168.2
    ],
    "inferred_put_in_coords": true,
-   "put_in_coord_source": "inferred from the written access description and geography",
-   "put_in_coord_accuracy": "low",
+   "put_in_coord_source": "Lower Windley Hut: Mountain-Forecast 45.51 S 168.20 E (rounded)",
+   "put_in_coord_accuracy": "medium",
    "take_out_description": "Old gravel pit on Centre Hill Rd near the Windley/Oreti confluence",
    "take_out_coords": [
-    -45.35,
-    168.33
+    -45.54407,
+    168.15315
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from the written access description and geography",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: Windley/Oreti confluence (8 m reach network (data/nz))",
+   "take_out_coord_accuracy": "high",
    "gauge": null,
    "flow_notes": "~8 cumecs on Oreti at Three Kings.",
    "description": "Two-day through trip: alpine approach then clean challenging grade III gorges on the narrow Windley.",
@@ -14877,14 +14963,20 @@
     {
      "title": "packraftingtrips.nz: Windley River - Lower Windley Hut to Oreti confluence",
      "url": "https://www.packraftingtrips.nz/windley-river-iii/"
+    },
+    {
+     "title": "Mountain-Forecast: Lower Windley Hut",
+     "url": "https://www.mountain-forecast.com/huts-and-lodges/Lower-Windley-Hut"
     }
    ],
    "primary_source": "packraftingtrips.nz",
    "attribution": "Summarised in our own words from packraftingtrips.nz; see link for the original.",
    "licence": "Summary only; original content remains under its own copyright",
-   "data_notes": null,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): old points were 30 km off (rounded); now the hut and the Oreti confluence."
+   ],
    "grading_note": "Packrafting grade; hardshell kayak grade may differ.",
-   "straight_line_km": 11.36,
+   "straight_line_km": 5.26,
    "distance_check": "no stated length to compare"
   },
   {
@@ -14903,20 +14995,20 @@
    "time": "~2 h paddle; 2-day trip",
    "put_in_description": "Tributary SW of Forks Hut, via Forks Hut track from Mararoa crossing (bike or hike in).",
    "put_in_coords": [
-    -45.13,
-    168.17
+    -45.1139,
+    168.12739
    ],
    "inferred_put_in_coords": true,
-   "put_in_coord_source": "inferred from the written access description and geography",
-   "put_in_coord_accuracy": "low",
+   "put_in_coord_source": "DOC Forks Hut (Mavora Lakes), NZTM E1216727 N4992836; the guide puts in on a tributary just above",
+   "put_in_coord_accuracy": "high",
    "take_out_description": "Lower Mararoa, then paddle North Mavora Lake to the Mavora Lakes campsite",
    "take_out_coords": [
-    -45.27,
-    168.17
+    -45.1633,
+    168.1638
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from the written access description and geography",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: Winton Burn / Mararoa confluence (8 m reach network (data/nz)); the guide goes on down the Mararoa to North Mavora Lake",
+   "take_out_coord_accuracy": "high",
    "gauge": null,
    "flow_notes": "No gauge; needs recent rain (est. 10-40 cumecs).",
    "description": "Rain-dependent continuous 8 km of II-III with brief IV at ~25 m/km.",
@@ -14940,17 +15032,24 @@
     {
      "title": "packraftingtrips.nz: Winton Burn - Above Forks Hut to North Mavora Lake",
      "url": "https://www.packraftingtrips.nz/winton-burn/"
+    },
+    {
+     "title": "DOC: Forks Hut",
+     "url": "https://www.doc.govt.nz/parks-and-recreation/places-to-go/southland/places/mavora-lakes-conservation-park/things-to-do/forks-hut/"
     }
    ],
    "primary_source": "packraftingtrips.nz",
    "attribution": "Summarised in our own words from packraftingtrips.nz; see link for the original.",
    "licence": "Summary only; original content remains under its own copyright",
    "data_notes": [
-    "Distance includes the lower Mararoa and the North Mavora Lake paddle to the campsite."
+    "Distance includes the lower Mararoa and the North Mavora Lake paddle to the campsite.",
+    "rf-bl3 (2026-11-27): old points were rounded (15 km off). REC2 spells the stream 'Windon Burn' (put_in_river, take_out_river)."
    ],
    "grading_note": "Packrafting grade; hardshell kayak grade may differ.",
-   "straight_line_km": 15.57,
-   "distance_check": "EXPLAINED: straight-line distance exceeds stated section length (see data_notes)"
+   "straight_line_km": 6.19,
+   "distance_check": "ok",
+   "put_in_river": "Windon Burn",
+   "take_out_river": "Windon Burn"
   },
   {
    "id": "packraftingtrips:worsley",
@@ -14968,20 +15067,20 @@
    "time": null,
    "put_in_description": "About 1.5 km above the Castle River confluence (remote; access across Lake Te Anau).",
    "put_in_coords": [
-    -45.055,
-    167.61
+    -44.92534,
+    167.77424
    ],
    "inferred_put_in_coords": true,
-   "put_in_coord_source": "inferred from the written access description and geography",
-   "put_in_coord_accuracy": "low",
+   "put_in_coord_source": "inferred: Worsley Stream just above the Castle River confluence (8 m reach network (data/nz)); the guide puts in about 1.5 km above it",
+   "put_in_coord_accuracy": "medium",
    "take_out_description": "Lake Te Anau, near Worsley Hut beach",
    "take_out_coords": [
-    -45.065,
-    167.635
+    -44.94315,
+    167.83375
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from the written access description and geography",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "DOC Worsley Hut, NZTM E1192417 N5010367 ('Lake Te Anau, near Worsley Hut beach')",
+   "take_out_coord_accuracy": "high",
    "gauge": null,
    "flow_notes": "Visual; low but runnable mid-October after dry days.",
    "description": "Short remote II+/III stream off Lake Te Anau (North Fiord); didymo-free, respect the trout fishery.",
@@ -15007,15 +15106,21 @@
     {
      "title": "packraftingtrips.nz: Worsley Stream - Above Castle River confluence to Lake Te Anau",
      "url": "https://www.packraftingtrips.nz/worsley/"
+    },
+    {
+     "title": "DOC: Worsley Hut",
+     "url": "https://www.doc.govt.nz/parks-and-recreation/places-to-go/fiordland/places/fiordland-national-park/things-to-do/huts/worsley-hut/"
     }
    ],
    "primary_source": "packraftingtrips.nz",
    "attribution": "Summarised in our own words from packraftingtrips.nz; see link for the original.",
    "licence": "Summary only; original content remains under its own copyright",
-   "data_notes": null,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): old points were 25 km off (rounded, south of the Worsley Arm). On the map the Castle River joins about 6 km above the lake, so the stated 2 km does not fit; length left as published."
+   ],
    "grading_note": "Packrafting grade; hardshell kayak grade may differ.",
-   "straight_line_km": 2.26,
-   "distance_check": "ok"
+   "straight_line_km": 5.09,
+   "distance_check": "EXPLAINED: straight-line distance exceeds stated section length (see data_notes)"
   },
   {
    "id": "packraftingtrips:anatoki-river",
@@ -15802,12 +15907,12 @@
    "put_in_coord_accuracy": "as published",
    "take_out_description": "Ariki Falls (signposted) off SH6",
    "take_out_coords": [
-    -41.79,
-    172.17
+    -41.77564,
+    172.1907
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from directions and geography: Ariki Falls (signposted off SH6)",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: Ariki Falls (LINZ waterfall point, data/nz/waterfalls.gpkg)",
+   "take_out_coord_accuracy": "high",
    "gauge": "Buller at Longford (93202)",
    "flow_notes": null,
    "description": "Classic surf and eddy-line rapids, good intro to big water. Whale Creek and Jet Boat rapids follow. Ariki Falls needs scouting; big whirlpools at high flow.",
@@ -15839,8 +15944,10 @@
    "primary_source": "riverguide",
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
-   "data_notes": null,
-   "straight_line_km": 5.4,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): take-out moved to Ariki Falls (5.6 km vs the guide's 5.9 km; was 9.8 km)."
+   ],
+   "straight_line_km": 3.27,
    "distance_check": "ok"
   },
   {
@@ -16696,12 +16803,12 @@
    "put_in_coord_accuracy": "as published",
    "take_out_description": "Road end",
    "take_out_coords": [
-    -40.72,
-    172.68
+    -40.74097,
+    172.67231
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from directions and geography: Parapara road end",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: where Parapara Valley Road meets the river (OSM), the riverguide 'Road end'",
+   "take_out_coord_accuracy": "medium",
    "gauge": null,
    "flow_notes": null,
    "description": "Beautiful gorge: many 3 m falls into clean pools, steep rockgardens, portages around log jams and sieves. Needs 8-15 cumecs. Final short gorge: jump-portage or 30-minute cliff walk.",
@@ -16736,8 +16843,10 @@
    "primary_source": "riverguide",
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
-   "data_notes": null,
-   "straight_line_km": 5.35,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): take-out moved from a rounded point; the stated 15 km does not fit: the river below the published put-in is 5.6 km long on the map."
+   ],
+   "straight_line_km": 2.95,
    "distance_check": "ok"
   },
   {
@@ -18250,10 +18359,13 @@
    "put_in_coord_source": "riverguide section location point (treated as put-in)",
    "put_in_coord_accuracy": "as published",
    "take_out_description": null,
-   "take_out_coords": null,
-   "inferred_take_out_coords": false,
-   "take_out_coord_source": null,
-   "take_out_coord_accuracy": null,
+   "take_out_coords": [
+    -42.6676,
+    171.6239
+   ],
+   "inferred_take_out_coords": true,
+   "take_out_coord_source": "inferred: put-in of downstream riverguide section 'Crooked River - Upper Gorge'",
+   "take_out_coord_accuracy": "high",
    "gauge": null,
    "flow_notes": null,
    "description": "Among the steepest, most technical class V in NZ. All portageable, with a few mandatory portages. Drops chained with 3-5 moves; short boats recommended.",
@@ -18283,10 +18395,10 @@
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
    "data_notes": [
-    "Take-out coordinates not placed: No take-out given in riverguide."
+    "rf-bl3 (2026-11-27): take-out added (it had none)."
    ],
-   "straight_line_km": null,
-   "distance_check": "missing coordinates"
+   "straight_line_km": 4.51,
+   "distance_check": "no stated length to compare"
   },
   {
    "id": "riverguide:5d16ba7b7b83b60017c66877",
@@ -18378,12 +18490,12 @@
    "put_in_coord_accuracy": "as published",
    "take_out_description": "Fox River bridge SH6 (downstream right-bank track)",
    "take_out_coords": [
-    -43.475,
-    170.0
+    -43.47711,
+    170.00905
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from directions and geography: Fox River bridge, SH6",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: SH6 (Haast Highway) bridge over the Fox River (OSM on the 8 m reach network (data/nz))",
+   "take_out_coord_accuracy": "high",
    "gauge": null,
    "flow_notes": null,
    "description": "Glacier-fed ice river: III-IV boulder gardens to a crux rapid after the swingbridge with multiple drops and hydraulics. A swim would be very serious in the icy water.",
@@ -18416,9 +18528,11 @@
    "primary_source": "riverguide",
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
-   "data_notes": null,
-   "straight_line_km": 4.12,
-   "distance_check": "ok"
+   "data_notes": [
+    "rf-bl3 (2026-11-27): take-out moved from a rounded point to the SH6 bridge."
+   ],
+   "straight_line_km": 3.39,
+   "distance_check": "EXPLAINED: straight-line distance exceeds stated section length (see data_notes)"
   },
   {
    "id": "packraftingtrips:gorge-river",
@@ -18624,20 +18738,20 @@
    "time": "4-5 days total; ~8 h paddling",
    "put_in_description": "Upper Grey/Robinson junction, after trekking via the Nina Valley and Robinson River from Palmer Lodge (Lewis Pass).",
    "put_in_coords": [
-    -42.39,
-    172.2
+    -42.45555,
+    171.99773
    ],
    "inferred_put_in_coords": true,
-   "put_in_coord_source": "inferred from the written access description and geography",
-   "put_in_coord_accuracy": "low",
+   "put_in_coord_source": "inferred: Grey/Robinson confluence (8 m reach network (data/nz))",
+   "put_in_coord_accuracy": "high",
    "take_out_description": "SH7 near Waipuna Rd, south of Ikamatua",
    "take_out_coords": [
-    -42.27,
-    171.68
+    -42.28525,
+    171.67277
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from the written access description and geography",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: SH7 (Ikamatua Highway) beside the Grey south of Ikamatua (OSM)",
+   "take_out_coord_accuracy": "medium",
    "gauge": null,
    "flow_notes": "Paddled at 25 cumecs; Grey at Waipuna gauge.",
    "description": "Multi-day main divide crossing: 50 km trekking then 50 km paddling the Grey, incl. Gentle Annie Gorge.",
@@ -18665,9 +18779,11 @@
    "primary_source": "packraftingtrips.nz",
    "attribution": "Summarised in our own words from packraftingtrips.nz; see link for the original.",
    "licence": "Summary only; original content remains under its own copyright",
-   "data_notes": null,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): old points were rounded (put-in 18 km off); now 48.6 km vs the guide's 50 km."
+   ],
    "grading_note": "Packrafting grade; hardshell kayak grade may differ.",
-   "straight_line_km": 44.78,
+   "straight_line_km": 32.73,
    "distance_check": "ok"
   },
   {
@@ -19290,20 +19406,20 @@
    "time": "Hut walk 4-6 h",
    "put_in_description": "Cassel Flat Hut via 13 km Karangarua Valley track (or McTaggart Creek for a III one-day option).",
    "put_in_coords": [
-    -43.53,
-    169.93
+    -43.66014,
+    169.82951
    ],
    "inferred_put_in_coords": true,
-   "put_in_coord_source": "inferred from the written access description and geography",
-   "put_in_coord_accuracy": "low",
+   "put_in_coord_source": "Cassel Flat Hut: Mountain-Forecast 43.66 S 169.83 E (rounded), at the junction of the Karangarua and Douglas valley routes on the river (OSM)",
+   "put_in_coord_accuracy": "medium",
    "take_out_description": "Copland River confluence (then out via Karangarua/SH6 bridge)",
    "take_out_coords": [
-    -43.57,
-    169.84
+    -43.61018,
+    169.836
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from the written access description and geography",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: Copland/Karangarua confluence (8 m reach network (data/nz))",
+   "take_out_coord_accuracy": "high",
    "gauge": null,
    "flow_notes": "Visual: clear blue water; not after heavy rain; very low unrunnable.",
    "description": "Steep schisty sievey gorge above the Copland confluence: big boofs and chutes needing solid grade IV skills and portaging. Remote and serious.",
@@ -19329,14 +19445,20 @@
     {
      "title": "packraftingtrips.nz: Karangarua River - Cassel Flat to Copland confluence",
      "url": "https://www.packraftingtrips.nz/karangarua/"
+    },
+    {
+     "title": "Mountain-Forecast: Cassel Flat Hut",
+     "url": "https://www.mountain-forecast.com/huts-and-lodges/Cassel-Flat-Hut"
     }
    ],
    "primary_source": "packraftingtrips.nz",
    "attribution": "Summarised in our own words from packraftingtrips.nz; see link for the original.",
    "licence": "Summary only; original content remains under its own copyright",
-   "data_notes": null,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): old points were 10-15 km off (rounded); put-in at Cassel Flat, take-out at the Copland."
+   ],
    "grading_note": "Packrafting grade; hardshell kayak grade may differ.",
-   "straight_line_km": 8.51,
+   "straight_line_km": 5.58,
    "distance_check": "no stated length to compare"
   },
   {
@@ -19625,12 +19747,12 @@
    "put_in_coord_accuracy": "as published",
    "take_out_description": "Landsborough confluence",
    "take_out_coords": [
-    -43.9,
-    169.5
+    -43.96926,
+    169.45119
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from directions and geography: Landsborough confluence",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: MacFarlane/Landsborough confluence (8 m reach network (data/nz))",
+   "take_out_coord_accuracy": "high",
    "gauge": null,
    "flow_notes": null,
    "description": "Expedition creek; first descent in 2012 by a six-person team took 15.5 hours over two days.",
@@ -19661,8 +19783,10 @@
    "primary_source": "riverguide",
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
-   "data_notes": null,
-   "straight_line_km": 7.16,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): take-out moved from a rounded point to the confluence."
+   ],
+   "straight_line_km": 11.3,
    "distance_check": "no stated length to compare"
   },
   {
@@ -19746,12 +19870,12 @@
    "time": null,
    "put_in_description": "Swing bridge on the Maruia, ~1.5 km walk on the St James Walkway (Lewis Pass, SH7).",
    "put_in_coords": [
-    -42.47,
-    172.32
+    -42.36764,
+    172.40451
    ],
    "inferred_put_in_coords": true,
-   "put_in_coord_source": "inferred from the written access description and geography",
-   "put_in_coord_accuracy": "low",
+   "put_in_coord_source": "inferred: St James Walkway swing bridge over the Maruia (OSM foot track crossing the river ~1.5 km from the Lewis Pass carpark)",
+   "put_in_coord_accuracy": "high",
    "take_out_description": "Maruia Springs, near the hot pools (SH7)",
    "take_out_coords": [
     -42.383,
@@ -19788,9 +19912,11 @@
    "primary_source": "packraftingtrips.nz",
    "attribution": "Summarised in our own words from packraftingtrips.nz; see link for the original.",
    "licence": "Summary only; original content remains under its own copyright",
-   "data_notes": null,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): put-in was rounded (on the Nina); now the swing bridge (8 km to Maruia Springs)."
+   ],
    "grading_note": "Packrafting grade; hardshell kayak grade may differ.",
-   "straight_line_km": 9.69,
+   "straight_line_km": 6.67,
    "distance_check": "no stated length to compare"
   },
   {
@@ -20337,12 +20463,12 @@
    "time": "8-10 h paddle; 2-3 days",
    "put_in_description": "Okuru/Ngatau confluence (fly in) or Emily Creek confluence (tough off-track walk in).",
    "put_in_coords": [
-    -44.1,
-    168.95
+    -44.05496,
+    169.14547
    ],
    "inferred_put_in_coords": true,
-   "put_in_coord_source": "inferred from the written access description and geography",
-   "put_in_coord_accuracy": "low",
+   "put_in_coord_source": "inferred: Ngatau/Okuru confluence (8 m reach network (data/nz))",
+   "put_in_coord_accuracy": "high",
    "take_out_description": "Okuru River bridge on Jackson Bay Rd",
    "take_out_coords": [
     -43.93,
@@ -20382,9 +20508,11 @@
    "primary_source": "packraftingtrips.nz",
    "attribution": "Summarised in our own words from packraftingtrips.nz; see link for the original.",
    "licence": "Summary only; original content remains under its own copyright",
-   "data_notes": null,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): put-in was rounded (off the river); now the Ngatau confluence."
+   ],
    "grading_note": "Packrafting grade; hardshell kayak grade may differ.",
-   "straight_line_km": 19.05,
+   "straight_line_km": 22.77,
    "distance_check": "no stated length to compare"
   },
   {
@@ -20469,20 +20597,20 @@
    "time": "2-day out-and-back",
    "put_in_description": "Tunnel Creek Hut (upper, III+) or near the Otoko/Paringa confluence (II); off-track route.",
    "put_in_coords": [
-    -43.72,
-    169.48
+    -43.81843,
+    169.53702
    ],
    "inferred_put_in_coords": true,
-   "put_in_coord_source": "inferred from the written access description and geography",
-   "put_in_coord_accuracy": "low",
+   "put_in_coord_source": "DOC Tunnel Creek Hut, NZTM E1321506 N5142463 (DOC hut page for the Haast, Paringa and Moeraki area)",
+   "put_in_coord_accuracy": "high",
    "take_out_description": "SH6 bridge over the lower Paringa",
    "take_out_coords": [
-    -43.718,
-    169.416
+    -43.71164,
+    169.49075
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from the written access description and geography",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: SH6 (Haast Highway) bridge over the Paringa (OSM x LINZ river line)",
+   "take_out_coord_accuracy": "high",
    "gauge": null,
    "flow_notes": "Needs recent rain; visual.",
    "description": "South Westland: upper grade III+ boulder gardens, easier II lower down; overnight at Tunnel Creek Hut.",
@@ -20514,9 +20642,11 @@
    "primary_source": "packraftingtrips.nz",
    "attribution": "Summarised in our own words from packraftingtrips.nz; see link for the original.",
    "licence": "Summary only; original content remains under its own copyright",
-   "data_notes": null,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): old points were rounded (take-out 6 km off); now the DOC hut and the SH6 bridge (16 km)."
+   ],
    "grading_note": "Packrafting grade; hardshell kayak grade may differ.",
-   "straight_line_km": 5.15,
+   "straight_line_km": 12.44,
    "distance_check": "no stated length to compare"
   },
   {
@@ -20543,12 +20673,12 @@
    "put_in_coord_accuracy": "as published",
    "take_out_description": "Old SH6 bridge site on Whataroa River",
    "take_out_coords": [
-    -43.276,
-    170.392
+    -43.29644,
+    170.41514
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from directions and geography: Old SH6 bridge site, Whataroa River",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "Whataroa old SH6 bridge site: inferred: where the gravel road/track on the south bank meets the river 1.6 km above the SH6 Whataroa bridge (OSM on the 8 m reach network (data/nz)), per riverguide 'turn eastwards on the gravel road on the southern side for 2 km to the old bridge site'",
+   "take_out_coord_accuracy": "medium",
    "gauge": null,
    "flow_notes": null,
    "description": "Stunning schist gorge with four or five class IV rapids and the Weir slide; class III+ past Nolans Hut; easy float after the Whataroa confluence. Commercially rafted.",
@@ -20580,8 +20710,10 @@
    "primary_source": "riverguide",
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
-   "data_notes": null,
-   "straight_line_km": 12.78,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): take-out re-placed on the Whataroa (same point as the Upper Whataroa)."
+   ],
+   "straight_line_km": 9.93,
    "distance_check": "no stated length to compare"
   },
   {
@@ -20608,12 +20740,12 @@
    "put_in_coord_accuracy": "as published",
    "take_out_description": "Old SH6 bridge site on Whataroa River",
    "take_out_coords": [
-    -43.276,
-    170.392
+    -43.29644,
+    170.41514
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from directions and geography: Old SH6 bridge site, Whataroa River",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "Whataroa old SH6 bridge site: inferred: where the gravel road/track on the south bank meets the river 1.6 km above the SH6 Whataroa bridge (OSM on the 8 m reach network (data/nz)), per riverguide 'turn eastwards on the gravel road on the southern side for 2 km to the old bridge site'",
+   "take_out_coord_accuracy": "medium",
    "gauge": null,
    "flow_notes": null,
    "description": "Outrageous must-do steep river with stunning scenery. Knuckle Grinder (IV-V), Pinballs (sneak line). Schist gorge with four or five class IV rapids and the Weir slide.",
@@ -20646,9 +20778,10 @@
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
    "data_notes": [
-    "Stated 13 km probably excludes the float down the Whataroa to the old SH6 bridge site."
+    "Stated 13 km probably excludes the float down the Whataroa to the old SH6 bridge site.",
+    "rf-bl3 (2026-11-27): take-out re-placed on the Whataroa (same point as the Upper Whataroa)."
    ],
-   "straight_line_km": 18.09,
+   "straight_line_km": 15.23,
    "distance_check": "EXPLAINED: straight-line distance exceeds stated section length (see data_notes)"
   },
   {
@@ -20675,12 +20808,12 @@
    "put_in_coord_accuracy": "as published",
    "take_out_description": "Old SH6 bridge site on Whataroa River (gravel road east 2 km from SH6 bridge)",
    "take_out_coords": [
-    -43.276,
-    170.392
+    -43.29644,
+    170.41514
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from directions and geography: Old SH6 bridge site, Whataroa River",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "Whataroa old SH6 bridge site: inferred: where the gravel road/track on the south bank meets the river 1.6 km above the SH6 Whataroa bridge (OSM on the 8 m reach network (data/nz)), per riverguide 'turn eastwards on the gravel road on the southern side for 2 km to the old bridge site'",
+   "take_out_coord_accuracy": "medium",
    "gauge": null,
    "flow_notes": null,
    "description": "Steep low-volume creeking, class IV-V with a couple of class V crux drops, mostly portageable. Scone Creek has a 12 m falls.",
@@ -20718,9 +20851,10 @@
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
    "data_notes": [
-    "Stated 13 km probably excludes the float down the Whataroa to the old SH6 bridge site."
+    "Stated 13 km probably excludes the float down the Whataroa to the old SH6 bridge site.",
+    "rf-bl3 (2026-11-27): take-out re-placed on the Whataroa (same point as the Upper Whataroa)."
    ],
-   "straight_line_km": 19.29,
+   "straight_line_km": 16.53,
    "distance_check": "EXPLAINED: straight-line distance exceeds stated section length (see data_notes)"
   },
   {
@@ -21190,20 +21324,20 @@
    "time": "~4 h paddle; 3-day trip",
    "put_in_description": "Thomas River Hut via Reef Spur from Mataketake Hut.",
    "put_in_coords": [
-    -43.98,
-    169.4
+    -43.89314,
+    169.19509
    ],
    "inferred_put_in_coords": true,
-   "put_in_coord_source": "inferred from the written access description and geography",
-   "put_in_coord_accuracy": "low",
+   "put_in_coord_source": "DOC Thomas River Hut, NZTM E1294389 N5132955",
+   "put_in_coord_accuracy": "high",
    "take_out_description": "Haast River, gravel carpark on SH6 by Thomas Bluff",
    "take_out_coords": [
-    -44.0,
-    169.33
+    -43.93762,
+    169.15242
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from the written access description and geography",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "inferred: Thomas/Haast confluence (8 m reach network (data/nz)); packraftingtrips.nz: at the Haast, paddle across and walk a short track to a gravel carpark on SH6 about 200 m west of Thomas Bluff",
+   "take_out_coord_accuracy": "high",
    "gauge": null,
    "flow_notes": "Visual; check Haast at Roaring Billy gauge.",
    "description": "Three-day through trip via the Mataketake tops: grade III with IV/V drops portaged, then the Haast to SH6.",
@@ -21227,14 +21361,20 @@
     {
      "title": "packraftingtrips.nz: Thomas River - Thomas River Hut to Haast River (SH6)",
      "url": "https://www.packraftingtrips.nz/thomas-river-iii-via-mataketake-tops/"
+    },
+    {
+     "title": "DOC: Thomas River Hut",
+     "url": "https://www.doc.govt.nz/parks-and-recreation/places-to-go/west-coast/places/haast-paringa-and-moeraki-rivers-area/things-to-do/huts/thomas-river-hut/"
     }
    ],
    "primary_source": "packraftingtrips.nz",
    "attribution": "Summarised in our own words from packraftingtrips.nz; see link for the original.",
    "licence": "Summary only; original content remains under its own copyright",
-   "data_notes": null,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): put-in was 25 km off (snapped to Mather Creek). The hut is 7 km above the Haast on the map, so the stated 18 km does not fit; length left as published."
+   ],
    "grading_note": "Packrafting grade; hardshell kayak grade may differ.",
-   "straight_line_km": 6.03,
+   "straight_line_km": 6.01,
    "distance_check": "ok"
   },
   {
@@ -21721,12 +21861,12 @@
    "put_in_coord_accuracy": "as published",
    "take_out_description": "SH6 bridge over Waiho River",
    "take_out_coords": [
-    -43.387,
-    170.18
+    -43.39359,
+    170.18033
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from directions and geography: SH6 Waiho bridge, Franz Josef",
-   "take_out_coord_accuracy": "medium",
+   "take_out_coord_source": "inferred: SH6 bridge over the Waiho (OSM Fox Glacier Highway at the 8 m reach network (data/nz))",
+   "take_out_coord_accuracy": "high",
    "gauge": "Waiho Rv @ SH6",
    "flow_notes": null,
    "description": "Freezing glacier river, less intense than the Fox: even-gradient wave chains, bigger and more confused at high flow. Unstable, aggrading riverbed.",
@@ -21758,9 +21898,11 @@
    "primary_source": "riverguide",
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
-   "data_notes": null,
-   "straight_line_km": 5.96,
-   "distance_check": "ok"
+   "data_notes": [
+    "rf-bl3 (2026-11-27): take-out moved to the SH6 bridge."
+   ],
+   "straight_line_km": 5.23,
+   "distance_check": "EXPLAINED: straight-line distance exceeds stated section length (see data_notes)"
   },
   {
    "id": "riverguide:5d16ba7b7b83b60017c668d1",
@@ -22197,20 +22339,20 @@
    "time": "3.5-6 hours",
    "put_in_description": "Butler Hut (heli)",
    "put_in_coords": [
-    -43.42,
-    170.52
+    -43.4069,
+    170.4146
    ],
-   "inferred_put_in_coords": true,
-   "put_in_coord_source": "Butler Junction Hut area (API record has no coordinates)",
-   "put_in_coord_accuracy": "low",
+   "inferred_put_in_coords": false,
+   "put_in_coord_source": "riverguide section location point (the API record now has one; treated as put-in)",
+   "put_in_coord_accuracy": "as published",
    "take_out_description": "Old SH6 bridge site",
    "take_out_coords": [
-    -43.276,
-    170.392
+    -43.29644,
+    170.41514
    ],
    "inferred_take_out_coords": true,
-   "take_out_coord_source": "inferred from directions and geography: Old SH6 bridge site, Whataroa River",
-   "take_out_coord_accuracy": "low",
+   "take_out_coord_source": "Whataroa old SH6 bridge site: inferred: where the gravel road/track on the south bank meets the river 1.6 km above the SH6 Whataroa bridge (OSM on the 8 m reach network (data/nz)), per riverguide 'turn eastwards on the gravel road on the southern side for 2 km to the old bridge site'",
+   "take_out_coord_accuracy": "medium",
    "gauge": null,
    "flow_notes": null,
    "description": "Busy steep rapids needing scouting, with a large unrun rapid about 2 km down. Portals of Doom portaged on the right. Route-finding and eddy hopping. (River name/coords missing in API record; inferred.)",
@@ -22242,8 +22384,10 @@
    "primary_source": "riverguide",
    "attribution": "Credits: WWNZ and Graham Charles (NZ Whitewater 4th Edition 2006). CC BY-SA 3.0 NZ. Description condensed/adapted from the NZ RiverGuide.",
    "licence": "CC BY-SA 3.0 NZ",
-   "data_notes": null,
-   "straight_line_km": 19.07,
+   "data_notes": [
+    "rf-bl3 (2026-11-27): put-in from the riverguide API (it had no point on 2026-11-13; riverguide now calls the section 'Butler Hut to Barrowman Flat'); take-out re-placed: 16.2 km down the river vs the guide's 16.8 km."
+   ],
+   "straight_line_km": 12.28,
    "distance_check": "ok"
   },
   {
