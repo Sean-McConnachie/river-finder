@@ -41,6 +41,21 @@ The schemes, their layout and the operators come from the operator and agency pa
   ([Waitaki](https://www.meridianenergy.co.nz/power-stations/hydro/about-the-waitaki-hydro-scheme)), Waikato
   Regional Council (hydro information sheet), Ministry for the Environment fast-track documents (Aniwhenua).
 
+Checked in rf-6u2 (2026-11-27). The session could not open the Electricity Authority, operator, Wikipedia or
+fast-track pages (outside its network allowlist), so:
+
+- **Read directly:** Environment Canterbury consents from its [Open Data Portal](https://data.ecan.govt.nz/)
+  (`data/2` consent details with WGS84 positions, `data/4` conditions, `data/80` allocations by `RecordNo`): Lake
+  Coleridge (CRC173079 Harper Diversion, CRC173064 and CRC173021 Oakden Bank, CRC172958 Wilberforce, CRC172988,
+  CRC173092 and CRC173100 Lake Stream) and the Rangitata Diversion Race (CRC182542); the national 1 m and Kaimai 5 m
+  LiDAR DEMs (levels, weir ponds) and the 8 m network (catchment areas).
+- **Through web-search excerpts only:** the Kaimai re-consenting documents on fasttrack.govt.nz (Appendix A final
+  conditions, Appendix F existing consents, Appendix H Tonkin & Taylor hydrology, the January 2026 panel presentation),
+  NIWA Fisheries Environmental Report 22 (Piriaka) and the Electricity Commission lake level history (Kawarau Falls).
+  Values taken from them are cross-checked where possible: the Opuiaki Weir's consent map reference (N67:483343, NZGD49
+  North Island Grid) lands 60 m from where the LiDAR DEM has the river at the weir's crest level with the catchment
+  Tonkin & Taylor give.
+
 Positions: dams, weirs and power stations mapped in OpenStreetMap, read from the Overture Maps release
 `2026-10-21.0` (`base/infrastructure`: `water/dam`, `water/weir`, `power/plant`, `power/generator` with a hydro
 source tag; about 390 dams, 470 weirs and 230 hydro plants and generators in NZ). Points without an OSM feature
@@ -49,22 +64,28 @@ config. Licence of the OSM positions: ODbL, © OpenStreetMap contributors.
 
 ## Coverage
 
-24 schemes, 75 points: Tongariro Power Scheme (Whanganui, Te Whaiau, Otamangakau, Whakapapa, Mangatepopo and Okupata
-intakes; Moawhango and Rangipo dams; Rangipo tailrace; Poutu Intake), Waikaremoana, Kaimai (upper Wairoa weir,
-Omanawa intake, Lloyd Mandeno, Lake McLaren and Ruahihi), Aniwhenua and Matahina, Wheao and Flaxy, the Waikato
-system (Taupo gates, Aratiatia, Ohakuri, Atiamuri, Whakamaru, Maraetai, Waipapa, Arapuni, Karapiro), Piriaka,
-Patea, Mangahao, Cobb, Lake Coleridge (Harper and Wilberforce diversions), Highbank and the Rangitata Diversion
-Race, Opuha, Waitaki (Tekapo, Pukaki and Ohau control structures, Ohau A and C, Ruataniwha, Benmore, Aviemore,
-Waitaki), Clutha (Clyde, Roxburgh, Hawea and Kawarau controls), Waipori, Manapouri (Te Anau gates, Mararoa Weir),
-Monowai, Arnold, Kumara, Kaniere, Roaring Meg, Branch River and Waihopai.
+24 schemes, 81 points: Tongariro Power Scheme (Whanganui, Te Whaiau, Otamangakau, Whakapapa, Mangatepopo and Okupata
+intakes; Moawhango and Rangipo dams; Rangipo tailrace; Poutu Intake), Waikaremoana, Kaimai (Opuiaki and Ngatuhoa
+weirs, Lake Mangaonui, Mangapapa weir on the upper Wairoa, Omanawa intake, Lloyd Mandeno, Mangakarengorengo weir,
+Lake McLaren and Ruahihi), Aniwhenua and Matahina, Wheao and Flaxy, the Waikato system (Taupo gates, Aratiatia,
+Ohakuri, Atiamuri, Whakamaru, Maraetai, Waipapa, Arapuni, Karapiro), Piriaka, Patea, Mangahao, Cobb, Lake Coleridge
+(Harper Diversion, Oakden Bank, Lake Stream dam, Wilberforce diversion), Highbank and the Rangitata Diversion Race,
+Opuha, Waitaki (Tekapo, Pukaki and Ohau control structures, Ohau A and C, Ruataniwha, Benmore, Aviemore, Waitaki),
+Clutha (Clyde, Roxburgh, Hawea and Kawarau controls), Waipori, Manapouri (Te Anau gates, Mararoa Weir), Monowai,
+Arnold, Kumara, Kaniere, Roaring Meg, Branch River and Waihopai.
 
 Not covered (small or no position found): the 22 Whangaehu-side intakes of the Eastern Diversion, the Taurewa and
-Tawhitikuri intakes, the Opuiaki and Ngatuhoa intakes of the Kaimai scheme, Mangorei, Motukawa, Hinemaiaia,
+Tawhitikuri intakes (no source gives their position; the Tawhitikuri Stream is named in REC2, up to 8.4 km², and no
+stream is named Taurewa in REC2 or the LINZ Topo50 names), the Kaimai scheme's Tauwharawhara take (283 l/s), Lake
+Matariki and Lower Mangapapa bypass, the Acheron diversion to Lake Coleridge, Mangorei, Motukawa, Hinemaiaia,
 Kuratau, Wairere, Matiri, Paerau and Patearoa, Teviot, Fraser, Wye Creek, Amethyst, Wahapo, Inchbonnie and the
 irrigation storages (Falls Dam, Waimea).
 
 Counts after `hydro attach` (2026-11-25, national table): diverted 1,859 reaches / 454 km, regulated 3,434 / 834 km,
 reservoir 2,588 / 628 km (500 km on reaches of 2 km² or more). Per scheme: `data/nz/hydro_summary.json`.
+With the rf-6u2 config (`hydro check`, 2026-11-27, same table; `hydro attach` not yet rerun): diverted 2,069 / 505 km,
+regulated 3,441 / 836 km, reservoir 2,593 / 629 km. Kaimai: diverted 99 → 190 reaches (24 → 47 km), regulated
+66 → 73, reservoir 15 → 20; Lake Coleridge: diverted 1 → 120 reaches (0.3 → 29 km); the other schemes are unchanged.
 
 ## Method
 
@@ -102,10 +123,21 @@ reservoir 2,588 / 628 km (500 km on reaches of 2 km² or more). Per scheme: `dat
   lake outlets are approximate (`approx` in the config). `hydro check` shows each snap.
 - **Shares by catchment area, not flow.** An intake takes `take` of the flow by area. Intake capacities are
   finite: in a flood most intakes spill, so the flood itself is less reduced than the share says; the share
-  describes normal flows, which is what makes a reach runnable. Partial takes (`take` < 1) are estimates
-  (Piriaka, Harper, Wilberforce, Rangitata Diversion Race, Kawarau gates).
-- **The 0.5 thresholds** put a reach just under half diverted outside `diverted` (e.g. parts of the Wairoa below
-  Lake McLaren, where the Mangakarengorengo joins below the dam: those reaches are `regulated`).
+  describes normal flows, which is what makes a reach runnable. `take = 1` where the intake takes all but a residual
+  flow at normal flows, e.g. the Mangakarengorengo weir: up to 7 m³/s of a 6.55 m³/s mean flow, but it spills on
+  about 103 days a year, so on average it takes 53 %. Partial takes (`take` < 1) remain estimates, each with its
+  reason in the point's note: Wilberforce 0.85 (consent: up to 30 m³/s, at least 3 m³/s left; the river's flow
+  there not found), Piriaka 0.6 (station capacity and the river's median flow not found), Rangitata Diversion Race
+  0.25 (the consent's restriction table keeps the share at or below about 0.5 at every flow) and Kawarau gates 0.3
+  (no consent terms found). The Harper Diversion takes the whole river (40 m³/s, no residual flow): `take = 1`
+  since rf-6u2.
+- **The 0.5 thresholds** put a reach just under half diverted outside `diverted`. The Wairoa below Lake McLaren
+  was such a case until rf-6u2, for a wrong snap: the dam point took the Mangakarengorengo's last reach (114 km²,
+  REC2 names it Wairoa River) instead of the lake's outflow (167 km², named Ruahihi Canal in REC2). With the outflow
+  and the Mangakarengorengo weir the reaches from the dam to Ruahihi are 0.91 to 0.98 diverted.
+- **Shares above 1.** Water that a return brings back is added again where a later return releases it (Kaimai:
+  the Lloyd Mandeno release passes Ruahihi), so `reg_share` can pass 1 below a chain of stations; `hydro_share` is
+  capped at 1 and the class is unaffected.
 - **Network.** Points snap to the 8 m network. Where it is wrong the marking is too: the upper Waikato between
   Lake Taupo and Ohakuri is unnamed and does not carry Lake Taupo's catchment (3 km² at the Taupo gates), so the
   Taupo gates carry `area_km2 = 3300`. Lake reaches are counted as the DEM's flow lines across the lake.

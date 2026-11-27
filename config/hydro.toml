@@ -14,8 +14,9 @@
 # `until` (river name) stops the marking at that confluence, `km` after that distance.
 #
 # Coordinates: dams, weirs and power stations mapped in OpenStreetMap (Overture Maps 2026-10-21.0, base/infrastructure
-# water/dam, water/weir, power/plant, power/generator: "osm" in the notes), else from the operator and scheme
-# descriptions ("approx": placed on the named river from the description; check before relying on the extent).
+# water/dam, water/weir, power/plant, power/generator: "osm" in the notes), consent map references (ECan; Kaimai
+# Appendix F), else from the operator and scheme descriptions ("approx": placed on the named river from the description,
+# a level on the LiDAR DEM or a catchment area; check before relying on the extent).
 #
 # General sources for every scheme:
 #   Electricity Authority, Hydrological Modelling Dataset, Report 4: Hydro power scheme background and descriptions
@@ -51,7 +52,9 @@ Taurewa, Tawhitikuri and Mangatepopo streams on the way; the Whanganui headwater
 Whaiau Stream; Lake Otamangakau and the Wairehu Canal take it all to Lake Rotoaira. Eastern Diversion: Lake Moawhango
 (Moawhango River, 22 Whangaehu tributaries) to the Tongariro by a 19 km tunnel; Rangipo Dam diverts the Tongariro to
 Rangipo Power Station, whose 3 km tailrace tunnel returns it just above the Poutu Intake, which sends the river to
-Lake Rotoaira and Tokaanu (Lake Taupo). Not modelled: the Whangaehu-side aqueduct intakes, Taurewa and Tawhitikuri."""
+Lake Rotoaira and Tokaanu (Lake Taupo). Not modelled: the Whangaehu-side aqueduct intakes, and the Taurewa and
+Tawhitikuri intakes (about 2 m3/s each): no source found gives where they are (the Tawhitikuri Stream is named in REC2,
+up to 8.4 km2; no stream is named Taurewa in REC2 or the LINZ Topo50 river names), rf-6u2."""
 sources = ["https://en.wikipedia.org/wiki/Tongariro_Power_Scheme", "https://teara.govt.nz/en/map/11834/tongariro-power-development",
            "https://genesisenergy.co.nz/about/generation/rivers-lakes-and-rainfall",
            "https://www.horizons.govt.nz/HRC/media/Media/One%20Plan/Jarrod-Bowler-for-Genesis-Power-Ltd.pdf?ext=.pdf"]
@@ -112,7 +115,7 @@ river = "Okupata Stream"
 role = "intake"
 lat = -39.0740
 lon = 175.4980
-note = "approx: where the tunnel crosses the stream (about 2 m3/s). Taurewa and Tawhitikuri intakes: not modelled (unnamed in REC2)"
+note = "approx: where the tunnel crosses the stream (about 2 m3/s). Taurewa and Tawhitikuri intakes: not modelled (see the scheme note)"
 
 [[scheme.point]]
 id = "moawhango_dam"
@@ -190,21 +193,63 @@ note = "osm plant"
 id = "kaimai"
 name = "Kaimai hydro scheme"
 operator = "Manawa Energy (formerly Trustpower)"
-note = """Run of river with daily storage: weirs and tunnels take the upper Wairoa (REC2 name), Opuiaki, Ngatuhoa and
-Omanawa into Lake Mangaonui, Lloyd Mandeno and Lower Mangapapa stations, then Lake McLaren; the Ruahihi Canal takes
-the Wairoa from Lake McLaren to Ruahihi Power Station. The Wairoa below McLaren Falls runs only on release days (about
-26 a year, the dam-release run). Not modelled: the Opuiaki and Ngatuhoa intakes (positions not found)."""
+note = """Run of river with daily storage. Western diversions: the Opuiaki Weir sends the Opuiaki River through Tunnel 4
+(which also takes the Tauwharawhara Stream) into the Ngatuhoa Canal, fed too by the Ngatuhoa Weir; Tunnel 5 takes the
+canal to the upper Mangaonui Stream and Lake Mangaonui. Eastern diversions: the Omanawa weirs (Tunnel 2) and the
+Mangapapa weir on the upper Wairoa (REC2 name; Tunnel 3). The Lloyd Mandeno Canal takes Lake Mangaonui (up to 14.2 m3/s)
+to Lloyd Mandeno Power Station on the upper Wairoa; Lake Matariki and Lower Mangapapa lead into Lake McLaren, which also
+gets the Mangakarengorengo River through two tunnels (up to 7 m3/s). The Ruahihi Canal (up to 31.2 m3/s) takes Lake
+McLaren to Ruahihi Power Station. The Wairoa below the McLaren Falls dam had no required residual flow (150 l/s under
+the 2026 consents) and the Mangakarengorengo joins it just below the dam: it runs on release days (about 26 a year, the
+dam-release run) and when the weirs spill. Not modelled: the Tauwharawhara take (up to 283 l/s, a stream of about
+2 km2), Lake Matariki and the short Lower Mangapapa bypass. Intakes, flows and levels from the 2025-26 fast-track
+re-consenting documents (rf-6u2), read through web-search excerpts: fasttrack.govt.nz was not reachable."""
 sources = ["https://www.manawaenergy.co.nz/kaimai-power-scheme",
-           "https://en.wikipedia.org/wiki/Kaimai_hydro_power_scheme"]
+           "https://en.wikipedia.org/wiki/Kaimai_hydro_power_scheme",
+           "https://www.fasttrack.govt.nz/__data/assets/pdf_file/0022/26653/Kaimai-HEPS-Appendix-A-Consent-Conditions-Final.pdf",
+           "https://www.fasttrack.govt.nz/__data/assets/pdf_file/0020/12863/B.05-Appendix-F-Existing-Resource-Consents.pdf.pdf",
+           "https://www.fasttrack.govt.nz/__data/assets/pdf_file/0022/12865/B.07-Appendix-H-Hydrology-Assessment-Tonkin-and-Taylor.pdf.pdf",
+           "https://www.fasttrack.govt.nz/__data/assets/pdf_file/0025/18745/Kaimai-Panel-Presentation.pdf"]
+
+[[scheme.point]]
+id = "opuiaki_weir"
+name = "Opuiaki Weir (Tunnel 4)"
+river = "Opuiaki River"
+role = "intake"
+lat = -37.89089
+lon = 176.00227
+note = """consent map reference N67:483343 (Appendix F; NZGD49 North Island Grid, 100-yard precision). Crest 299.0 m (the
+5 m LiDAR DEM has the river at 298 m 60 m away); catchment 55.7 km2 (Tonkin & Taylor); up to 8.5 m3/s, residual 280 l/s"""
+
+[[scheme.point]]
+id = "ngatuhoa_weir"
+name = "Ngatuhoa Weir (Ngatuhoa Canal)"
+river = "Ngatuhoa Stream"
+role = "intake"
+lat = -37.88654
+lon = 176.02030
+note = """approx: where the stream is at the weir's crest level (292.0 m, at most 1.6 m high: Appendix F) on the 5 m LiDAR DEM,
+at the tributary between 18.8 and 21.5 km2 (Tonkin & Taylor: 20.9 km2); residual 60 l/s"""
+
+[[scheme.point]]
+id = "mangaonui_dam"
+name = "Mangaonui Dam (Lake Mangaonui)"
+river = "Mangaonui Stream"
+role = "intake"
+reservoir = true
+reservoir_km = 2
+lat = -37.86787
+lon = 176.04063
+note = "osm dam (LINZ Topo50); spillway crest 279.5 m (Appendix F), lake at 279 m on the LiDAR DEM; the Lloyd Mandeno Canal takes the lake"
 
 [[scheme.point]]
 id = "wairoa_weir"
-name = "Upper Wairoa intake weir"
+name = "Mangapapa weir (upper Wairoa)"
 river = "Wairoa River"
 role = "intake"
 lat = -37.87921
 lon = 176.05555
-note = "osm weir; Lloyd Mandeno diversion tunnel 1 km east"
+note = "osm weir; crest 284.2 m (Appendix F), the LiDAR DEM has the river at 284 m 120 m upstream; Lloyd Mandeno diversion tunnel 1 km east"
 
 [[scheme.point]]
 id = "omanawa_intake"
@@ -220,28 +265,41 @@ id = "lloyd_mandeno"
 name = "Lloyd Mandeno Power Station"
 river = "Wairoa River"
 role = "return"
-returns = ["wairoa_weir", "omanawa_intake"]
+returns = ["wairoa_weir", "omanawa_intake", "opuiaki_weir", "ngatuhoa_weir", "mangaonui_dam"]
 lat = -37.84393
 lon = 176.05042
-note = "osm plant"
+note = "osm plant; the Lloyd Mandeno Canal brings Lake Mangaonui (the western and eastern diversions)"
+
+[[scheme.point]]
+id = "mangakarengorengo_weir"
+name = "Mangakarengorengo Weir"
+river = "Mangakarengorengo River"
+role = "intake"
+lat = -37.81574
+lon = 176.03336
+note = """approx: foot of the weir pond (99 m) on the 5 m LiDAR DEM, where the catchment is 108.1 km2 (Tonkin & Taylor:
+107.9 km2); two tunnels to Lake McLaren (88 m). Up to 7 m3/s of a 6.55 m3/s mean flow, residual 40 l/s: it takes all
+but the residual on the days it does not spill (it spills on about 103 days a year, so 3.5 m3/s, 53 %, on average)"""
 
 [[scheme.point]]
 id = "mclaren_dam"
 name = "Lake McLaren dam (Ruahihi Canal intake)"
-river = "Wairoa River"
+river = ""
 role = "intake"
 reservoir = true
 reservoir_km = 3
 lat = -37.80820
 lon = 176.04432
-note = "osm dam at the head of the Ruahihi Canal"
+note = """osm dam at the head of the Ruahihi Canal (canal intake N67:525444, Appendix F). river = "": the lake's outflow
+reaches carry REC2's "Ruahihi Canal" name, and the nearest "Wairoa River" reach is the Mangakarengorengo's last one
+below the dam (rf-6u2: the point took 114 km2 instead of the lake's 167 km2)"""
 
 [[scheme.point]]
 id = "ruahihi"
 name = "Ruahihi Power Station"
 river = "Wairoa River"
 role = "return"
-returns = ["mclaren_dam"]
+returns = ["mclaren_dam", "mangakarengorengo_weir"]
 lat = -37.77739
 lon = 176.05530
 note = "osm plant"
@@ -455,9 +513,15 @@ note = "osm dam"
 id = "piriaka"
 name = "Piriaka"
 operator = "King Country Energy"
-note = """Small run-of-river station on the Whanganui near Manunui: a weir and short canal bypass about 1.5 km of the
-river. Approx: weir position and the share taken (take = 0.6) are estimates."""
-sources = ["https://en.wikipedia.org/wiki/List_of_power_stations_in_New_Zealand"]
+note = """Small run-of-river station (1924; 1-1.5 MW at 8.2 m head) on the Whanganui near Manunui: a weir and a canal
+bypass part of the river. Approx: the weir position and the share taken (take = 0.6) are estimates. At low flow the
+station took 10 m3/s with at least 1.5 m3/s left over the weir (11.5 m3/s at Piriaka: NIWA Fisheries Environmental
+Report 22, via a web-search excerpt), about 0.87 of the river; the station's capacity and the river's median flow at
+Piriaka were not found (rf-6u2), so the share at normal flows stays an estimate."""
+sources = ["https://en.wikipedia.org/wiki/List_of_power_stations_in_New_Zealand",
+           "https://en.wikipedia.org/wiki/Piriaka_Power_Station",
+           "https://www.kce.co.nz/history-of-piriaka-power-station/",
+           "https://webstatic.niwa.co.nz/library/fer22.pdf"]
 
 [[scheme.point]]
 id = "piriaka_weir"
@@ -467,7 +531,8 @@ role = "intake"
 take = 0.6
 lat = -38.9284
 lon = 175.3514
-note = "approx"
+note = """approx, unconfirmed: OSM maps three weirs 0.5-0.7 km above the station (-38.9174, 175.3408), in the smooth western
+channel of the 1 m LiDAR DEM that leads to the station; neither position is confirmed by a source"""
 
 [[scheme.point]]
 id = "piriaka_ps"
@@ -558,29 +623,63 @@ note = "osm generator"
 id = "coleridge"
 name = "Lake Coleridge"
 operator = "Manawa Energy (formerly Trustpower)"
-note = """Lake Coleridge feeds the power station on the Rakaia; the Harper River and part of the Wilberforce River are
-diverted into the lake. Approx: intake positions and the shares taken (Harper 0.5, Wilberforce 0.3) are estimates."""
-sources = ["https://en.wikipedia.org/wiki/List_of_power_stations_in_New_Zealand"]
+note = """Lake Coleridge feeds the power station on the Rakaia through intake tunnels; its natural outlet, Lake Stream
+(to the Harper), is dammed and spills only in lake floods. The Harper Diversion takes the Harper River (up to 40 m3/s,
+no residual flow required) by canal to the lake; the Oakden Bank below it takes what is left of the Harper (up to
+50 m3/s) into the Oakden Canal, which also carries the Wilberforce Canal (up to 30 m3/s; at least 3 m3/s stays in the
+Wilberforce below its diversion bank). Positions and rates: Environment Canterbury consents (Open Data Portal, read
+2026-11-27, rf-6u2). Not modelled: the Acheron diversion (pipeline and race to the lake)."""
+sources = ["https://en.wikipedia.org/wiki/List_of_power_stations_in_New_Zealand",
+           "https://www.ecan.govt.nz/data/consent-search/consentdetails/CRC173079",
+           "https://www.ecan.govt.nz/data/consent-search/consentdetails/CRC173064",
+           "https://www.ecan.govt.nz/data/consent-search/consentdetails/CRC172958",
+           "https://www.ecan.govt.nz/data/consent-search/consentdetails/CRC173092",
+           "https://data.ecan.govt.nz/Catalogue/Method?MethodId=2",
+           "https://braidedrivers.org/rivers/rakaia/"]
 
 [[scheme.point]]
 id = "harper_diversion"
-name = "Harper diversion"
+name = "Harper Diversion intake"
+river = ""
+role = "intake"
+lat = -43.21754
+lon = 171.46130
+note = """ECan CRC173079 (K34:850-755; osm weir 50 m away): take up to 40 m3/s into the Harper Diversion Canal, no residual
+flow (a review clause allows one between the intake and the Oakden Bank): take = 1 (was an estimate of 0.5). river = "":
+the reaches here are unnamed in REC2; the nearest (321 km2) is above the Glenthorne Stream, which joins below the intake"""
+
+[[scheme.point]]
+id = "oakden_bank"
+name = "Oakden Bank (Oakden Canal intake)"
 river = "Harper River"
 role = "intake"
-take = 0.5
-lat = -43.2163
-lon = 171.4718
-note = "approx"
+lat = -43.21718
+lon = 171.43422
+note = "ECan CRC173021 (gravel weir, K34:828-755) and CRC173064 (take up to 50 m3/s into the Oakden pond and canal, K34:831-752)"
+
+[[scheme.point]]
+id = "lake_stream"
+name = "Lake Stream dam (Lake Coleridge outlet)"
+river = ""
+role = "intake"
+lat = -43.22898
+lon = 171.44131
+note = """ECan CRC173092 (dam at Lake Stream, K34:834-742) and CRC173100 (discharge to Lake Stream only in lake floods and gate
+tests): the lake's outflow goes to the power station. The network routes the lake (212 km2) out here to the Harper"""
 
 [[scheme.point]]
 id = "wilberforce_diversion"
 name = "Wilberforce diversion"
 river = "Wilberforce River"
 role = "intake"
-take = 0.3
+take = 0.85
 lat = -43.1989
 lon = 171.4167
-note = "approx"
+note = """ECan CRC172958: take up to 30 m3/s into the Wilberforce pond and canal (K34:822-773), at least 3 m3/s left below the
+diversion bank (gravel weirs K34:815-774, 200 m from the point). take = 0.85 (was an estimate of 0.3) is still an
+estimate: the Wilberforce's flow at the diversion was not found; at the Rakaia's mean specific flow (203 m3/s from
+2,900 km2, 70 l/s/km2) the river carries about 24 m3/s here, of which all but 3 m3/s is taken (0.87); the share is
+at least 0.5 at any flow between 6 and 60 m3/s"""
 
 [[scheme.point]]
 id = "coleridge_ps"
@@ -595,10 +694,12 @@ note = "osm plant"
 id = "highbank"
 name = "Highbank (Rangitata Diversion Race)"
 operator = "Manawa Energy (formerly Trustpower); race: Rangitata Diversion Race Management"
-note = """The Rangitata Diversion Race takes up to about 30 m3/s of the Rangitata at Klondyke for irrigation and the
-Montalto and Highbank stations, which discharge into the Rakaia. A small share of the Rangitata flood flow: no
-reach is flagged (take = 0.25 is below the thresholds); listed for coverage."""
-sources = ["https://en.wikipedia.org/wiki/List_of_power_stations_in_New_Zealand"]
+note = """The Rangitata Diversion Race takes up to 30.7 m3/s of the Rangitata at Klondyke (ECan CRC182542; 35.4 m3/s with
+the South Ashburton) for irrigation and the Montalto and Highbank stations, which discharge into the Rakaia. A small
+share of the Rangitata's flow: no reach is flagged (take = 0.25 is below the thresholds); listed for coverage."""
+sources = ["https://en.wikipedia.org/wiki/List_of_power_stations_in_New_Zealand",
+           "https://www.ecan.govt.nz/data/consent-search/consentdetails/CRC182542",
+           "https://www.rdrml.co.nz/our-scheme/"]
 
 [[scheme.point]]
 id = "rdr_intake"
@@ -606,9 +707,12 @@ name = "Rangitata Diversion Race intake (Klondyke)"
 river = "Rangitata River"
 role = "intake"
 take = 0.25
-lat = -43.8488
-lon = 171.2609
-note = "approx"
+lat = -43.76454
+lon = 171.23511
+note = """osm weir at the head of the race; ECan CRC182542 (rock weir at 365.5 m, J36:678-144) 120 m away. The point was 9.5 km
+downstream (at the Mayfield Hinds intake) until rf-6u2. take = 0.25 stays an estimate: the consent allows 30.7 m3/s
+while the river at Klondyke is above 60 m3/s and less below it (restriction table, at least about 20 m3/s left), so
+the share is about 0.3 at 100 m3/s and at most about 0.5 (between 43 and 60 m3/s); the median flow was not found"""
 
 [[scheme.point]]
 id = "highbank_ps"
@@ -743,9 +847,12 @@ id = "clutha"
 name = "Clutha hydro scheme and lake controls"
 operator = "Contact Energy"
 note = """Clyde (Lake Dunstan) and Roxburgh are storage dams with the stations at the dam; the Clutha below is regulated.
-Lake Hawea is a controlled storage (Hawea River below the control dam). The Kawarau Falls gates control Lake Wakatipu
-within a narrow range (take = 0.3: no reach flagged on their own)."""
-sources = ["https://en.wikipedia.org/wiki/Hydroelectric_power_in_New_Zealand"]
+Lake Hawea is a controlled storage (Hawea River below the control dam). The Kawarau Falls gates (1926) control Lake
+Wakatipu within a narrow range: the outflow is normally set by the gated weir and the river's hydraulics, and the gates
+hold water back in floods (Electricity Commission lake level history). take = 0.3 is an estimate (no consent terms
+found, rf-6u2): no reach is flagged on their own."""
+sources = ["https://en.wikipedia.org/wiki/Hydroelectric_power_in_New_Zealand",
+           "https://emidatasets.blob.core.windows.net/publicdata/Datasets/Environment/_AdditionalInformation/ArchivedDatasets/20100630_HydrologicalData/20090331_Lake_level_history/20090331_Lake_level_history_report.pdf"]
 
 [[scheme.point]]
 id = "hawea_dam"
@@ -762,9 +869,9 @@ name = "Kawarau Falls control gates"
 river = "Kawarau River"
 role = "dam"
 take = 0.3
-lat = -45.0301
-lon = 168.7401
-note = "approx: Lake Wakatipu outlet"
+lat = -45.02831
+lon = 168.73330
+note = "osm weir across the Lake Wakatipu outlet (the Kawarau Falls Dam), 600 m above the former approx point"
 
 [[scheme.point]]
 id = "clyde_dam"
