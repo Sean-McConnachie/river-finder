@@ -71,6 +71,9 @@
 .top-dot--hi { background: var(--score-hi); }
 .top-dot--mid { background: var(--score-mid); }
 .top-dot--lo { background: var(--score-lo); }
+/* ranked by Pareto layer: the layer under the score (the frontier has a pill instead) */
+.top-layer { display: block; color: var(--muted); font: 400 var(--fs-xs) var(--font-ui); }
+.top-model-acts { gap: var(--sp-1) var(--sp-2); }
 .top-acts { flex-wrap: wrap; }
 .top-guide { color: var(--accent); padding: 0 var(--sp-2); }
 /* Text for screen readers only (spoken column headers; on phones the whole header row) */

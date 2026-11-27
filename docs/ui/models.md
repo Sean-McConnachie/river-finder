@@ -51,9 +51,22 @@ Done (rf-aq6.4, 2026-11-27):
   and ten measures in one region, and a 3D scatter (Plotly gl3d 2.35.0 loaded from cdnjs only when opened;
   tap a point to open it on the map).
 
+Done (rf-aq6.33, 2026-11-27, rebuilt from the legacy viewer):
+
+- "Rank and colour runs by" at the top of the run finder: the model (default), Pareto layer, weighted score,
+  similarity to known runs, or your feature weights (`params.rankBy` through `RF.setRunParams`; the Map's
+  predicted runs and "Every reach by its score" layer and Top rivers follow it);
+- "Your feature weights" (shown for that ranking): a slider (-2 to +2) for every feature of `RF.runs.features()`,
+  the pooled regression's (or the chosen linear model's) coefficient beside it, "Reset the weights" and
+  "Start from ...'s weights";
+- "Runs: flow vs gradient": the runs of the preview region in a small SVG scatter (mean annual flood, log;
+  gradient as the run finder counts it; shade = height-to-area; shape = new lead, in the guides, test river), the
+  Pareto frontier ringed (outlined on the map, a pill in the lists); hover for a tip, tap or click a mark (or arrow
+  keys) for the run with Show on map and Details; the frontier runs listed under it;
+- `RF.go("models", {section: "models-rf"})` scrolls to the run finder (Top rivers' "Change the ranking").
+
 Not done: archived cards (`registry.archived` on the 1 m site) are not listed (correctly not offered as map
-scores); run-finder settings are not kept between visits; `featureWeights` (only used by `rankBy: "comp"`)
-have no controls.
+scores); run-finder settings and the ranking are not kept between visits.
 
 ## What you can use
 

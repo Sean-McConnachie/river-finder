@@ -21,6 +21,13 @@
   const OPT = { grade: [2, 3, 4, 5, 6], grad: [10, 20, 30, 40, 50, 60, 80, 100], len: [1, 2, 3, 5, 10, 20],
     maf: [2, 5, 10, 20, 50, 100, 200, 500], road: [100, 250, 500, 1000, 2000, 5000] };
   const FALLS = [["any", "Any"], ["none", "None mapped"], ["some", "At least one"]];
+  // the ranking in use (set on the Models page: RF.state.runParams.rankBy, RF.runs.rankOf)
+  const ranking = () => RF.runs.rankOf(RF.state.runParams, !!RF.state.model);
+  const SCORE_TITLE = { model: "The model's percentile: 100 is most like the known runs",
+    pareto: "Weighted score of flood flow, gradient and height-to-area, 0 to 100 (the list is ordered by Pareto layer first)",
+    wsum: "Weighted score of flood flow, gradient and height-to-area, 0 to 100", sig: "Similarity to the known runs, percentile",
+    comp: "Your feature weights, percentile among reaches of 2 km² or more" };
+  const FRONT_TIP = "Pareto frontier: no other run in its region has more flood flow, a steeper gradient and a higher height-to-area at once";
   const DEFAULTS = () => ({ scope: null, sort: "score", status: STATUS_KEYS.slice(), gMin: null, gMax: null,
     lenMin: null, lenMax: null, mafMin: null, mafMax: null, gradMin: null, road: null, falls: "any" });
 
@@ -190,6 +197,7 @@
     const items = pool.filter(passes), key = SORT_KEY[F.sort];
     // One region keeps the run finder's own order for "score"; across regions the scores are national percentiles.
     if (key) items.sort((a, b) => key(b.r) - key(a.r) || b.r.score - a.r.score);
+    else if (scope === ALL && ranking() === "pareto") items.sort((a, b) => a.r.layer - b.r.layer || b.r.score - a.r.score);
     else if (scope === ALL) items.sort((a, b) => b.r.score - a.r.score);
     return items;
   }
@@ -204,6 +212,7 @@
     const parts = [];
     if (n && pool.length) parts.push(`${fmt.int(items.length)} of ${fmt.int(pool.length)} runs match ${n === 1 ? "the filter" : `${n} filters`}${loading ? " so far" : ""}.`);
     if (F.sort !== "score") parts.push(`Sorted by ${SORTS.find(([k]) => k === F.sort)[1].replace(/ \(.*/, "").toLowerCase()}.`);
+    if (ctl.sort) ctl.sort.options[0].textContent = ranking() === "pareto" ? "Pareto layer, then score" : SORTS[0][1];
     summary.textContent = parts.join(" ");
     summary.hidden = !parts.length;
     draw(items, keep);
@@ -219,7 +228,8 @@
   /** One cell of column k (explicit role: some browsers drop table semantics once the display changes). */
   const cell = (k, ...kids) => el("td", { class: COLS[k][2], role: "cell", "data-label": COLS[k][1] }, ...kids);
   const head = () => el("thead", { role: "rowgroup" }, el("tr", { role: "row" }, ...COLS.map(([h, label, c]) =>
-    el("th", { class: c.startsWith("n") ? `n ${c.slice(2)}` : c, role: "columnheader", scope: "col", title: TITLES[c.replace(/^n /, "")] || null },
+    el("th", { class: c.startsWith("n") ? `n ${c.slice(2)}` : c, role: "columnheader", scope: "col",
+      title: (c === "n top-score" ? SCORE_TITLE[ranking()] : TITLES[c.replace(/^n /, "")]) || null },
       h === label ? h : [h ? el("span", { "aria-hidden": "true", text: h }) : null, el("span", { class: "top-vh", text: label })]))));
   /** "Waima River" and "Waima" are the same river: guides often drop River / Stream. */
   const bare = (s) => String(s || "").toLowerCase().replace(/\b(river|stream|creek)\b/g, "").replace(/\s+/g, " ").trim();
@@ -228,7 +238,7 @@
   const road = (m) => (m < 50 ? "< 50 m" : fmt.dist(m));
   const dist = (m) => (m < 1000 ? `${m} m` : `${m / 1000} km`);
 
-  function row(it, i, multi) {
+  function row(it, i, multi, pareto) {
     const r = it.r, [pc, pt] = PILL[it.st] || PILL.candidate;
     const grade = it.sec && (it.sec.grade || it.bin) ? el("span", { class: "rf-pill top-grade", title: `${it.sec.river}${it.sec.section ? `: ${it.sec.section}` : ""}` },
       it.bin ? el("span", { class: "top-gdot", style: `background:var(--grade-${it.bin})`, "aria-hidden": "true" }) : null,
@@ -239,13 +249,15 @@
     const hydro = hy ? el("span", { class: `rf-pill top-hydro${hy.cls === "regulated" ? "" : " rf-pill--warn"}`,
       title: `${hy.note} ${hy.scheme.name}${hy.scheme.operator ? ` (${hy.scheme.operator})` : ""}.` },
     it.st === "hydro" ? hy.scheme.name : `${HYDRO_PILL[hy.cls] || hy.cls}: ${hy.scheme.name}`) : null;
+    const front = r.layer === 1 ? el("span", { class: "rf-pill rf-pill--accent top-front", title: FRONT_TIP }, "Pareto frontier") : null;
+    const layer = pareto && r.layer > 1 ? el("span", { class: "top-layer", title: "Pareto layer: 1 is the frontier", text: `layer ${r.layer}` }) : null;
     return el("tr", { role: "row", "data-id": r.id },
       cell(0, String(i + 1)),
       cell(1, el("strong", { text: name }), " ", el("span", { class: `rf-pill ${pc}`, text: it.st === "hydro" ? HYDRO_PILL[hy.cls] || pt : pt }),
-        hydro ? " " : null, hydro, grade ? " " : null, grade, falls ? " " : null, falls,
+        front ? " " : null, front, hydro ? " " : null, hydro, grade ? " " : null, grade, falls ? " " : null, falls,
         multi ? el("span", { class: "top-sub", text: it.region }) : null),
       cell(2, r.len.toFixed(1)), cell(3, fmt.grad(r.grad)), cell(4, fmt.flow(r.maf)), cell(5, r.acc ? road(r.acc.putIn) : "–"),
-      cell(6, el("span", { class: `top-dot top-dot--${band(r.score)}`, "aria-hidden": "true" }), r.score.toFixed(0)),
+      cell(6, el("span", { class: `top-dot top-dot--${band(r.score)}`, "aria-hidden": "true" }), r.score.toFixed(0), layer),
       cell(7, el("div", { class: "rf-row top-acts" },
         el("button", { type: "button", class: "rf-btn", "data-act": "map", "aria-label": `Map: ${name}`, onclick: () => RF.go("map", { select: r }) }, "Map"),
         el("button", { type: "button", class: "rf-btn", "data-act": "detail", "aria-label": `Details: ${name}`, onclick: (e) => RF.detail.open(r, { opener: e.currentTarget }) }, "Details"),
@@ -284,7 +296,7 @@
       }
     }
     if (!total) { view = null; list.replaceChildren(emptyState()); return; }
-    const multi = scope === ALL, tb = el("tbody", { role: "rowgroup" });
+    const multi = scope === ALL, pareto = ranking() === "pareto", tb = el("tbody", { role: "rowgroup" });
     const count = el("p", { class: "rf-note", "aria-live": "polite" });
     const more = el("button", { type: "button", class: "rf-btn", "data-act": "more", onclick: () => {
       const first = next(); if (first) { first.tabIndex = -1; first.focus(); }   // keyboard and screen readers continue at the new rows
@@ -298,7 +310,7 @@
       if (my !== listToken || v.shown >= total) return null;
       const from = v.shown, frag = document.createDocumentFragment();
       v.shown = Math.min(from + n, total);
-      for (let i = from; i < v.shown; i++) frag.append(row(items[i], i, multi));
+      for (let i = from; i < v.shown; i++) frag.append(row(items[i], i, multi, pareto));
       tb.append(frag);
       const left = total - v.shown;
       count.textContent = left ? `Showing ${fmt.int(v.shown)} of ${fmt.int(total)} runs` : `Showing all ${fmt.int(total)} run${total === 1 ? "" : "s"}`;
@@ -369,14 +381,24 @@
   }
 
   function setModelLine() {
-    const m = RF.models.get(RF.state.model);
-    const name = !RF.state.model ? "The run finder (this build has no models)"
+    const m = RF.models.get(RF.state.model), rk = ranking();
+    const model = !RF.state.model ? "The run finder (this build has no models)"
       : fallback ? `${m?.title || RF.state.model}, with the pooled regression where this build has no per-model scores` : m?.title || RF.state.model;
+    const name = rk === "model" ? model : { pareto: "Pareto layer, then the weighted score", wsum: "the weighted score",
+      sig: "similarity to the known runs", comp: "your feature weights" }[rk];
+    const note = rk === "model" ? (RF.state.model ? "Score is the model's percentile: 100 is most like the known runs." : "Score is the run finder's desirability, 0 to 100.")
+      : rk === "pareto" ? "Pareto frontier first: runs no other run in their region beats on flood flow, gradient and height-to-area at once; then the next layer. Score is the weighted score, 0 to 100."
+        : rk === "wsum" ? "Score is the weighted mean of the flood, gradient and height-to-area part scores, 0 to 100."
+          : rk === "sig" ? "Score is how close the terrain is to the average known run, as a percentile."
+            : "Score is your weighted sum of the terrain features, as a percentile.";
     modelLine.replaceChildren(
       el("p", {}, el("span", { class: "rf-muted", text: "Ranked by " }), el("strong", { text: name }), el("br"),
-        el("span", { class: "rf-note", text: RF.state.model ? "Score is the model's percentile: 100 is most like the known runs." : "Score is the run finder's desirability, 0 to 100." })),
-      el("a", { class: "rf-btn", href: "#models", onclick: (e) => { e.preventDefault(); RF.go("models"); } },
-        el("span", { html: icon("model"), "aria-hidden": "true" }), "Why rivers rank where they do"));
+        el("span", { class: "rf-note", text: note })),
+      el("div", { class: "rf-row top-model-acts" },
+        el("a", { class: "rf-btn", href: "#models", onclick: (e) => { e.preventDefault(); RF.go("models"); } },
+          el("span", { html: icon("model"), "aria-hidden": "true" }), "Why rivers rank where they do"),
+        el("a", { class: "rf-btn rf-btn--quiet", href: "#models", onclick: (e) => { e.preventDefault(); RF.go("models", { section: "models-rf" }); } },
+          "Change the ranking")));
   }
 
   function controls(regions) {
@@ -432,7 +454,7 @@
     const header = el("header", { class: "rf-stack" },
       el("span", { class: "rf-eyebrow", text: "Ranking" }),
       el("h1", { text: "Top rivers" }),
-      el("p", { class: "rf-note", text: "The best-scoring runs for the current model, in one region or across all of them. Each one opens on the map or in full detail." }),
+      el("p", { class: "rf-note", text: "The best-scoring runs for the current model and ranking, in one region or across all of them. Each one opens on the map or in full detail." }),
       (modelLine = el("div", { class: "top-model" })),
       el("p", { class: "top-safety", role: "note" }, el("span", { html: icon("info"), "aria-hidden": "true" }),
         el("span", {}, el("strong", { text: "Before you go: " }), "new leads come from terrain data only. Check access, land ownership, hazards, flows and local knowledge.")));

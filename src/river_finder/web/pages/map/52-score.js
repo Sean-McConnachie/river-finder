@@ -1,10 +1,11 @@
-/* Reach scores: every modelled reach coloured by the current model's score, its national percentile (the per-model
-   score files the predicted runs use, RF.data.scores), red (low) through amber to green (high) from the score tokens.
-   Off by default; "From" hides the lower reaches and stretches the ramp over the rest.
+/* Reach scores: every modelled reach coloured by its score under the ranking in use (RF.runs.rankOf: the current
+   model's national percentile from the per-model score files the predicted runs use, by default; or the weighted
+   score, the similarity to known runs or the user's feature weights: RF.runs.scores), red (low) through amber to
+   green (high) from the score tokens. Off by default; "From" hides the lower reaches and stretches the ramp over the rest.
    Drawn from the modelled-channel features (M.netData, source src-net: one per reach, property i = reach index) with
-   the scores handed to MapLibre as one literal array read by ["at", ["get", "i"], …]: a model switch only repaints,
-   and no feature is built or re-sent per reach. Below zoom 8 a source of the larger rivers (from 30 km², as the rain
-   layer) stands in, because the tiler drops reaches shorter than its tolerance at region scale.
+   the scores handed to MapLibre as one literal array read by ["at", ["get", "i"], …]: a model or ranking switch only
+   repaints, and no feature is built or re-sent per reach. Below zoom 8 a source of the larger rivers (from 30 km², as
+   the rain layer) stands in, because the tiler drops reaches shorter than its tolerance at region scale.
    Owner: map agent. */
 (() => {
   "use strict";
@@ -17,20 +18,35 @@
   if (!CUTS.includes(M.prefs.score.min)) M.prefs.score.min = 0;
   const cut = () => M.prefs.score.min;
 
-  let cur = null;            // {R, mid, fallback, q: per-reach score 0-100 (integers), shown: reaches at or above the cut}
-  let token = 0, want = "";  // the (region, model) being loaded
-  let loInto = null;         // the M.netData written into the zoomed-out source
+  // cur: {R, mid, p (run params), rank, fallback, src (the score array it came from), q: per-reach score 0-100
+  // (integers), shown: reaches at or above the cut}
+  let cur = null;
+  let token = 0, want = null;  // the (region, model, params) being loaded
+  let loInto = null;           // the M.netData written into the zoomed-out source
   let painted = { q: null, sig: "" };
 
-  const fresh = () => !!cur && cur.R === M.R && cur.mid === RF.state.model;
+  const fresh = () => !!cur && cur.R === M.R && cur.mid === RF.state.model && cur.p === RF.state.runParams;
   const short = (id) => (RF.models.get(id)?.title || id || "").split(":")[0];
-  /** "v4" / "Pooled regression": what the colours show. */
-  const source = () => (!cur || cur.fallback || !cur.mid ? "Pooled regression" : `Model ${short(cur.mid)}`);
+  const rank = () => (fresh() ? cur.rank : RF.runs.rankOf(RF.state.runParams, !!RF.state.model));
+  /** What the colours show: "Model v4" / "Pooled regression" / "Weighted score" / ... */
+  function source() {
+    const r = rank();
+    if (r !== "model") return { pareto: "Weighted score", wsum: "Weighted score", sig: "Similarity to known runs", comp: "Your feature weights" }[r];
+    return !cur || cur.fallback || !cur.mid ? "Pooled regression" : `Model ${short(cur.mid)}`;
+  }
+  const KIND = { model: "national percentile", pareto: "0 to 100", wsum: "0 to 100", sig: "percentile", comp: "percentile" };
+  const ABOUT = {
+    model: "National percentile among reaches of 2 km² or more: 100 is most like the known runs.",
+    pareto: "The run finder's weighted mean of the three part scores (flood flow, gradient, height-to-area), × 100. Pareto layers rank whole runs, not reaches.",
+    wsum: "The run finder's weighted mean of the three part scores (flood flow, gradient, height-to-area), × 100.",
+    sig: "How close each reach's terrain is to the average reach of the known runs, as a percentile.",
+    comp: "Your feature weights (Models page) on the standardised features, as a percentile among reaches of 2 km² or more.",
+  };
   const colors = () => ["lo", "mid", "hi"].map((k) => M.colorOf("score", k));
 
   // ---------- layer tree, legend ----------
   M.defineLayer({ id: "score", parent: "rivers", after: "pred", label: "Every reach by its score", defaultOn: false,
-    note: () => (M.isVisible("score") && !fresh() ? "Loading the scores…" : `${fresh() ? source() : "Current model"}: national percentile, red (low) to green (high)`),
+    note: () => (M.isVisible("score") && !fresh() ? "Loading the scores…" : `${source()}: ${KIND[rank()]}, red (low) to green (high)`),
     colors: [{ key: "lo", token: "--score-lo", label: "low score" }, { key: "mid", token: "--score-mid", label: "middle" }, { key: "hi", token: "--score-hi", label: "high score" }],
     count: () => (fresh() ? cur.shown : null), legendBlock: legend, mini: true, controls, apply: sync });
 
@@ -50,12 +66,12 @@
   /** The colour ramp with its stops: the cut, the middle of the rest, 100. */
   function legend() {
     const c = colors(), lo = cut(), title = el("div", { class: "map-legend-title",
-      text: `Every reach: ${fresh() ? source() : "current model"} score${lo ? `, ${lo} and up` : ""}` });
+      text: `Every reach: ${source().replace(/^(Weighted|Similarity|Your)/, (w) => w.toLowerCase())}${rank() === "model" ? " score" : ""}${lo ? `, ${lo} and up` : ""}` });
     return el("div", { class: "map-legend-block map-score-legend" }, title,
       el("span", { class: "map-score-bar", role: "img", "aria-label": `Colour ramp from ${lo} (red) through ${(lo + 100) / 2} (amber) to 100 (green)`,
         style: `--lo:${c[0]};--mid:${c[1]};--hi:${c[2]}` }),
       el("span", { class: "map-score-ticks num", "aria-hidden": "true" }, el("span", { text: String(lo) }), el("span", { text: String((lo + 100) / 2) }), el("span", { text: "100" })),
-      el("p", { class: "map-rain-note map-score-note", text: "National percentile among reaches of 2 km² or more: 100 is most like the known runs." }));
+      el("p", { class: "map-rain-note map-score-note", text: ABOUT[rank()] }));
   }
 
   // ---------- on the map ----------
@@ -81,19 +97,23 @@
 
   const countFrom = (q, lo) => { let n = 0; for (let i = 0; i < q.length; i++) if (q[i] >= lo) n++; return n; };
 
-  /** Fetch the current model's scores for the region on the map (once per region and model). */
+  /** Each reach's score for the region on the map, the current model and the run-finder settings (with them the
+   *  ranking): fetched once per region and model, recomputed when the settings change. */
   async function load() {
-    const R = M.R, mid = RF.state.model, key = `${R?.id}|${mid}`;
-    if (!R?.segments || want === key) return;
+    const R = M.R, mid = RF.state.model, p = RF.state.runParams, key = { R, mid, p };
+    if (!R?.segments || (want && want.R === R && want.mid === mid && want.p === p)) return;
     want = key;
     const my = ++token;
-    let sc;
-    try { sc = await RF.data.scores(R.id, mid); } catch (e) { sc = null; }
-    if (my !== token || M.R !== R || mid !== RF.state.model) return;
-    want = "";
-    const pct = sc?.pct?.length === R.segments.g.length ? sc.pct : R.segments.reg;
-    const q = Array.from(pct, (v) => Math.max(0, Math.min(100, Math.round(v))));
-    cur = { R, mid, fallback: !sc || !!sc.fallback || pct !== sc.pct, q, shown: countFrom(q, cut()) };
+    let sc = null;
+    try { sc = mid ? await RF.data.scores(R.id, mid) : null; } catch (e) { sc = null; }
+    if (my !== token || M.R !== R || mid !== RF.state.model || p !== RF.state.runParams) return;
+    want = null;
+    const model = sc?.pct?.length === R.segments.g.length ? sc : null, rk = RF.runs.rankOf(p, !!mid);
+    const src = RF.runs.scores(R, { params: p, model, rankBy: rk });
+    // the same scores as before (a settings change that leaves the model's percentiles as they were): keep the array,
+    // so nothing is repainted
+    const q = cur && cur.R === R && cur.src === src ? cur.q : Array.from(src, (v) => Math.max(0, Math.min(100, Math.round(v))));
+    cur = { R, mid, p, rank: rk, fallback: !model || !!model.fallback, src, q, shown: countFrom(q, cut()) };
     sync(); M.renderTree(); M.renderLegend();
   }
 
@@ -114,7 +134,7 @@
     painted = { q: cur.q, sig };
   }
 
-  /** Show the layer when it is on and the scores of this region and model are in (asks for them otherwise). */
+  /** Show the layer when it is on and the scores of this region, model and settings are in (asks for them otherwise). */
   function sync() {
     if (!M.ready || !M.map.getLayer("score-line")) return;
     const on = M.isVisible("score");
@@ -126,15 +146,17 @@
     M.updateNote("score");
   }
 
-  M.onRegion(() => { cur = null; want = ""; loInto = null; painted = { q: null, sig: "" }; M.map?.getSource("src-score-lo")?.setData(EMPTY); });
-  RF.on("model", () => { if (M.ready && M.R && M.isVisible("score")) { sync(); M.renderLegend(); } });
+  M.onRegion(() => { cur = null; want = null; loInto = null; painted = { q: null, sig: "" }; M.map?.getSource("src-score-lo")?.setData(EMPTY); });
+  const follow = () => { if (M.ready && M.R && M.isVisible("score")) { sync(); M.renderLegend(); } };
+  RF.on("model", follow);
+  RF.on("runs", follow);
 
   // a reach card says its score while the layer is on
   const reachCard = M.card.reach;
   M.card.reach = (f) => {
     const d = reachCard(f);
     if (M.isVisible("score") && fresh() && f.region === M.R.id && cur.q[f.seg] != null) {
-      d.lines.push(el("span", { class: "num", text: `${source()} score ${fmt.int(cur.q[f.seg])} (national percentile)` }));
+      d.lines.push(el("span", { class: "num", text: `${source()}${rank() === "model" ? " score" : ""} ${fmt.int(cur.q[f.seg])} (${KIND[rank()]})` }));
     }
     return d;
   };

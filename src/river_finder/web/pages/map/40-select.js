@@ -129,13 +129,19 @@
       el("span", { class: "rf-note", text: `Area draining through this point (map cell about ${f.pixelM} m).` })],
     noDetails: true,
   });
+  // what a run's score is under the ranking in use (RF.runs.rankOf; set on the Models page)
+  const SCORE_NAME = { model: "score", pareto: "weighted score", wsum: "weighted score", sig: "similarity", comp: "your weights" };
+  M.scoreName = () => SCORE_NAME[RF.runs.rankOf(RF.state.runParams, !!RF.state.model)] || "score";
   /** The numbers line of a run card, also used for known sections (RF.runs.measure); score left out when null. */
   M.runLine = (r, opts = {}) => el("span", { class: "num", text: [`${r.len.toFixed(1)} km${opts.mapped ? " mapped" : ""}`, `${fmt.grad(r.grad)} m/km`,
-    `flood ${fmt.flow(r.maf)} m³/s`, `${fmt.km2(r.aBot)} km²`, r.score == null ? "" : `score ${r.score.toFixed(0)}`].filter(Boolean).join(" · ") });
+    `flood ${fmt.flow(r.maf)} m³/s`, `${fmt.km2(r.aBot)} km²`, r.score == null ? "" : `${M.scoreName()} ${r.score.toFixed(0)}`].filter(Boolean).join(" · ") });
+  /** The run's Pareto layer: a pill on the frontier; the layer number when the runs are ranked by it. */
+  M.layerLine = (r) => (r.layer === 1 ? el("span", { class: "rf-pill", title: "No other run here has more flood flow, a steeper gradient and a higher height-to-area at once", text: "Pareto frontier" })
+    : r.layer && RF.runs.rankOf(RF.state.runParams, !!RF.state.model) === "pareto" ? el("span", { class: "rf-note", text: `Pareto layer ${r.layer}` }) : null);
   M.card.run = (f) => ({
     eyebrow: f.status === "listed" ? "Known river · in guides" : f.status === "heldout" ? "Predicted run · test river" : "Predicted run · not in guides",
     title: f.name,
-    lines: [M.runLine(f)],
+    lines: [M.runLine(f), M.layerLine(f)],
   });
 
   function renderCard(f) {
@@ -155,6 +161,8 @@
   /** Draw the open card again (e.g. once the model scores it shows have loaded). kind: only a card of that kind. */
   M.refreshCard = (kind) => {
     if (!shown || !cardEl || cardEl.hidden || (kind && shown.kind !== kind)) return;
+    // a predicted run found again (new model or ranking): the same run's new numbers
+    if (shown.kind === "run") { const again = M.runs?.().find((r) => r.id === shown.id); if (again) shown = again; }
     const btns = () => [...cardEl.querySelectorAll("button")], at = btns().indexOf(document.activeElement);
     renderCard(shown);
     if (at >= 0) btns()[at]?.focus(); // keep keyboard focus on the same button

@@ -1,5 +1,6 @@
-/* River layers: known rivers (guide sections, by grade and by source), predicted runs (current model,
-   red low to green high), the river network (grey/white) and river names along the lines.
+/* River layers: known rivers (guide sections, by grade and by source), predicted runs (ranked as the Models page
+   sets: the current model by default, red low to green high; by Pareto layer the frontier is green; the frontier is
+   outlined), the river network (grey/white) and river names along the lines.
    Owner: map agent. */
 (() => {
   "use strict";
@@ -52,11 +53,21 @@
   SOURCES.forEach(([k, label, link]) => M.defineLayer({ id: `known-src-${k}`, parent: "known-src", label, link, defaultOn: true, swatch: "none",
     count: () => (M.R?.sections || []).filter((s) => s.src === k).length, apply: applyKnown }));
 
-  M.defineLayer({ id: "pred", parent: "rivers", label: "Predicted runs", note: "Current model, red (low) to green (high)", defaultOn: true,
+  // the ranking in use (Models page: RF.runs.rankOf), for the note and the legend
+  const ranking = () => RF.runs.rankOf(RF.state.runParams, !!RF.state.model);
+  const PRED_NOTE = { pareto: "Ranked by Pareto layer: green is the frontier, red the deepest layer", wsum: "Ranked by the weighted score, red (low) to green (high)",
+    sig: "Ranked by similarity to known runs, red (low) to green (high)", comp: "Ranked by your feature weights, red (low) to green (high)" };
+  const predNote = () => PRED_NOTE[ranking()] || "Current model, red (low) to green (high)";
+  M.defineLayer({ id: "pred", parent: "rivers", label: "Predicted runs", note: predNote, defaultOn: true,
     colors: [{ key: "lo", token: "--score-lo", label: "low score" }, { key: "mid", token: "--score-mid", label: "middle" }, { key: "hi", token: "--score-hi", label: "high score" }],
     legend: "Predicted run: low to high score", count: () => runs.filter((r) => r.status !== "listed").length, apply: applyPred });
   M.defineLayer({ id: "pred-listed", parent: "pred", label: "Include runs already in the guides", defaultOn: false, swatch: "none",
     count: () => runs.filter((r) => r.status === "listed").length, apply: applyPred });
+  M.defineLayer({ id: "pred-front", parent: "pred", label: "Outline the Pareto frontier", defaultOn: true,
+    note: "Runs that no other run beats on flood flow, gradient and height-to-area at once",
+    colors: [{ key: "c", token: "--fg", label: "outline" }], legend: "Pareto frontier: no other run beats it on flood, gradient and height-to-area",
+    legendKey: () => el("span", { class: "map-key map-key--front", style: `--sw:${M.colorOf("pred-front")}` }),
+    count: () => runs.filter((r) => r.layer === 1 && (r.status !== "listed" || M.isVisible("pred-listed"))).length, apply: applyPred });
 
   M.defineLayer({ id: "linz", parent: "rivers", label: "LINZ rivers", note: "NZ Topo50 river lines with LINZ names (not unnamed headwaters under 2 km²)", defaultOn: true,
     link: "https://data.linz.govt.nz/layer/103632-nz-river-name-lines-pilot/",
@@ -82,6 +93,9 @@
         "line-width": ["interpolate", ["linear"], ["zoom"], 8, ["case", ["get", "named"], 1.1, 0.5], 12, ["case", ["get", "named"], 2, 1], 16, ["case", ["get", "named"], 4, 2]] } }, "network");
     M.addLayer({ id: "net-line", type: "line", source: "src-net", layout: { "line-cap": "round", "line-join": "round" },
       paint: { "line-color": "#888", "line-width": ["interpolate", ["linear"], ["zoom"], 8, ["interpolate", ["linear"], ["get", "w"], 0, 0.4, 1, 1.6], 14, ["interpolate", ["linear"], ["get", "w"], 0, 1, 1, 4]], "line-opacity": 0.9 } }, "network");
+    // the Pareto frontier: an outline round the casing of frontier runs
+    M.addLayer({ id: "pred-front", type: "line", source: "src-pred", layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": "#888", "line-width": predWidth(5), "line-opacity": 0.95 } }, "rivers");
     M.addLayer({ id: "pred-casing", type: "line", source: "src-pred", layout: { "line-cap": "round", "line-join": "round" },
       paint: { "line-color": casing(), "line-width": predWidth(2), "line-opacity": 0.85 } }, "rivers");
     M.addLayer({ id: "pred-line", type: "line", source: "src-pred", layout: { "line-cap": "round", "line-join": "round" },
@@ -108,14 +122,14 @@
     });
     if (M.isDark()) { map.setPaintProperty("names-label", "text-color", "#9cc4f2"); map.setPaintProperty("names-label", "text-halo-color", "#111513"); }
     // On the LINZ aerial photos the river lines fade from zoom 13, so the channel shows through them (still a guide).
-    const OPACITY = { "linz-line": 0.95, "net-line": 0.9, "pred-casing": 0.85, "pred-line": 1, "known-casing": 0.9, "known-line": 1, "known-gap-casing": 0.9, "known-gap": 1 };
+    const OPACITY = { "linz-line": 0.95, "net-line": 0.9, "pred-front": 0.95, "pred-casing": 0.85, "pred-line": 1, "known-casing": 0.9, "known-line": 1, "known-gap-casing": 0.9, "known-gap": 1 };
     const fade = (use) => Object.entries(OPACITY).forEach(([l, o]) => map.getLayer(l) && map.setPaintProperty(l, "line-opacity",
       use === "linz-aerial" ? ["interpolate", ["linear"], ["zoom"], M.AERIAL_MIN_ZOOM, o, 16, +(o * 0.3).toFixed(2)] : o));
     M.onBasemap(fade);
     fade(document.querySelector(".map-root")?.dataset.basemap);
 
     M.clickable({ layers: ["known-line", "known-casing", "known-gap", "known-gap-casing"], priority: 90, feature: (f) => sectionFeature(f.properties.i) });
-    M.clickable({ layers: ["pred-line", "pred-casing"], priority: 80, feature: (f) => runs[f.properties.i] || null });
+    M.clickable({ layers: ["pred-line", "pred-casing", "pred-front"], priority: 80, feature: (f) => runs[f.properties.i] || null });
     M.clickable({ layers: ["net-line"], priority: 40, feature: (f) => reachFeature(f.properties.i) });
     M.clickable({ layers: ["linz-line"], priority: 45, feature: (f, e) => linzFeature(f, e) });
   });
@@ -182,12 +196,15 @@
     if (my !== runToken || M.R !== R) return;
     runs = RF.runs.find(R, { model });
     scored = { R, model };
+    // colour (t, 0..1): by Pareto layer when ranking by it (the frontier green), else by score among these runs
+    const pareto = ranking() === "pareto", deepest = Math.max(1, ...runs.map((r) => r.layer));
     const sc = runs.map((r) => r.score), lo = Math.min(...sc), hi = Math.max(...sc);
-    M.predRange = runs.length ? [lo, hi] : null;
+    const t = (r) => (pareto ? (deepest > 1 ? 1 - (r.layer - 1) / (deepest - 1) : 1) : hi > lo ? (r.score - lo) / (hi - lo) : 1);
+    M.nodes.get("pred").legend = pareto ? "Predicted run: deepest Pareto layer to the frontier" : "Predicted run: low to high score";
     M.map.getSource("src-pred")?.setData({ type: "FeatureCollection", features: runs.map((r, i) => ({
-      type: "Feature", properties: { i, t: hi > lo ? (r.score - lo) / (hi - lo) : 1, listed: r.status === "listed" ? 1 : 0 },
+      type: "Feature", properties: { i, t: t(r), listed: r.status === "listed" ? 1 : 0, front: r.layer === 1 ? 1 : 0 },
       geometry: { type: "LineString", coordinates: RF.runs.path(S, r.members) } })) });
-    applyPred(); M.renderTree(); M.refreshCard("section");
+    applyPred(); M.renderTree(); M.renderLegend(); M.refreshCard("section"); M.refreshCard("run");
   }
   M.runs = () => runs;
 
@@ -248,6 +265,9 @@
     const on = M.isVisible("pred"), listed = M.isVisible("pred-listed");
     const f = listed ? ["all"] : ["==", ["get", "listed"], 0];
     ["pred-line", "pred-casing"].forEach((l) => { M.map.setFilter(l, f); M.vis(l, on); });
+    M.map.setFilter("pred-front", ["all", f, ["==", ["get", "front"], 1]]);
+    M.vis("pred-front", on && M.isVisible("pred-front"));
+    M.map.setPaintProperty("pred-front", "line-color", M.colorOf("pred-front"));
     M.map.setPaintProperty("pred-line", "line-color", ["interpolate", ["linear"], ["get", "t"], 0, M.colorOf("pred", "lo"), 0.5, M.colorOf("pred", "mid"), 1, M.colorOf("pred", "hi")]);
     M.flow?.sync();
   }

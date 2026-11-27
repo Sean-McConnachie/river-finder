@@ -79,3 +79,31 @@ a.models-ml { color: var(--accent); }
 /* separation: 3D scatter */
 .models-plot { min-height: 160px; border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; background: var(--surface); }
 .models-plotmsg { padding: var(--sp-4); }
+
+/* ranking: how runs are ranked and coloured (a list of choices), your feature weights */
+.models-rankset { grid-template-columns: minmax(0, 1fr); }
+.models-ranks { display: grid; gap: 2px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+.models-rank { display: flex; gap: var(--sp-2); align-items: flex-start; padding: var(--sp-2); border-radius: var(--radius); cursor: pointer; min-height: var(--touch); }
+.models-rank:hover { background: var(--surface-2); }
+.models-rank:has(input:checked) { background: var(--accent-soft); }
+.models-rank input { width: 18px; height: 18px; margin: 1px 0 0; flex: none; accent-color: var(--accent); }
+.models-rank-text { display: grid; gap: 2px; min-width: 0; font-size: var(--fs-sm); }
+.models-wide { grid-column: 1 / -1; }
+.models-wset[hidden] { display: none; }
+
+/* runs: flow vs gradient (SVG scatter) */
+.models-scat-wrap { position: relative; }
+.models-scat-host { width: 100%; min-height: 120px; touch-action: manipulation; }
+.models-scat-svg { border-radius: var(--radius); }
+.models-scat-svg:focus { outline: none; }
+.models-scat-svg:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.models-scat-band { fill: var(--accent); fill-opacity: 0.08; stroke: var(--accent); stroke-opacity: 0.35; stroke-dasharray: 3 3; }
+.models-scat-hov { fill: none; stroke: var(--muted); stroke-width: 1.5; pointer-events: none; }
+.models-scat-sel { fill: none; stroke: var(--accent); stroke-width: 2.5; pointer-events: none; }
+.models-scat-tip { white-space: normal; max-width: 240px; font-family: var(--font-ui); }
+.models-scat-legend { display: flex; flex-wrap: wrap; gap: 4px var(--sp-4); font-size: var(--fs-xs); color: var(--muted); }
+.models-scat-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.models-scat-ico svg { display: block; }
+.models-scat-ramp { display: inline-block; width: 36px; height: 8px; border-radius: 2px;
+  background: linear-gradient(90deg, color-mix(in oklab, var(--accent) 18%, var(--surface)), var(--accent)); }
+.models-scat-card { display: grid; gap: var(--sp-2); padding: var(--sp-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-2); }

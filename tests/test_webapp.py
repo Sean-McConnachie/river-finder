@@ -265,7 +265,10 @@ def test_score_layer_colours_every_reach_from_one_expression(tmp_path):
         "const out = { paint: [], vis: {}, sources: {}, clicks: [] };\n"
         "const handlers = {};\n"
         "const scores = { v1: [10.2, 55.5, 71, 99.6], v2: [90, 80, 20, 0.4] };\n"
-        "const RF = { state: { model: 'v1' }, util: { el: () => ({}), fmt: { int: String }, css: () => '' },\n"
+        "const RF = { state: { model: 'v1', runParams: {} },\n"
+        "  util: { el: () => ({}), fmt: { int: String }, css: () => '' },\n"
+        "  runs: { rankOf: (p, m) => (p && p.rankBy) || (m ? 'model' : 'pareto'),\n"
+        "    scores: (R, o) => (o.rankBy === 'model' ? o.model.pct : [5, 6, 7, 8]) },\n"
         "  on: (e, f) => { handlers[e] = f; }, models: { get: (id) => ({ title: `${id}: test` }) },\n"
         "  data: { scores: async (r, m) => ({ pct: scores[m], role: null }) } };\n"
         "globalThis.window = { RF };\n"
@@ -299,6 +302,9 @@ def test_score_layer_colours_every_reach_from_one_expression(tmp_path):
         "const c = out.clicks[0], hit = (i) => c.feature({ properties: { i } }, null, [{ properties: { i } }]);\n"
         "out.tap = [hit(0), hit(3)];\n"
         "RF.state.model = 'v2'; handlers.model(); await tick(); out.v2 = last();\n"
+        "const n1 = out.paint.length; RF.state.runParams = {}; handlers.runs(); await tick();\n"
+        "out.sameScores = out.paint.length - n1;\n"
+        "RF.state.runParams = { rankBy: 'wsum' }; handlers.runs(); await tick(); out.wsum = last();\n"
         "console.log(JSON.stringify(out));\n")
     r = subprocess.run(["node", str(tmp_path / "run.mjs")], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
@@ -314,3 +320,77 @@ def test_score_layer_colours_every_reach_from_one_expression(tmp_path):
     assert case[:3] == ["case", ["<", ["var", "v"], 70], "rgba(0,0,0,0)"] and case[3][3:5] == [70, "#lo"]
     assert got["tap"] == [None, {"kind": "reach", "seg": 3}]
     assert got["v2"][2] == ["at", ["get", "i"], ["literal", [90, 80, 20, 0]]]
+    assert got["sameScores"] == 0  # new run-finder settings, same model percentiles: nothing repainted
+    assert got["wsum"][2] == ["at", ["get", "i"], ["literal", [5, 6, 7, 8]]]  # follows the ranking in use
+
+
+# Three rivers of six 250 m reaches: A big and steep, B smaller, C small and flat-sided (core/runs.js ranking test).
+RUNS_RANKING_JS = """
+const legacy = { run_params: { threshold: 0.5 }, default_weights: { gradient: 1, maf: 0.5 },
+  descriptions: { gradient: 'Gradient' } };
+const RF = { state: {}, models: { legacy, descriptions: { maf: 'Flood' } } };
+globalThis.window = { RF };
+(0, eval)(%%RUNS%%);
+const riv = [{ maf: 50, g: 40, mel: 0.2, sig: 10, z: [0, 1], pct: 30 },
+  { maf: 10, g: 60, mel: 0.15, sig: 90, z: [1, 0], pct: 20 },
+  { maf: 5, g: 25, mel: 0.05, sig: 50, z: [-1, -1], pct: 99 }];
+const S = { d: [], u: [], len: [], g: [], s50: [], maf: [], mel: [], hw: [], a: [], zt: [], zb: [], r: [],
+  sig: [], reg: [], z: [], lab: [], ho: [], rivers: ['A', 'B', 'C'], listed: [], features: ['gradient', 'maf'], c: [] };
+const pct = [];
+riv.forEach((v, k) => {
+  for (let j = 0; j < 6; j++) {
+    const i = 6 * k + j;
+    S.d.push(j < 5 ? i + 1 : -1); S.u.push(j ? i - 1 : -1); S.len.push(250); S.g.push(v.g); S.s50.push(v.g);
+    S.maf.push(v.maf); S.mel.push(v.mel); S.hw.push(1); S.a.push(10); S.zt.push(100 - 10 * j); S.zb.push(90 - 10 * j);
+    S.r.push(k); S.sig.push(v.sig); S.reg.push(1); S.z.push(v.z); S.lab.push(0); S.ho.push(0);
+    S.c.push([[0, 0], [1, 1]]); pct.push(v.pct);
+  }
+});
+const R = { id: 'r', segments: S, sections: [] }, model = { pct, role: null };
+const P = (x) => Object.assign(RF.runs.defaults(), x);
+const find = (x, o = {}) => RF.runs.find(R, Object.assign({ params: P(x), model }, o));
+const names = (runs) => runs.map((r) => r.name).join('');
+const out = {
+  rankOf: [RF.runs.rankOf(P(), true), RF.runs.rankOf(P(), false), RF.runs.rankOf(P({ rankBy: 'sig' }), true),
+    RF.runs.rankOf(null, true)],
+  ids: RF.runs.rankings.map((r) => r.id), defRank: RF.runs.defaults().rankBy,
+  model: names(find()),
+  pareto: find({ rankBy: 'pareto' }).map((r) => [r.name, r.layer, Math.round(r.score)]),
+  wsum: names(find({ rankBy: 'wsum' })),
+  sig: find({ rankBy: 'sig' }).map((r) => [r.name, r.score]),
+  compG: names(find({ rankBy: 'comp', featureWeights: { gradient: 1, maf: 0 } })),
+  compQ: names(find({ rankBy: 'comp', featureWeights: { gradient: 0, maf: 1 } })),
+  override: names(find({ rankBy: 'sig' }, { rankBy: 'model' })),
+  layers: find().map((r) => [r.name, r.layer]),
+  measure: Math.round(RF.runs.measure(R, [6, 7], { params: P({ rankBy: 'sig' }), model }).score),
+  scoresModel: RF.runs.scores(R, { params: P(), model }) === pct,
+  scoresWsum: Array.from(RF.runs.scores(R, { params: P({ rankBy: 'wsum' }), model }))
+    .filter((v, i) => i % 6 === 0).map(Math.round),
+  features: RF.runs.features(),
+};
+console.log(JSON.stringify(out));
+"""
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_runs_follow_the_ranking_in_the_run_params(tmp_path):
+    """core/runs.js: params.rankBy ranks and scores runs (model, Pareto layer, weighted score, similarity, feature
+    weights) unless rankBy is given; Pareto layers whatever the ranking; per-reach scores; the feature list."""
+    js = webapp.web_root().joinpath("core/runs.js").read_text()
+    (tmp_path / "run.mjs").write_text(RUNS_RANKING_JS.replace("%%RUNS%%", json.dumps(js)))
+    r = subprocess.run(["node", str(tmp_path / "run.mjs")], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    got = json.loads(r.stdout)
+    assert got["rankOf"] == ["model", "pareto", "sig", "model"] and got["defRank"] is None
+    assert got["ids"] == ["model", "pareto", "wsum", "sig", "comp"]
+    assert got["model"] == "CAB"                                  # by the model's percentiles
+    assert got["pareto"] == [["A", 1, 100], ["B", 2, 100], ["C", 3, 65]]   # A beats B and C on all three
+    assert got["wsum"][2] == "C"                                  # A and B have full credit, C does not
+    assert got["sig"] == [["B", 90], ["C", 50], ["A", 10]]
+    assert got["compG"][0] == "B" and got["compQ"][0] == "A"     # your weights: gradient favours B, flood A
+    assert got["override"] == "CAB"                               # opts.rankBy wins over params.rankBy
+    assert got["layers"] == [["C", 3], ["A", 1], ["B", 2]]        # layers whatever the ranking
+    assert got["measure"] == 90
+    assert got["scoresModel"] is True and got["scoresWsum"] == [100, 100, 65]
+    assert got["features"] == [{"id": "gradient", "label": "Gradient", "weight": 1},
+                               {"id": "maf", "label": "Flood", "weight": 0.5}]

@@ -21,7 +21,25 @@
       threshold: RP.threshold ?? 0.7, gate: RP.gate ?? true, flowScaled: RP.flow_scaled ?? true,
       minLen: RP.min_length_km ?? 1, maxGap: RP.max_gap_segments ?? 1,
       featureWeights: Object.assign({}, LEG().default_weights || {}),
+      rankBy: null,                    // null: the model when one is chosen, else "pareto" (see rankings)
     };
+  }
+
+  /** How runs can be ranked and coloured (params.rankBy); the order the settings offer them. */
+  const RANKINGS = [
+    { id: "model", label: "Model", note: "The chosen model's score: its national percentile, 100 is most like the known runs" },
+    { id: "pareto", label: "Pareto layer", note: "The frontier first: runs that no other run beats on flood flow, gradient and height-to-area at once; then the next layer, and so on. Within a layer, the weighted score" },
+    { id: "wsum", label: "Weighted score", note: "The weighted mean of the three part scores (flood flow, gradient, height-to-area), 0 to 100" },
+    { id: "sig", label: "Similarity to known runs", note: "How close a reach's terrain is to the average reach of the known runs, as a percentile" },
+    { id: "comp", label: "Your feature weights", note: "Your weights on the standardised terrain features, as a percentile among reaches of 2 km² or more" },
+  ];
+  /** The ranking in use: params.rankBy, else the model when there is one, else the Pareto layers. */
+  const rankOf = (p, hasModel) => (RANKINGS.some((r) => r.id === p?.rankBy) ? p.rankBy : hasModel ? "model" : "pareto");
+
+  /** The features the feature weights apply to, in order: [{id, label, weight (default)}]. */
+  function features() {
+    const dw = LEG().default_weights || {}, desc = Object.assign({}, LEG().descriptions || {}, RF.models?.descriptions || {});
+    return Object.keys(dw).map((id) => ({ id, label: desc[id] || id, weight: dw[id] }));
   }
 
   function percentiles(values, refMask) {
@@ -86,7 +104,7 @@
   /** What scoring a set of reaches needs for one region, parameter set and model (shared by find and measure). */
   function context(R, opts) {
     const S = R.segments, p = opts.params || RF.state.runParams || defaults();
-    const model = opts.model || null, rankBy = opts.rankBy || (model ? "model" : "pareto");
+    const model = opts.model || null, rankBy = opts.rankBy || rankOf(p, !!model);
     const D = segmentScores(S, p);
     return { R, S, p, model, role: model?.role || null, rankBy, D, scores: rankScores(S, D, rankBy, p, model),
       listed: new Set(S.listed),
@@ -152,8 +170,8 @@
 
   /**
    * Find runs in a loaded region.
-   * opts: {params (default RF.state.runParams), rankBy ("model" default when a model is given, else "pareto"),
-   *        model: {pct, role} from RF.data.scores()}
+   * opts: {params (default RF.state.runParams), rankBy (default params.rankBy, else "model" when a model is given,
+   *        else "pareto"), model: {pct, role} from RF.data.scores()}
    * Returns runs sorted best first. Each run is a feature reference ({kind: "run", region, id, members, ...}).
    */
   function find(R, opts = {}) {
@@ -189,10 +207,20 @@
   function measure(R, members, opts = {}) {
     const S = R?.segments, ms = S ? [...new Set(members || [])].filter((m) => m >= 0 && m < S.g.length) : [];
     if (!ms.length) return null;
-    const p = opts.params || RF.state.runParams || defaults(), model = opts.model || null, rankBy = opts.rankBy || (model ? "model" : "pareto");
-    if (!memo || memo.R !== R || memo.p !== p || memo.model !== model || memo.rankBy !== rankBy) memo = context(R, { params: p, model, rankBy });
-    return summarize(memo, ms);
+    return summarize(memoized(R, opts), ms);
   }
+  function memoized(R, opts) {
+    const p = opts.params || RF.state.runParams || defaults(), model = opts.model || null, rankBy = opts.rankBy || rankOf(p, !!model);
+    if (!memo || memo.R !== R || memo.p !== p || memo.model !== model || memo.rankBy !== rankBy) memo = context(R, { params: p, model, rankBy });
+    return memo;
+  }
+
+  /**
+   * Every reach's score (0-100, reach order) under a ranking, as runs take their best reach's: the model's
+   * percentiles ("model"), 100 × the weighted score ("wsum"; also "pareto", which ranks whole runs), the similarity
+   * percentile ("sig") or the percentile of the feature-weighted sum ("comp"). opts as find(); null without reaches.
+   */
+  function scores(R, opts = {}) { return R?.segments ? memoized(R, opts).scores : null; }
 
   /** Two Chaikin passes: softens the 5-8 m grid staircase; keeps both end points. */
   function smooth(pts) {
@@ -251,5 +279,6 @@
     return mask;
   }
 
-  RF.runs = { defaults, find, measure, pieces, path, chains, smooth, upstream, segmentScores, percentiles, paretoLayers };
+  RF.runs = { defaults, find, measure, scores, pieces, path, chains, smooth, upstream, segmentScores, percentiles, paretoLayers,
+    rankings: RANKINGS, rankOf, features };
 })();

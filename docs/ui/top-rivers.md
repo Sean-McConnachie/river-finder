@@ -20,6 +20,11 @@ The ranked list of the best rivers, and the bridge between the map browser and t
   changes live (`RF.on("model", ...)`, `RF.on("runs", ...)`);
 - useful filters and sorts: grade band (once known sections land), length, gradient, flow, access
   (distance to road: `run.acc`), mapped waterfalls (`run.falls`), not-in-guides only.
+- show the ranking in use (rf-aq6.33): `RF.state.runParams.rankBy`, set on the Models page (model, Pareto layer,
+  weighted score, similarity to known runs, your feature weights). The line above the list names it and says what
+  the score is, with "Change the ranking" (`RF.go("models", {section: "models-rf"})`); the score column's title
+  follows it; runs on the Pareto frontier (`run.layer === 1`) carry a "Pareto frontier" pill; ranked by Pareto
+  layer, the layer shows under the score and "All regions" orders by layer, then score.
 
 ## What you can use
 

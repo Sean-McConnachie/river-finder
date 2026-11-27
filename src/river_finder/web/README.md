@@ -138,7 +138,7 @@ Stable unless noted. Anything not listed here is internal.
 | `RF.setRunParams(params \| null)` | merge over defaults (null resets); emits `runs` |
 | `RF.select(feature)` | emits `select` |
 | `RF.on(evt, fn)` → `unsubscribe` | events: `ready`, `page`, `region`, `model`, `runs`, `select`, `detail-close`, `rain` |
-| `RF.go(pageId, params)` | open a page; e.g. `RF.go("map", {select: feature})` zooms the map to it and highlights it; `{select, aerial: true}` also switches to the Aerial base map (site with a Basemaps key) |
+| `RF.go(pageId, params)` | open a page; e.g. `RF.go("map", {select: feature})` zooms the map to it and highlights it; `{select, aerial: true}` also switches to the Aerial base map (site with a Basemaps key); `RF.go("models", {section: "models-rf"})` scrolls to a section of the Models page (the run finder and its ranking) |
 
 ### Data: `RF.data`
 
@@ -263,12 +263,23 @@ once a minute only so that shown ages can move on.
 
 | | |
 |---|---|
-| `RF.runs.defaults()` | `{q: [lo, hi] m³/s, g: [lo, hi] m/km, haMeasure, haHi, w: [flow, gradient, H/A], threshold, gate, flowScaled, minLen, maxGap, featureWeights}` |
-| `RF.runs.find(region, {params?, model?, rankBy?})` | runs, best first. `model` = result of `RF.data.scores`; `rankBy`: `"model"` (default with a model), `"pareto"`, `"wsum"`, `"sig"`, `"comp"` |
+| `RF.runs.defaults()` | `{q: [lo, hi] m³/s, g: [lo, hi] m/km, haMeasure, haHi, w: [flow, gradient, H/A], threshold, gate, flowScaled, minLen, maxGap, featureWeights, rankBy}` |
+| `RF.runs.find(region, {params?, model?, rankBy?})` | runs, best first. `model` = result of `RF.data.scores`; `rankBy`: `"model"`, `"pareto"`, `"wsum"`, `"sig"`, `"comp"`; default `params.rankBy`, else `"model"` with a model, else `"pareto"` |
+| `RF.runs.rankings` | the rankings in the order to offer them: `[{id, label, note}]` (`model`, `pareto`, `wsum`, `sig`, `comp`) |
+| `RF.runs.rankOf(params, hasModel)` | the ranking in use: `params.rankBy` when set, else `"model"` when a model is chosen, else `"pareto"` |
+| `RF.runs.scores(region, {params?, model?, rankBy?})` | every reach's score under a ranking (0-100, reach order; what a run's `score` is the best of): the model's percentiles, 100 × the weighted score (`wsum`; `pareto` too, which ranks whole runs), the similarity percentile, or the percentile of the feature-weighted sum; null without reaches |
+| `RF.runs.features()` | the features `featureWeights` applies to: `[{id, label, weight}]` (default weights from `model.json`) |
 | `RF.runs.measure(region, members, {params?, model?, rankBy?})` | the numbers `find` gives a run (`len`, `grad`, `s50`, `aTop`, `aBot`, `maf`, `ha`, `score`, `acc`, `falls`, …) for any set of reaches, e.g. a known section; `pieces` counts its separate pieces (totals for length and drop, so the gradient is length-weighted; area and flow at the largest piece), null if none |
 | `RF.runs.pieces(S, members)` | connected pieces of a set of reaches, largest catchment first: `[{members, top, bottom, stem, len}]` |
 | `RF.runs.path(S, members)` | smoothed `[[lon, lat], …]` for drawing |
 | `RF.runs.upstream(S, reach)` | `Uint8Array` mask of every reach upstream of `reach` |
+
+Ranking (`RF.state.runParams.rankBy`, set on the Models page; rf-aq6.33): pages that call `find` or `measure` without
+`rankBy` follow it, so the Map and Top rivers rank and colour runs the same way. `null` (the default) keeps the old
+behaviour. A run's `score` is its best reach's score under the ranking (`pareto` and `wsum`: the length-weighted
+weighted score, 0-100) and `layer` its Pareto layer among the region's runs (1 = the frontier: no other run has a larger
+flood flow, a steeper effective gradient and a higher height-to-area at once), whatever the ranking. `comp` uses
+`featureWeights` (one weight per feature of `RF.runs.features()`, on the standardised `S.z`).
 
 ### Models: `RF.models`
 

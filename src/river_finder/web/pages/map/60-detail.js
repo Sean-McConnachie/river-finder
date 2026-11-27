@@ -33,7 +33,8 @@
    * road access at the ends and the profile follow the whole line. Null: no reaches.
    */
   function stats(R, ms, model, gap = []) {
-    const S = R.segments, st = RF.runs.measure(R, ms, { model });
+    // the model's score whatever the ranking in use (that one gets a row of its own: rankRow)
+    const S = R.segments, st = RF.runs.measure(R, ms, model ? { model, rankBy: "model" } : {});
     if (!st) return null;
     const own = new Set(ms), bridge = [...new Set(gap)].filter((m) => m >= 0 && m < S.g.length && !own.has(m)), all = bridge.length ? ms.concat(bridge) : ms;
     const parts = RF.runs.pieces(S, all), longest = parts.reduce((b, q) => (q.len > b.len ? q : b)), stem = longest.stem;
@@ -49,7 +50,20 @@
       zMax: Math.max(...all.map((m) => S.zt[m])), zMin: Math.min(...all.map((m) => S.zb[m])), mel: median(ms.map((m) => S.mel[m])) });
   }
 
-  function statsTable(st, score, air) {
+  /** The row of the ranking in use when it is not the model (Models page, RF.runs.rankOf): its score for these reaches,
+   *  and for a predicted run its Pareto layer. Null under the model's ranking. */
+  function rankRow(R, ms, model, f) {
+    const rk = RF.runs.rankOf(RF.state.runParams, !!model);
+    if (rk === "model") return null;
+    const s = RF.runs.measure(R, ms, { model, rankBy: rk })?.score;
+    if (s == null) return null;
+    const layer = f.kind === "run" && f.layer ? `; Pareto layer ${f.layer}${f.layer === 1 ? " (the frontier)" : ""}` : "";
+    if (rk === "pareto" || rk === "wsum") return ["Weighted score", `${s.toFixed(0)} of 100${layer}`, "Flood flow, gradient and height-to-area part scores, weighted (the ranking in use)"];
+    if (rk === "sig") return ["Similarity to known runs", `${s.toFixed(0)} percentile${layer}`, "Closeness to the average reach of the known runs (the ranking in use)"];
+    return ["Your feature weights", `${s.toFixed(0)} percentile${layer}`, "Your weights on the terrain features (the ranking in use)"];
+  }
+
+  function statsTable(st, score, air, rank) {
     // not one joined stretch: no single top → bottom, so say what each figure covers
     const many = st.n > 1, gapped = !many && st.gapKm > 0;
     const over = many ? `${st.n} separate pieces` : gapped ? `the ${st.mp} pieces` : "the main stem and its side branches";
@@ -65,6 +79,7 @@
         : ["Elevation", `${fmt.int(st.zTop)} → ${fmt.int(st.zBot)} m`, "NZVD2016"],
     ];
     if (score) rows.push(["Model score", `${score.pct.toFixed(score.pct >= 99 ? 1 : 0)} percentile`, `${score.model}: nationally, higher is more like the known runs`]);
+    if (rank) rows.push(rank);
     if (st.acc) {
       rows.push(many ? ["Road access", fmt.dist(st.acc.road), "Nearest road to any of the pieces (OpenStreetMap)"]
         : ["Road access", `${fmt.dist(st.acc.putIn)} · ${fmt.dist(st.acc.takeOut)}`, "From the top · from the bottom (OpenStreetMap)"]);
@@ -217,7 +232,7 @@
 
     const body = [
       el("div", { class: "det-summary" }, pills, ...desc, gen, apart, approxNote, hy ? hydroNote(hy) : null),
-      section("Key numbers", statsTable(st, score, air)),
+      section("Key numbers", statsTable(st, score, air, rankRow(R, ms, sc?.pct?.length ? sc : null, f))),
       section("Long profile", ...profile(S, st.stem, highlight), stemNote),
       M.rain?.section(f, R), // 57-rain.js: live rain at the outlet (null without live rain)
       section("Flow rate", RF.chart.placeholder("Flow rate over time",

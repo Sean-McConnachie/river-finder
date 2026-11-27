@@ -3,7 +3,9 @@
    style-matched / style x size AUC).
    Sections: the models in this build (choosing one calls RF.setModel, which the map and Top rivers follow), the
    chosen model's card and what it uses (coefficients or gain importance), how the models do on held-out guide
-   rivers and in cross-validation, the run-finder settings (RF.setRunParams, with their effect on one region)
+   rivers and in cross-validation, the run-finder settings and the ranking of runs (RF.setRunParams: model, Pareto
+   layer, weighted score, similarity to known runs or the user's feature weights; their effect on one region and the
+   runs there by flood flow and gradient, the Pareto frontier ringed)
    and how well single measures separate known runs from the other reaches (AUC per measure and a 3D scatter;
    Plotly's 3D bundle is loaded from cdnjs only when that view is opened).
    Only edit files under src/river_finder/web/pages/models/. */
@@ -270,7 +272,30 @@
     if (p.flowScaled !== d.flowScaled) out.push("big-river gradient");
     if (p.minLen !== d.minLen) out.push("minimum length");
     if (p.maxGap !== d.maxGap) out.push("gaps");
+    if (rankOf(p) !== rankOf(d)) out.push("ranking");
+    if (ne(p.featureWeights, d.featureWeights)) out.push("feature weights");
     return out;
+  }
+
+  // ---------- ranking: how runs are ranked and coloured (params.rankBy, RF.runs.rankings) ----------
+  const rankOf = (p) => RF.runs.rankOf(p, !!RF.state.model);
+  /** "Model v4" for the model option (the pooled regression when the build has no models), else the ranking's label. */
+  const rankName = (id) => (id === "model" ? (RF.state.model ? `Model ${shortOf(RF.state.model)}` : "Pooled regression")
+    : RF.runs.rankings.find((r) => r.id === id)?.label || id);
+  /** The same, inside a sentence ("ranked by similarity to known runs"; Pareto keeps its capital). */
+  const rankWords = (id) => rankName(id).replace(/^(Weighted|Similarity|Your)/, (w) => w.toLowerCase());
+  const SCORE_NAME = { model: "score", pareto: "weighted score", wsum: "weighted score", sig: "similarity", comp: "your weights" };
+  const STATUS_PILL = { candidate: ["rf-pill--ok", "New lead"], heldout: ["rf-pill--warn", "Test river"], listed: ["", "In guides"] };
+  const FRONT_TIP = "No other run in this region has more flood flow, a steeper gradient and a higher height-to-area at once";
+
+  /** One run in a list: name, status, Pareto frontier, its numbers (text), Show on map. */
+  function runItem(r, text) {
+    const [cls, label] = STATUS_PILL[r.status] || STATUS_PILL.candidate;
+    return el("li", { class: "models-run" },
+      el("div", { class: "models-run-main" }, el("strong", { text: r.name }), el("span", { class: `rf-pill ${cls}`, text: label }),
+        r.layer === 1 ? el("span", { class: "rf-pill rf-pill--accent", title: FRONT_TIP, text: "Pareto frontier" }) : null,
+        el("span", { class: "num rf-muted", text })),
+      el("button", { type: "button", class: "rf-btn", "aria-label": `Show on map: ${r.name}`, onclick: () => RF.go("map", { select: r }) }, "Show on map"));
   }
 
   function summarize(R, runs) {
@@ -278,7 +303,166 @@
     let km = 0;
     runs.forEach((r) => { by[r.status] = (by[r.status] || 0) + 1; km += r.len; r.members.forEach((m) => on.add(m)); });
     const secs = R.sections || [];
-    return { n: runs.length, km, by, secN: secs.length, secHit: secs.filter((s) => (s.m || []).some((m) => on.has(m))).length };
+    return { n: runs.length, km, by, secN: secs.length, secHit: secs.filter((s) => (s.m || []).some((m) => on.has(m))).length,
+      front: runs.filter((r) => r.layer === 1).length };
+  }
+
+  // ---------- runs: flow vs gradient, the Pareto view of the run finder (SVG) ----------
+  /** Shade of a mark from its height-to-area rank t (0..1): the accent mixed into the surface, pale low to dark high. */
+  const shade = (t) => `color-mix(in oklab, var(--accent) ${Math.round(18 + 82 * t)}%, var(--surface))`;
+  /** SVG of a mark at (x, y): circle (new lead), square (in the guides) or diamond (test river). */
+  function mark(r, x, y, rad, attrs) {
+    const X = x.toFixed(1), Y = y.toFixed(1);
+    if (r.status === "listed") { const s = rad * 0.9; return `<rect x="${(x - s).toFixed(1)}" y="${(y - s).toFixed(1)}" width="${(2 * s).toFixed(1)}" height="${(2 * s).toFixed(1)}" rx="1.5" ${attrs}/>`; }
+    if (r.status === "heldout") { const s = rad * 1.3; return `<path d="M${X} ${(y - s).toFixed(1)}L${(x + s).toFixed(1)} ${Y}L${X} ${(y + s).toFixed(1)}L${(x - s).toFixed(1)} ${Y}Z" ${attrs}/>`; }
+    return `<circle cx="${X}" cy="${Y}" r="${rad}" ${attrs}/>`;
+  }
+  const svgIcon = (inner) => el("span", { class: "models-scat-ico", "aria-hidden": "true", html: `<svg viewBox="0 0 16 16" width="16" height="16">${inner}</svg>` });
+
+  function buildScatter() {
+    const st = { R: null, runs: [], p: null, pts: [], W: 0, sel: null };
+    const host = el("div", { class: "models-scat-host" });
+    const tip = el("div", { class: "rf-chart-tip models-scat-tip", hidden: true });
+    const pick = el("div", { class: "models-scat-pick", "aria-live": "polite" });
+    const front = el("div");
+    const ring = 'fill="none" stroke="var(--fg)" stroke-width="1.75"';
+    const legend = el("div", { class: "models-scat-legend" },
+      el("span", {}, svgIcon(`<circle cx="8" cy="8" r="4" style="fill:${shade(0.6)}" stroke="var(--surface)"/>`), "New lead"),
+      el("span", {}, svgIcon(`<rect x="4.4" y="4.4" width="7.2" height="7.2" rx="1.5" style="fill:${shade(0.6)}" stroke="var(--surface)"/>`), "In the guides"),
+      el("span", {}, svgIcon(`<path d="M8 2.8L13.2 8L8 13.2L2.8 8Z" style="fill:${shade(0.6)}" stroke="var(--surface)"/>`), "Test river"),
+      el("span", {}, svgIcon(`<circle cx="8" cy="8" r="5" style="fill:${shade(0.6)}" ${ring.replace('fill="none" ', "")}/>`), "Pareto frontier (ringed)"),
+      el("span", {}, el("span", { class: "models-scat-ramp", "aria-hidden": "true" }), "Height-to-area, low to high"),
+      el("span", {}, svgIcon('<rect x="2" y="3" width="12" height="10" rx="1" class="models-scat-band"/>'), "Full-credit band"));
+    const note = el("p", { class: "rf-note" });
+    const node = el("div", { class: "rf-stack models-scat" },
+      el("h3", { text: "Runs: flow vs gradient" }), note, el("div", { class: "models-scat-wrap" }, host, tip), legend, pick, front);
+    let lastW = 0;
+    if ("ResizeObserver" in window) {
+      new ResizeObserver(RF.util.debounce(() => { const w = host.clientWidth; if (w && Math.abs(w - lastW) > 8 && st.R) draw(); }, 120)).observe(host);
+    }
+
+    const haName = () => (st.p?.haMeasure === "height_to_width" ? "height-to-width" : "height-to-area");
+    const numbers = (r) => `flood ${fmt.flow(r.maf)} m³/s · ${fmt.grad(r.grad)} m/km${st.p?.flowScaled && r.effG > r.grad * 1.05 ? ` (counted as ${fmt.grad(r.effG)})` : ""} · ${haName()} ${r.ha.toFixed(3)} · ${r.len.toFixed(1)} km`;
+
+    function draw() {
+      const { runs, p, R } = st;
+      lastW = host.clientWidth;
+      tip.hidden = true;
+      if (!R) { host.replaceChildren(); pick.replaceChildren(); front.replaceChildren(); note.textContent = ""; return; }
+      note.textContent = `Each mark is a run in ${R.title}: across, its mean annual flood (log scale); up, its gradient${p.flowScaled ? ", with big rivers counted steeper as set above" : ""}; the shade is its ${haName()}. Ringed marks are on the Pareto frontier: no other run here has more flood flow, a steeper gradient and a higher ${haName()} at once. The frontier is outlined on the map and marked in the lists. Tap or click a mark for its run; arrow keys step through them.`;
+      if (!runs.length) { host.replaceChildren(el("p", { class: "rf-note", text: "No runs pass these settings here." })); pick.replaceChildren(); front.replaceChildren(); return; }
+      const W = (st.W = Math.max(280, Math.min(760, lastW || 600))), H = W < 480 ? 300 : 360, m = { l: 42, r: 12, t: 10, b: 40 };
+      const qs = runs.map((r) => Math.max(r.maf, 1e-3));
+      const x0 = Math.floor(Math.log10(Math.min(...qs, p.q[0]))), x1 = Math.max(x0 + 1, Math.ceil(Math.log10(Math.max(...qs, p.q[1]))));
+      const gmax = Math.max(...runs.map((r) => r.effG), p.g[1], 1), yt = RF.chart.ticks(0, gmax, H < 320 ? 4 : 5), step = yt[1] - yt[0] || gmax;
+      const y1 = Math.ceil(gmax / step - 1e-9) * step;
+      const X = (q) => m.l + (Math.log10(Math.max(q, 10 ** x0)) - x0) / (x1 - x0) * (W - m.l - m.r);
+      const Y = (g) => H - m.b - Math.max(0, Math.min(g, y1)) / y1 * (H - m.t - m.b);
+      // shade: rank of height-to-area among these runs (pale low, dark high)
+      const t = new Float64Array(runs.length);
+      runs.map((r, i) => i).sort((a, b) => runs[a].ha - runs[b].ha).forEach((i, k) => { t[i] = runs.length > 1 ? k / (runs.length - 1) : 1; });
+      st.pts = runs.map((r) => [X(r.maf), Y(r.effG)]);
+      const s = [];
+      s.push(`<rect class="models-scat-band" x="${X(p.q[0]).toFixed(1)}" y="${Y(p.g[1]).toFixed(1)}" width="${Math.max(0, X(p.q[1]) - X(p.q[0])).toFixed(1)}" height="${Math.max(0, Y(p.g[0]) - Y(p.g[1])).toFixed(1)}"/>`);
+      for (let k = x0; k <= x1; k++) {
+        const x = X(10 ** k).toFixed(1), lab = k >= 0 ? fmt.int(10 ** k) : String(+(10 ** k).toPrecision(1));
+        // the last label ends at the plot's edge, so it is not cut off
+        s.push(`<line class="rf-chart-grid" x1="${x}" x2="${x}" y1="${m.t}" y2="${H - m.b}"/><text class="rf-chart-xlab" x="${x}" y="${H - m.b + 14}" text-anchor="${k === x1 ? "end" : k === x0 ? "start" : "middle"}">${lab}</text>`);
+      }
+      for (let v = 0; v <= y1 + 1e-9; v += step) {
+        const y = Y(v).toFixed(1);
+        s.push(`<line class="rf-chart-grid" x1="${m.l}" x2="${W - m.r}" y1="${y}" y2="${y}"/><text class="rf-chart-ylab" x="${m.l - 5}" y="${(+y + 3.5).toFixed(1)}" text-anchor="end">${+v.toPrecision(6)}</text>`);
+      }
+      s.push(`<line class="rf-chart-axis" x1="${m.l}" x2="${W - m.r}" y1="${H - m.b}" y2="${H - m.b}"/>`);
+      s.push(`<text class="rf-chart-xlab" x="${(m.l + W - m.r) / 2}" y="${H - 6}" text-anchor="middle">Mean annual flood, m³/s</text>`);
+      s.push(`<text class="rf-chart-xlab" transform="translate(11 ${(m.t + H - m.b) / 2}) rotate(-90)" text-anchor="middle">Gradient, m/km</text>`);
+      // the frontier last, so its rings are on top
+      const order = runs.map((r, i) => i).sort((a, b) => (runs[a].layer === 1) - (runs[b].layer === 1));
+      order.forEach((i) => {
+        const r = runs[i], [x, y] = st.pts[i], f = r.layer === 1;
+        s.push(mark(r, x, y, f ? 5.5 : 4, `style="fill:${shade(t[i])}" stroke="${f ? "var(--fg)" : "var(--surface)"}" stroke-width="${f ? 1.75 : 1}"`));
+      });
+      s.push('<circle class="models-scat-hov" r="9" cx="-20" cy="-20"/><circle class="models-scat-sel" r="10" cx="-20" cy="-20"/>');
+      const nf = runs.filter((r) => r.layer === 1).length;
+      host.innerHTML = `<svg class="rf-chart-svg models-scat-svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" tabindex="0" role="img" aria-label="${esc(`${runs.length} runs in ${R.title} by mean annual flood and gradient; ${nf} on the Pareto frontier. Arrow keys step through them.`)}">${s.join("")}</svg>`;
+      const i = runs.findIndex((r) => r.id === st.sel);
+      select(i >= 0 ? i : -1, true);
+      const fr = runs.filter((r) => r.layer === 1).sort((a, b) => b.score - a.score);
+      front.replaceChildren(el("details", { class: "models-more" }, el("summary", { text: `Runs on the Pareto frontier (${fr.length})` }),
+        el("ol", { class: "models-runs" }, ...fr.map((r) => runItem(r, numbers(r))))));
+    }
+
+    /** The run nearest a pointer event, within tol px of the drawing (-1: none). */
+    function nearest(ev, tol) {
+      const svg = host.querySelector("svg"); if (!svg || !st.pts.length) return -1;
+      const b = svg.getBoundingClientRect(), k = st.W / b.width, x = (ev.clientX - b.left) * k, y = (ev.clientY - b.top) * k;
+      let best = (tol * k) ** 2, bi = -1;
+      st.pts.forEach(([px, py], i) => { const d = (px - x) ** 2 + (py - y) ** 2; if (d < best) { best = d; bi = i; } });
+      return bi;
+    }
+    const place = (cls, i) => {
+      const c = host.querySelector(cls); if (!c) return;
+      const [x, y] = i >= 0 ? st.pts[i] : [-20, -20];
+      c.setAttribute("cx", x.toFixed(1)); c.setAttribute("cy", y.toFixed(1));
+    };
+    /** Select run i (-1: none): ring it and show it under the plot. */
+    function select(i, quiet) {
+      const r = i >= 0 ? st.runs[i] : null;
+      st.sel = r ? r.id : null;
+      place(".models-scat-sel", i);
+      if (!r) { pick.replaceChildren(el("p", { class: "rf-note", text: "Tap a mark for its run." })); return; }
+      const sname = SCORE_NAME[rankOf(st.p)] || "score";
+      const [cls, label] = STATUS_PILL[r.status] || STATUS_PILL.candidate;
+      pick.replaceChildren(el("div", { class: "models-scat-card" },
+        el("div", { class: "models-run-main" }, el("strong", { text: r.name }), el("span", { class: `rf-pill ${cls}`, text: label }),
+          el("span", { class: `rf-pill${r.layer === 1 ? " rf-pill--accent" : ""}`, title: r.layer === 1 ? FRONT_TIP : "Pareto layer: 1 is the frontier, 2 the frontier once those are left out, and so on", text: r.layer === 1 ? "Pareto frontier" : `Pareto layer ${r.layer}` })),
+        el("span", { class: "num rf-muted", text: `${numbers(r)} · ${sname} ${r.score.toFixed(0)}` }),
+        el("div", { class: "rf-row" },
+          el("button", { type: "button", class: "rf-btn rf-btn--primary", onclick: () => RF.go("map", { select: r }) }, "Show on map"),
+          el("button", { type: "button", class: "rf-btn", onclick: (e) => RF.detail.open(r, { opener: e.currentTarget }) }, "Details"))));
+      if (!quiet) tip.hidden = true;
+    }
+
+    host.addEventListener("pointermove", (ev) => {
+      if (ev.pointerType !== "mouse") return;
+      const i = nearest(ev, 12);
+      place(".models-scat-hov", i);
+      host.style.cursor = i >= 0 ? "pointer" : "";
+      if (i < 0) { tip.hidden = true; return; }
+      const r = st.runs[i];
+      tip.replaceChildren(el("strong", { text: r.name }), el("br"), el("span", { text: r.layer === 1 ? "Pareto frontier" : `Pareto layer ${r.layer}` }), el("br"),
+        el("span", { text: `${fmt.flow(r.maf)} m³/s · ${fmt.grad(r.effG)} m/km · ${r.ha.toFixed(3)}` }));
+      tip.hidden = false;
+      const wb = host.parentElement.getBoundingClientRect(), left = ev.clientX - wb.left + 14;
+      tip.style.left = `${Math.max(0, Math.min(left, wb.width - tip.offsetWidth - 4))}px`;
+      tip.style.top = `${Math.max(0, ev.clientY - wb.top - tip.offsetHeight - 10)}px`;
+    });
+    host.addEventListener("pointerleave", () => { tip.hidden = true; place(".models-scat-hov", -1); });
+    host.addEventListener("click", (ev) => {
+      const i = nearest(ev, window.matchMedia("(pointer: coarse)").matches ? 22 : 14);
+      if (i >= 0) select(i);
+    });
+    host.addEventListener("keydown", (ev) => {
+      if (!st.runs.length) return;
+      const byX = st.runs.map((r, i) => i).sort((a, b) => st.pts[a][0] - st.pts[b][0] || st.pts[b][1] - st.pts[a][1]);
+      const at = byX.indexOf(st.runs.findIndex((r) => r.id === st.sel));
+      if (ev.key === "ArrowRight" || ev.key === "ArrowDown") select(byX[Math.min(byX.length - 1, at + 1)]);
+      else if (ev.key === "ArrowLeft" || ev.key === "ArrowUp") select(byX[Math.max(0, at < 0 ? 0 : at - 1)]);
+      else if (ev.key === "Enter" && at >= 0) RF.go("map", { select: st.runs[byX[at]] });
+      else if (ev.key === "Escape") select(-1);
+      else return;
+      ev.preventDefault();
+    });
+
+    return {
+      node,
+      /** Draw the runs of region R found with params p (R null: clear). */
+      update(R, runs = [], p = null) {
+        if (R !== st.R) st.sel = null;
+        Object.assign(st, { R, runs, p });
+        draw();
+      },
+    };
   }
 
   function buildTuner() {
@@ -288,6 +472,7 @@
     const status = el("p", { class: "rf-note models-inuse", role: "status" });
     const box = el("div", { class: "rf-stack models-preview", "aria-live": "polite" });
     const regionPick = el("div", { class: "models-ctl rf-stack" });
+    const scat = buildScatter();
     const later = RF.util.debounce(() => preview(), 250);
 
     const apply = () => {
@@ -324,7 +509,57 @@
     ctl["models-rf-ham"] = { el: haSel, get: () => cand.haMeasure };
     const haHelp = el("span", { class: "rf-note" });
 
+    // how runs are ranked and coloured: one choice, applied at once
+    const ranks = RF.runs.rankings.map((r) => {
+      const input = el("input", { type: "radio", name: "models-rank", value: r.id, onchange: () => { cand.rankBy = r.id; sync(true); apply(); } });
+      const name = el("strong");
+      return { id: r.id, input, name, node: el("label", { class: "models-rank" }, input,
+        el("span", { class: "models-rank-text" }, name, el("span", { class: "rf-note", text: r.note }))) };
+    });
+    const rankSet = el("fieldset", { class: "models-set models-rankset" }, el("legend", { text: "Rank and colour runs by" }),
+      el("div", { class: "models-ranks" }, ...ranks.map((r) => r.node)));
+
+    // your feature weights (ranking "comp"): a slider for every feature
+    const feats = RF.runs.features(), hints = {};
+    /** The weights to start from: the current model's coefficients when it is a linear model, else the pooled regression's. */
+    const startFrom = () => {
+      const m = RF.models.get(RF.state.model);
+      if (m?.kind === "logistic" && Object.keys(m.coef || {}).length) return { coef: m.coef, name: shortOf(m.id) };
+      const c = RF.models.legacy?.coef;
+      return c && Object.keys(c).length ? { coef: c, name: "the pooled regression" } : null;
+    };
+    const signed = (v) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(2)}`;
+    const startBtn = el("button", { type: "button", class: "rf-btn", onclick: () => {
+      const s = startFrom(); if (!s) return;
+      feats.forEach((f) => { cand.featureWeights[f.id] = Math.max(-2, Math.min(2, Math.round((s.coef[f.id] ?? 0) * 4) / 4)); });
+      sync(true); apply();
+    } });
+    const wSet = el("fieldset", { class: "models-set models-wset" }, el("legend", { text: "Your feature weights" }),
+      el("p", { class: "rf-note models-wide", text: "Each feature is standardised: 1 is one standard deviation across the reaches. A reach's score is the weighted sum of its features, as a percentile among reaches of 2 km² or more, and a run takes its best reach's. Positive weights raise the score, negative ones lower it. Changes apply when you let go of a slider." }),
+      el("div", { class: "rf-row models-wide" },
+        el("button", { type: "button", class: "rf-btn", onclick: () => { cand.featureWeights = RF.runs.defaults().featureWeights; sync(true); apply(); } }, "Reset the weights"),
+        startBtn),
+      ...(feats.length ? feats.map((f) => {
+        const id = `models-rf-fw-${f.id}`;
+        hints[f.id] = el("span", { class: "rf-note" });
+        return el("div", { class: "models-field" },
+          el("label", { for: id, class: "models-flabel" }, el("span", { class: "models-fname", text: f.label }), hints[f.id]),
+          el("div", { class: "models-finput" }, ...range(id, () => cand.featureWeights[f.id] ?? 0, (v) => { cand.featureWeights[f.id] = v; },
+            { min: -2, max: 2, step: 0.25, fmt: signed })));
+      }) : [el("p", { class: "rf-note models-wide", text: "This build has no feature list (model.json), so there is nothing to weight." })]));
+    /** The ranking controls from cand: which one is checked, the model's name, the weights shown only for "comp". */
+    function syncRank() {
+      const cur = rankOf(cand);
+      ranks.forEach((r) => { r.input.checked = r.id === cur; r.name.textContent = rankName(r.id); });
+      wSet.hidden = cur !== "comp";
+      const s = startFrom();
+      startBtn.hidden = !s;
+      if (s) startBtn.textContent = `Start from ${s.name}'s weights`;
+      feats.forEach((f) => { hints[f.id].textContent = s && s.coef[f.id] != null ? `${s.name[0].toUpperCase()}${s.name.slice(1)}: ${signed(s.coef[f.id])}` : ""; });
+    }
+
     const form = el("div", { class: "rf-stack models-form" },
+      rankSet, wSet,
       el("fieldset", { class: "models-set" }, el("legend", { text: "Bands: full credit inside, none far outside" }),
         field("models-rf-q0", "Flood flow (mean annual flood), m³/s", "Full credit between these. None below a quarter of the lower end or above 6.7 × the upper.",
           number("models-rf-q0", () => cand.q[0], (v) => { cand.q[0] = v; }, { min: 0.1, max: 5000, step: 0.5 }), el("span", { class: "rf-muted", text: "to" }),
@@ -358,14 +593,15 @@
       Object.values(outs).forEach((f) => f());
       const [lo] = haDefaults()[cand.haMeasure] || [0];
       haHelp.textContent = `None at or below ${lo.toFixed(3)}; the score rises in a straight line up to this.`;
-      const ch = changes(RF.state.runParams || cand);
-      status.textContent = ch.length ? `In use on the map and in Top rivers: changed from the defaults (${ch.join(", ")}).` : "In use on the map and in Top rivers: the default settings.";
+      syncRank();
+      const inUse = RF.state.runParams || cand, ch = changes(inUse);
+      status.textContent = `In use on the map and in Top rivers: runs ranked by ${rankWords(rankOf(inUse))}; ${ch.length ? `changed from the defaults (${ch.join(", ")})` : "the default settings"}.`;
     }
 
     async function preview() {
       const my = ++token, id = view.region;
-      if (!id) { box.replaceChildren(el("p", { class: "rf-note", text: "No regions in this build." })); return; }
-      if (!box.firstChild || box.dataset.region !== id) box.replaceChildren(el("p", { class: "rf-note", text: "Finding runs…" }));
+      if (!id) { box.replaceChildren(el("p", { class: "rf-note", text: "No regions in this build." })); scat.update(null); return; }
+      if (!box.firstChild || box.dataset.region !== id) { box.replaceChildren(el("p", { class: "rf-note", text: "Finding runs…" })); scat.update(null); }
       let R, model;
       try {
         R = await RF.data.region(id);
@@ -374,42 +610,42 @@
       if (my !== token) return;
       await yieldMain();
       if (my !== token) return;
-      if (!R.segments) { box.replaceChildren(el("p", { class: "rf-note", text: "This region has no modelled reaches." })); return; }
+      if (!R.segments) { box.replaceChildren(el("p", { class: "rf-note", text: "This region has no modelled reaches." })); scat.update(null); return; }
       const key = `${id}|${RF.state.model}`, p = clone(cand);
       if (!base.has(key)) base.set(key, summarize(R, RF.runs.find(R, { params: RF.runs.defaults(), model })));
       const runs = RF.runs.find(R, { params: p, model }), now = summarize(R, runs), d = base.get(key);
       if (my !== token) return;
       const row = (label, a, b, f = (v) => fmt.int(v)) => el("tr", {}, el("th", { scope: "row", text: label }), el("td", { class: "n", text: f(a) }), el("td", { class: "n rf-muted", text: f(b) }));
-      const top = runs.slice(0, 5).map((r) => el("li", { class: "models-run" },
-        el("div", { class: "models-run-main" }, el("strong", { text: r.name }),
-          el("span", { class: `rf-pill${r.status === "candidate" ? " rf-pill--ok" : r.status === "heldout" ? " rf-pill--warn" : ""}`, text: r.status === "candidate" ? "New lead" : r.status === "heldout" ? "Test river" : "In guides" }),
-          el("span", { class: "num rf-muted", text: `${r.len.toFixed(1)} km · ${fmt.grad(r.grad)} m/km · flood ${fmt.flow(r.maf)} m³/s · score ${r.score.toFixed(0)}` })),
-        el("button", { type: "button", class: "rf-btn", onclick: () => RF.go("map", { select: r }) }, "Show on map")));
+      const rk = rankOf(p), sname = SCORE_NAME[rk] || "score";
+      const by = rk === "model" ? (model && !model.fallback ? shortOf(RF.state.model) : "the pooled regression") : rankWords(rk);
+      const top = runs.slice(0, 5).map((r) => runItem(r, `${r.len.toFixed(1)} km · ${fmt.grad(r.grad)} m/km · flood ${fmt.flow(r.maf)} m³/s · ${sname} ${r.score.toFixed(0)}${rk === "pareto" && r.layer > 1 ? ` · layer ${r.layer}` : ""}`));
       box.dataset.region = id;
       box.replaceChildren(
         table([th(""), th("These settings", true), th("Defaults", true)], [
           row("Runs", now.n, d.n), row("New leads", now.by.candidate || 0, d.by.candidate || 0), row("In the guides", now.by.listed || 0, d.by.listed || 0),
           row("Test rivers", now.by.heldout || 0, d.by.heldout || 0), row("Total length, km", now.km, d.km, (v) => v.toFixed(0)),
-          row("Guide sections touched", now.secHit, d.secHit, (v) => (now.secN ? `${v} of ${now.secN}` : "–"))], "models-cmp"),
-        el("p", { class: "rf-note", text: `With ${model && !model.fallback ? shortOf(RF.state.model) : "the pooled regression"} ranking the runs. "Guide sections touched": known sections in this region that at least one run overlaps, a rough check that the settings still find the runs people paddle.` }),
+          row("Guide sections touched", now.secHit, d.secHit, (v) => (now.secN ? `${v} of ${now.secN}` : "–")),
+          row("On the Pareto frontier", now.front, d.front)], "models-cmp"),
+        el("p", { class: "rf-note", text: `Ranked by ${by}. "Guide sections touched": known sections in this region that at least one run overlaps, a rough check that the settings still find the runs people paddle.` }),
         runs.length ? el("h3", { text: "Best five runs with these settings" }) : null,
         runs.length ? el("ol", { class: "models-runs" }, ...top) : el("p", { class: "rf-note", text: "No runs pass these settings here." }));
+      scat.update(R, runs, p);
     }
 
     const node = el("section", { class: "rf-panel rf-stack", id: "models-rf", "aria-labelledby": "models-rf-h" },
       el("h2", { id: "models-rf-h", text: "Run finder" }),
-      el("p", { class: "rf-note", text: "How the map and Top rivers turn reaches into runs before the model ranks them. Each reach gets three part scores from 0 to 1 (flood flow, gradient, height-to-area); a reach passes when their weighted mean reaches the threshold, and passing reaches in a row make a run. Changes apply when you let go of a slider or leave a box." }),
+      el("p", { class: "rf-note", text: "How the map and Top rivers turn reaches into runs and rank them. Each reach gets three part scores from 0 to 1 (flood flow, gradient, height-to-area); a reach passes when their weighted mean reaches the threshold, and passing reaches in a row make a run. The ranking orders and colours the runs: on the map, in Top rivers and here. Changes apply when you let go of a slider or leave a box." }),
       status,
       el("div", { class: "rf-row" }, el("button", { type: "button", class: "rf-btn", onclick: () => RF.setRunParams(null) }, "Reset to defaults")),
       form,
       el("h3", { text: "Effect in one region" }),
-      regionPick, box);
+      regionPick, box, scat.node);
 
     return {
       node,
       /** The settings in use changed (here or elsewhere): controls from RF.state.runParams, then the preview. */
       sync(quiet) { cand = clone(RF.state.runParams || RF.runs.defaults()); sync(); if (!quiet) preview(); },
-      model() { preview(); },
+      model() { sync(true); preview(); },
       region() {
         regionPick.replaceChildren(el("label", { for: "models-rf-region", class: "rf-eyebrow", text: "Region" }), regionSelect("models-rf-region", (id) => setRegion(id, true)));
         preview();
@@ -628,7 +864,11 @@
       // follow the map's region until a region is picked here
       RF.on("region", ({ id }) => { if (!view.regionPicked) setRegion(id, false); });
     },
-    show() { sep?.show(); },
+    /** params.section: the id of a section to scroll to (e.g. "models-rf", the run finder and its ranking). */
+    show(params) {
+      sep?.show();
+      if (params?.section) requestAnimationFrame(() => document.getElementById(params.section)?.scrollIntoView({ block: "start" }));
+    },
     hide() { sep?.hide(); },
   });
 })();
