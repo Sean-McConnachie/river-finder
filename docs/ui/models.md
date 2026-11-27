@@ -33,8 +33,27 @@ Done so far (rf-qiw, 2026-11-18):
 - the cross-validated model recipes, from `RF.payload.registry.cv` (built by
   `models.viewer_models` -> `cv_summary`).
 
-v3 (LightGBM, kind `gbm`, no coefficients but `importance`) is now the default model. Still to do:
-run-finder tuning, feature weights and the separation views.
+v3 (LightGBM, kind `gbm`, no coefficients but `importance`) is now the default model.
+
+Done (rf-aq6.4, 2026-11-27):
+
+- the chosen model's card: description, kind, training rivers and reaches, held-out rivers, split (share,
+  strata, seed), recipe, links to `models/<id>.json` and `models/splits/`; river lists in `<details>`;
+- what it uses: gain importance bars (`gbm`) or signed coefficient bars (`logistic`), plus a side-by-side
+  table of the linear models' coefficients;
+- a key-finding line computed from the evaluations (baseline AUC vs style × size; v1 at chance), and a
+  per-test-river table for the chosen model;
+- run-finder settings with `RF.setRunParams` (bands, height-to-area measure and full-credit level, weights,
+  threshold, gate, big-river gradient, minimum length, gaps; applied on release / leaving a box; Reset), and
+  their effect on one region next to the defaults (runs, new leads, length, guide sections touched, best five
+  with "Show on map");
+- separation: AUC and medians of known-run reaches against the other reaches (≥ 2 km²) for the model score
+  and ten measures in one region, and a 3D scatter (Plotly gl3d 2.35.0 loaded from cdnjs only when opened;
+  tap a point to open it on the map).
+
+Not done: archived cards (`registry.archived` on the 1 m site) are not listed (correctly not offered as map
+scores); run-finder settings are not kept between visits; `featureWeights` (only used by `rankBy: "comp"`)
+have no controls.
 
 ## What you can use
 
