@@ -1,0 +1,553 @@
+{
+ "schema": 1,
+ "format": "river-finder live rain v1",
+ "generated": "2026-11-28T17:00:53Z",
+ "now": "2026-11-28 17:00Z",
+ "windows": [
+  1,
+  3,
+  6,
+  12,
+  24
+ ],
+ "observed": {
+  "products": [
+   "ECMWF_OBS"
+  ],
+  "sources": [
+   "openmeteo-s3"
+  ],
+  "runs": [
+   "2026-11-27 12:00Z",
+   "2026-11-27 18:00Z",
+   "2026-11-28 00:00Z",
+   "2026-11-28 06:00Z"
+  ],
+  "family": "ecmwf",
+  "scaled": false,
+  "scale": "raw",
+  "windows": {
+   "1": {
+    "start": "2026-11-28 16:00Z",
+    "end": "2026-11-28 17:00Z",
+    "hours_with_data": 1,
+    "missing_hours": [],
+    "products": {
+     "ECMWF_OBS": 1
+    },
+    "runs": [
+     "2026-11-28 06:00Z"
+    ],
+    "leads": [
+     11,
+     11
+    ],
+    "reaches_incomplete": 0
+   },
+   "3": {
+    "start": "2026-11-28 14:00Z",
+    "end": "2026-11-28 17:00Z",
+    "hours_with_data": 3,
+    "missing_hours": [],
+    "products": {
+     "ECMWF_OBS": 3
+    },
+    "runs": [
+     "2026-11-28 06:00Z"
+    ],
+    "leads": [
+     9,
+     11
+    ],
+    "reaches_incomplete": 0
+   },
+   "6": {
+    "start": "2026-11-28 11:00Z",
+    "end": "2026-11-28 17:00Z",
+    "hours_with_data": 6,
+    "missing_hours": [],
+    "products": {
+     "ECMWF_OBS": 6
+    },
+    "runs": [
+     "2026-11-28 06:00Z"
+    ],
+    "leads": [
+     6,
+     11
+    ],
+    "reaches_incomplete": 0
+   },
+   "12": {
+    "start": "2026-11-28 05:00Z",
+    "end": "2026-11-28 17:00Z",
+    "hours_with_data": 12,
+    "missing_hours": [],
+    "products": {
+     "ECMWF_OBS": 12
+    },
+    "runs": [
+     "2026-11-28 00:00Z",
+     "2026-11-28 06:00Z"
+    ],
+    "leads": [
+     1,
+     11
+    ],
+    "reaches_incomplete": 0
+   },
+   "24": {
+    "start": "2026-11-27 17:00Z",
+    "end": "2026-11-28 17:00Z",
+    "hours_with_data": 24,
+    "missing_hours": [],
+    "products": {
+     "ECMWF_OBS": 24
+    },
+    "runs": [
+     "2026-11-27 12:00Z",
+     "2026-11-27 18:00Z",
+     "2026-11-28 00:00Z",
+     "2026-11-28 06:00Z"
+    ],
+    "leads": [
+     1,
+     11
+    ],
+    "reaches_incomplete": 0
+   }
+  },
+  "window_end": "2026-11-28 17:00Z",
+  "hours_behind_now": 0
+ },
+ "forecast": {
+  "products": [
+   "ECMWF_FC"
+  ],
+  "sources": [
+   "openmeteo-s3"
+  ],
+  "runs": [
+   "2026-11-28 06:00Z"
+  ],
+  "family": "ecmwf",
+  "scaled": false,
+  "scale": "raw",
+  "windows": {
+   "1": {
+    "start": "2026-11-28 17:00Z",
+    "end": "2026-11-28 18:00Z",
+    "hours_with_data": 1,
+    "missing_hours": [],
+    "products": {
+     "ECMWF_FC": 1
+    },
+    "runs": [
+     "2026-11-28 06:00Z"
+    ],
+    "leads": [
+     12,
+     12
+    ],
+    "reaches_incomplete": 0
+   },
+   "3": {
+    "start": "2026-11-28 17:00Z",
+    "end": "2026-11-28 20:00Z",
+    "hours_with_data": 3,
+    "missing_hours": [],
+    "products": {
+     "ECMWF_FC": 3
+    },
+    "runs": [
+     "2026-11-28 06:00Z"
+    ],
+    "leads": [
+     12,
+     14
+    ],
+    "reaches_incomplete": 0
+   },
+   "6": {
+    "start": "2026-11-28 17:00Z",
+    "end": "2026-11-28 23:00Z",
+    "hours_with_data": 6,
+    "missing_hours": [],
+    "products": {
+     "ECMWF_FC": 6
+    },
+    "runs": [
+     "2026-11-28 06:00Z"
+    ],
+    "leads": [
+     12,
+     17
+    ],
+    "reaches_incomplete": 0
+   },
+   "12": {
+    "start": "2026-11-28 17:00Z",
+    "end": "2026-11-29 05:00Z",
+    "hours_with_data": 12,
+    "missing_hours": [],
+    "products": {
+     "ECMWF_FC": 12
+    },
+    "runs": [
+     "2026-11-28 06:00Z"
+    ],
+    "leads": [
+     12,
+     23
+    ],
+    "reaches_incomplete": 0
+   },
+   "24": {
+    "start": "2026-11-28 17:00Z",
+    "end": "2026-11-29 17:00Z",
+    "hours_with_data": 24,
+    "missing_hours": [],
+    "products": {
+     "ECMWF_FC": 24
+    },
+    "runs": [
+     "2026-11-28 06:00Z"
+    ],
+    "leads": [
+     12,
+     35
+    ],
+    "reaches_incomplete": 0
+   }
+  },
+  "start": "2026-11-28 17:00Z",
+  "run": "2026-11-28 06:00Z",
+  "run_age_hours": 11.0
+ },
+ "ecmwf": {
+  "reader": "openmeteo-s3",
+  "runs": [
+   {
+    "run": "2026-11-27 12:00Z",
+    "age_hours": 29.0,
+    "used_for": [
+     "observed"
+    ]
+   },
+   {
+    "run": "2026-11-27 18:00Z",
+    "age_hours": 23.0,
+    "used_for": [
+     "observed"
+    ]
+   },
+   {
+    "run": "2026-11-28 00:00Z",
+    "age_hours": 17.0,
+    "used_for": [
+     "observed"
+    ]
+   },
+   {
+    "run": "2026-11-28 06:00Z",
+    "age_hours": 11.0,
+    "used_for": [
+     "observed",
+     "forecast"
+    ]
+   }
+  ],
+  "newest_run": "2026-11-28 06:00Z",
+  "newest_run_age_hours": 11.0
+ },
+ "units": {
+  "mm": "upstream rain: mean depth over the reach's whole upstream catchment, mm (0.1 mm steps)",
+  "area_km2": "upstream pixel area the depths are averaged over, km2",
+  "m3": "mm / 1000 * area_km2 * 1e6",
+  "time": "UTC; an hour is named by its end; window x observed = (window_end - x h, window_end], forecast = (start, start + x h]",
+  "age_hours": "generated - run time, hours"
+ },
+ "products": {
+  "ECMWF_OBS": "ECMWF IFS short-lead hours used as an observed proxy",
+  "ECMWF_FC": "ECMWF IFS forecast hours (rain in the next x hours)"
+ },
+ "flags": {
+  "1": {
+   "name": "outlet",
+   "doc": "down < 0: the network ends here"
+  },
+  "2": {
+   "name": "tile_edge_outlet",
+   "doc": "outlet at a tile edge that the relink (rf-t26.8) could not reconnect: totals stop here"
+  },
+  "4": {
+   "name": "tile_edge_outlet_gt200km2",
+   "doc": "tile-edge outlet over 200 km2, one of the 26 rivers of rf-t26.11"
+  },
+  "8": {
+   "name": "drains_to_tile_edge",
+   "doc": "the reach drains to a tile-edge outlet"
+  },
+  "16": {
+   "name": "area_short",
+   "doc": "upstream pixel area >= 5 % and >= 1 km2 short of the table's area_km2: the total misses part of the catchment (tile-edge losses)"
+  }
+ },
+ "attribution": "Rain: ECMWF IFS open data, © ECMWF, CC BY 4.0 (www.ecmwf.int); modified: regridded and summed over the river catchments; hourly fields via Open-Meteo (open-meteo.com, CC BY 4.0).",
+ "licences": [
+  {
+   "name": "ECMWF IFS open data",
+   "licence": "CC BY 4.0",
+   "url": "https://www.ecmwf.int/en/forecasts/datasets/open-data"
+  },
+  {
+   "name": "Open-Meteo (hourly copy of the ECMWF IFS run)",
+   "licence": "CC BY 4.0",
+   "url": "https://open-meteo.com/"
+  }
+ ],
+ "regions": [
+  {
+   "id": "northland",
+   "title": "Northland",
+   "file": "northland.bin.gz",
+   "n": 24098,
+   "bytes": 58725,
+   "raw_bytes": 316970,
+   "sha256": "14eb8bbcbe5c2805e80b63af65acdb902c3cc6746a5630ec772c477471d97a4e"
+  },
+  {
+   "id": "auckland",
+   "title": "Auckland",
+   "file": "auckland.bin.gz",
+   "n": 7523,
+   "bytes": 25135,
+   "raw_bytes": 176725,
+   "sha256": "07cad86821a224ade5dab0ad7b8d7e15c1a186c1c3ac7ffd968da156ed7e2122"
+  },
+  {
+   "id": "waikato",
+   "title": "Waikato",
+   "file": "waikato.bin.gz",
+   "n": 58473,
+   "bytes": 220162,
+   "raw_bytes": 1348583,
+   "sha256": "7923fb2ed24199671fd2e47d5c74ad54a4ac58448f47a318adc1515e41254d6d"
+  },
+  {
+   "id": "bay-of-plenty",
+   "title": "Bay of Plenty",
+   "file": "bay-of-plenty.bin.gz",
+   "n": 29689,
+   "bytes": 123028,
+   "raw_bytes": 686559,
+   "sha256": "108fa2c5dfef5a06c8878bac5ca70b5e9d72b63046e4a22d8b566520649238d0"
+  },
+  {
+   "id": "gisborne",
+   "title": "Gisborne",
+   "file": "gisborne.bin.gz",
+   "n": 18325,
+   "bytes": 65593,
+   "raw_bytes": 425171,
+   "sha256": "bb703458005c6f06e07f1d700a411dc1a7f18f8b973db5c991ee79ff3224e5a1"
+  },
+  {
+   "id": "hawkes-bay",
+   "title": "Hawke's Bay",
+   "file": "hawkes-bay.bin.gz",
+   "n": 33234,
+   "bytes": 95781,
+   "raw_bytes": 768086,
+   "sha256": "d753f5ae594957187bfddccb61e4559702e3d89b7c1bed564005e9da29f07590"
+  },
+  {
+   "id": "taranaki",
+   "title": "Taranaki",
+   "file": "taranaki.bin.gz",
+   "n": 18875,
+   "bytes": 46709,
+   "raw_bytes": 286821,
+   "sha256": "3b1be15b6421bbd4c87ad582cfc6af4fb645b8ad810557b60f828b52d593e04b"
+  },
+  {
+   "id": "wanganui",
+   "title": "Wanganui",
+   "file": "wanganui.bin.gz",
+   "n": 35092,
+   "bytes": 103476,
+   "raw_bytes": 740628,
+   "sha256": "f3f1b3d67c8c8239c8ca957e9e23c37ebcd40d0325c42a2682bcff900a80d881"
+  },
+  {
+   "id": "manawatu",
+   "title": "Manawatu",
+   "file": "manawatu.bin.gz",
+   "n": 18822,
+   "bytes": 48587,
+   "raw_bytes": 398958,
+   "sha256": "79f6787828821dde61cf4bfddd7e903e6d4d7251e25dfae3cdaf8fdfbc48c27a"
+  },
+  {
+   "id": "wellington",
+   "title": "Wellington",
+   "file": "wellington.bin.gz",
+   "n": 18301,
+   "bytes": 44290,
+   "raw_bytes": 424627,
+   "sha256": "a586221bebb398ccbe8c46ec2e3c4df6862cb3ec99376659bd17e7398670b6a2"
+  },
+  {
+   "id": "tasman",
+   "title": "Tasman",
+   "file": "tasman.bin.gz",
+   "n": 20562,
+   "bytes": 46047,
+   "raw_bytes": 229870,
+   "sha256": "46a04c07836d2ea62e728cff5d29ce9913cfb94f3fd77924757324931790a30b"
+  },
+  {
+   "id": "marlborough",
+   "title": "Marlborough",
+   "file": "marlborough.bin.gz",
+   "n": 20293,
+   "bytes": 42075,
+   "raw_bytes": 186333,
+   "sha256": "4376a7a221938f550bc942629739f73b77f171845e87e7d262e853d4d23c682c"
+  },
+  {
+   "id": "west-coast",
+   "title": "West Coast",
+   "file": "west-coast.bin.gz",
+   "n": 47897,
+   "bytes": 158147,
+   "raw_bytes": 1105335,
+   "sha256": "2890f8a94c9c929c6a6d0c5a9869546e3a1e7f29d7e1b384c7a62c1572823611"
+  },
+  {
+   "id": "canterbury",
+   "title": "Canterbury",
+   "file": "canterbury.bin.gz",
+   "n": 109254,
+   "bytes": 247914,
+   "raw_bytes": 2079538,
+   "sha256": "b1098a7c830034cf2e66929b87883e2d59f16a1b6a4e14348095fe8c4e41a5c8"
+  },
+  {
+   "id": "otago",
+   "title": "Otago",
+   "file": "otago.bin.gz",
+   "n": 71159,
+   "bytes": 185570,
+   "raw_bytes": 1640353,
+   "sha256": "cc30c9486931cf27714577ab7da8b3e619e4f541fe98bc12f5434ba354134b4a"
+  },
+  {
+   "id": "southland",
+   "title": "Southland",
+   "file": "southland.bin.gz",
+   "n": 63139,
+   "bytes": 210519,
+   "raw_bytes": 1455901,
+   "sha256": "4763fae94f3610415790795125d6a129827aefef2221cf3fdfc84084de77cbe7"
+  }
+ ],
+ "omitted": {
+  "kaimai": "5 m reference area with its own reach network: no clean reach-for-reach link to the national reaches (2026-11-20: only 82-87 % of its viewer reaches lie within 150 m of a national reach, and 80-87 % of those have an upstream area within 25 %); its national region has the rain",
+  "karangahake": "5 m reference area with its own reach network: no clean reach-for-reach link to the national reaches (2026-11-20: only 82-87 % of its viewer reaches lie within 150 m of a national reach, and 80-87 % of those have an upstream area within 25 %); its national region has the rain",
+  "tutamoe": "5 m reference area with its own reach network: no clean reach-for-reach link to the national reaches (2026-11-20: only 82-87 % of its viewer reaches lie within 150 m of a national reach, and 80-87 % of those have an upstream area within 25 %); its national region has the rain"
+ },
+ "totals": {
+  "created": "2026-11-28T17:00:49+00:00",
+  "rows": 1104794,
+  "rows_digest": "6c8d0b45c128cfe4",
+  "scaled": false,
+  "values": "scaled"
+ },
+ "scaling": {
+  "publish": false,
+  "apply": true,
+  "scaled": false,
+  "withheld": false,
+  "note": "no gauge scale factor applied (factor version 0 everywhere)"
+ },
+ "inputs": {
+  "created": "2026-11-22T20:21:49Z",
+  "code": "b55c3f55bb785dc412c65155ce0a2dbcc0017a86",
+  "national_build": {
+   "segments_table": {
+    "file": "segments_table.pkl",
+    "mtime": "2026-11-20T00:38:06Z",
+    "bytes": 310906233
+   },
+   "weights": {
+    "ecmwf": {
+     "built": "2026-11-20T01:17:48Z",
+     "rows_digest": "6c8d0b45c128cfe4",
+     "grid": {
+      "name": "ecmwf",
+      "lon0": 165.8,
+      "lat0": -33.8,
+      "dlon": 0.1,
+      "dlat": -0.1,
+      "nx": 133,
+      "ny": 141
+     }
+    }
+   },
+   "network_built": "2026-11-20T01:41:58+00:00",
+   "viewer_index": {
+    "file": "regions_index.json",
+    "mtime": "2026-11-20T01:08:44Z"
+   },
+   "scaling_zones": {
+    "file": "scaling_zones.npz",
+    "built": "2026-11-22T20:21:48Z",
+    "zones": [
+     "Auckland",
+     "Bay of Plenty",
+     "Canterbury divide",
+     "Canterbury east",
+     "Gisborne",
+     "Hawke's Bay",
+     "Manawatu",
+     "Marlborough",
+     "Northland",
+     "Otago",
+     "Southland",
+     "Taranaki",
+     "Tasman",
+     "Waikato",
+     "Wanganui",
+     "Wellington",
+     "West Coast"
+    ],
+    "splits": [
+     {
+      "region": "Canterbury",
+      "divide_km": 15.0,
+      "near": "Canterbury divide",
+      "far": "Canterbury east"
+     }
+    ],
+    "divide": {
+     "west": [
+      "West Coast",
+      "Tasman"
+     ],
+     "east": [
+      "Canterbury",
+      "Otago"
+     ]
+    }
+   }
+  },
+  "rows_digest": "6c8d0b45c128cfe4"
+ },
+ "job": {
+  "run": "https://github.com/Sean-McConnachie/river-finder/actions/runs/46168083446",
+  "commit": "a9ee02ae504f33cf98c148d3a1cc43e51be7353f",
+  "event": "schedule"
+ },
+ "summary": "Rain 2026-11-28 17:00Z; observed to 2026-11-28 17:00Z from ECMWF runs 2026-11-27 12:00Z, 2026-11-27 18:00Z, 2026-11-28 00:00Z, 2026-11-28 06:00Z; forecast from run 2026-11-28 06:00Z (11 h old) [openmeteo-s3]"
+}
