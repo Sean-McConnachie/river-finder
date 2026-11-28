@@ -94,6 +94,23 @@ def test_joins(tmp_path):
     assert s[0] == pytest.approx(1.0) and s[1] == pytest.approx(447.2 / 400, rel=1e-3)
 
 
+def test_joins_run_skips_an_empty_row_group(tmp_path):
+    # the merge writes one row group per tile, also for a tile with no reach in its core
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    lines = [shapely.LineString([(0, 0), (300, 0)]), shapely.LineString([(0, 100), (200, 300)])]
+    full = pa.table({"gid": pa.array([1, 2], pa.int64()), "length_m": [300.0, 283.0], "river_rec2": ["A", ""],
+                     "river": ["A", ""], "geometry": shapely.to_wkb(lines)})
+    with pq.ParquetWriter(tmp_path / "reaches.parquet", full.schema) as w:
+        w.write_table(full.slice(0, 0))
+        w.write_table(full)
+        w.write_table(full.slice(0, 0))
+    s = J.run(tmp_path, layer_dir=tmp_path, log=lambda *a: None)
+    j = pd.read_parquet(tmp_path / "joins.parquet")
+    assert j["gid"].tolist() == [1, 2] and j["river"].tolist() == ["A", ""] and isinstance(s, dict)
+
+
 def test_reaches_1m_reads_the_joins(tmp_path):
     from river_finder.nzscore import reaches_1m
 

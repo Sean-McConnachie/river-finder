@@ -215,6 +215,8 @@ def run(root: Path, reaches: Path | None = None, linz_dir: Path | None = None, l
     for k in range(pf.metadata.num_row_groups):
         tab = pf.read_row_group(k, columns=cols)
         f = tab.to_pandas()
+        if not len(f):      # a tile with no reach in its core (the merge writes its row group all the same)
+            continue
         g = gpd.GeoSeries.from_wkb(f["geometry"].to_numpy(), crs="EPSG:2193")
         b = g.total_bounds
         box = (b[0] - PAD_M, b[1] - PAD_M, b[2] + PAD_M, b[3] + PAD_M)
