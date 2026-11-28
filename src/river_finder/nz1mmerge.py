@@ -47,8 +47,17 @@ STITCH_RATIO = (0.7, 3.0)       # its in-tile area / the exit's
 EDGE_BAND_M = 1500.0            # lines kept for stitching: within this of the core edge
 ENTRY_M = 600.0                 # second stitch: an entry reach of another tile starts within this of the exit
 EXACT_M = 1.0                   # on the line: the same 2 m cell path (lines are simplified at 1 m)
+CATCH_DEPTH_M = 250.0           # third stitch: the receiving tile's 10 m cells up to this far past the core edge ...
+CATCH_WIN_M = (30.0, 300.0)     # ... along it within clip(30 m + 2 x the end point's distance to the edge)
+FALLBACK_Z_M = 1.0              # third and fourth stitch: the target's bottom at most this above the exit's end ...
+FALLBACK_Z_8M_M = 20.0          # ... or this when either is on the 8 m fallback (each tile fits it to the LiDAR
+                                # around its own box: corrections of up to 18-31 m, so two tiles' heights differ)
+PATH_SNAP_M = 100.0             # fourth stitch: a reach of the receiving tile this close to REC2's path ...
+PATH_WALK_M = 10_000.0          # ... within this far down REC2 from the exit's end (past 1.5 km of the edge: the
+                                # reaches' start, middle and end points only)
 TRUNC_TOL = 0.10                # truncated: the area entering unlinked is more than this share ...
 TRUNC_MIN_KM2 = 0.25            # ... and more than this
+OPEN_NEAR_M = 3000.0            # an open entry from a merged tile counts only with an unresolved exit this close
 THETA = 0.45
 LAKE_OUTLET_M = 300.0           # an outlet point not held by a tile record: the reach within this
 REC2_NAME_M, REC2_NAME_RATIO = 150.0, (0.6, 1.6)     # spec rule for river_rec2
@@ -233,12 +242,200 @@ def crosses_into(x: np.ndarray, y: np.ndarray, tile: np.ndarray, cores: dict) ->
     an id ``q<ix>y<iy>``. An unstitched exit into a merged tile is a failed stitch; into another, a tile not merged."""
     out = np.empty(len(x), object)
     for k, (xx, yy, t) in enumerate(zip(x, y, tile, strict=True)):
-        c = cores[str(t)]
-        d = [abs(xx - c[0]), abs(xx - c[2]), abs(yy - c[1]), abs(yy - c[3])]
+        side, _ = _edge_side(xx, yy, cores[str(t)])
         q = N.Tile32.parse(str(t))
-        dx, dy = [(-1, 0), (1, 0), (0, -1), (0, 1)][int(np.argmin(d))]
+        dx, dy = [(-1, 0), (1, 0), (0, -1), (0, 1)][side]
         out[k] = N.Tile32(q.ix + dx, q.iy + dy).id
     return out
+
+
+def _edge_side(x: float, y: float, c) -> tuple[int, float]:
+    """The side of core ``c`` (x0, y0, x1, y1) nearest to (x, y): 0 west, 1 east, 2 south, 3 north; and the
+    distance to it."""
+    d = [abs(x - c[0]), abs(x - c[2]), abs(y - c[1]), abs(y - c[3])]
+    k = int(np.argmin(d))
+    return k, float(d[k])
+
+
+def _past_edge(x: float, y: float, c, along: np.ndarray, depth: np.ndarray) -> np.ndarray:
+    """Points past the nearest side of core ``c``: ``depth`` m beyond it (rows) by ``along`` m from the projection of
+    (x, y) onto it (columns). Shape (len(depth), len(along), 2)."""
+    side, _ = _edge_side(x, y, c)
+    D, A = np.meshgrid(depth, along, indexing="ij")
+    if side < 2:
+        ex = c[0] - D if side == 0 else c[2] + D
+        return np.stack([ex, y + A], axis=-1)
+    ey = c[1] - D if side == 2 else c[3] + D
+    return np.stack([x + A, ey], axis=-1)
+
+
+def _into_tiles(T: pd.DataFrame, cores: dict) -> np.ndarray:
+    """Per row, the tile a reach that leaves its core crosses into ('' for the others)."""
+    out = np.full(len(T), "", object)
+    e = np.flatnonzero(T["exits_core"].to_numpy(bool))
+    if len(e) and cores:
+        out[e] = crosses_into(T["end_x"].to_numpy()[e], T["end_y"].to_numpy()[e], T["tile"].astype(str).to_numpy()[e],
+                              cores)
+    return out.astype(str)
+
+
+def _fallback_rows(T: pd.DataFrame, down: np.ndarray, cores: dict) -> tuple[np.ndarray, np.ndarray]:
+    """The exits still unlinked whose crossing is into a merged tile (biggest first), and the tile of each."""
+    ex = np.flatnonzero(T["exits_core"].to_numpy(bool) & (down < 0))
+    if not len(ex) or not cores:
+        return np.zeros(0, np.int64), np.zeros(0, str)
+    into = crosses_into(T["end_x"].to_numpy()[ex], T["end_y"].to_numpy()[ex], T["tile"].astype(str).to_numpy()[ex],
+                        cores).astype(str)
+    keep = np.isin(into, list(cores))
+    ex, into = ex[keep], into[keep]
+    o = np.lexsort((T["gid"].to_numpy(np.int64)[ex], -T["area_tile_km2"].to_numpy(float)[ex]))
+    return ex[o], into[o]
+
+
+def _target_ok(j: np.ndarray, i: int, into_i: str, names: np.ndarray, zbot: np.ndarray, fb8: np.ndarray,
+               z_m: float, z8_m: float) -> np.ndarray:
+    """Fallback targets for exit ``i``: core reaches of the tile it crosses into whose bottom is at most ``z_m`` above
+    its end (``z8_m`` when either is on the 8 m fallback, ``fb8``)."""
+    return (names[j] == into_i) & (zbot[j] <= zbot[i] + np.where(fb8[j] | fb8[i], z8_m, z_m))
+
+
+def _first_target(j: np.ndarray, i: int, names: np.ndarray, area: np.ndarray, back: np.ndarray,
+                  down: np.ndarray) -> int:
+    """Of the acceptable targets ``j``, the first that makes no cycle: those that do not leave their core straight
+    back into the exit's tile first (a river along the edge that each tile sends into the other), then by in-tile
+    area. -1 for none."""
+    o = np.lexsort((-area[j], back[j] == names[i]))
+    for jj in j[o].tolist():
+        if not _walk_to(int(jj), i, down):
+            return int(jj)
+    return -1
+
+
+def _fallback8(T: pd.DataFrame) -> np.ndarray:
+    return np.isin(T["dem_source"].astype(str).to_numpy(), ["8m", "mixed"])
+
+
+def stitch_catchments(T: pd.DataFrame, down: np.ndarray, stitch: np.ndarray, cores: dict | None,
+                      root: Path | None = None, depth_m: float = CATCH_DEPTH_M, z_m: float = FALLBACK_Z_M,
+                      z8_m: float = FALLBACK_Z_8M_M) -> dict:
+    """The third stitch, for exits still unlinked after the edge, lake and REC2 links (rf-lxa.10): where the receiving
+    tile's own routing takes the water past the crossing. Each tile's ``local_catchment_core.tif`` names, for every
+    10 m cell it owns, the core reach the cell first drains into (-1 for a cell that drains first into a reach it does
+    not own): the cells the merge's areas are built from. From the edge outwards, 10 m at a time up to ``depth_m``,
+    along it within clip(30 m + 2 x the end point's distance to the edge, 30, 300 m) of the end point's projection:
+    at the first depth that names an acceptable reach (``_target_ok``), ``_first_target`` is the link. No area test:
+    where the first two stitches fail, the receiving tile's in-tile areas are what went wrong (its REC2 inflow took
+    another path: across the plain beside a braided bed, or across a flat its box edge cut). In place; returns
+    counts."""
+    import rasterio
+    from rasterio.windows import Window
+
+    ex, into = _fallback_rows(T, down, cores)
+    st = {"tried": int(len(ex)), "linked": 0, "no_label": 0, "refused": 0}
+    if not len(ex):
+        return st
+    pos = pd.Index(T["gid"].to_numpy(np.int64))
+    names = T["tile"].astype(str).to_numpy()
+    zbot = T["z_bot"].to_numpy(float)
+    fb8 = _fallback8(T)
+    area = T["area_tile_km2"].to_numpy(float)
+    end = T[["end_x", "end_y"]].to_numpy(float)
+    back = _into_tiles(T, cores)
+    depth = np.arange(5.0, depth_m, 10.0)
+    for b in np.unique(into):
+        p = N.tile_dir(b, root) / "local_catchment_core.tif"
+        if not p.exists():
+            continue
+        with rasterio.open(p) as r:
+            for q in np.flatnonzero(into == b):
+                i = int(ex[q])
+                _, dist = _edge_side(end[i, 0], end[i, 1], cores[names[i]])
+                half = float(np.clip(30.0 + 2.0 * dist, *CATCH_WIN_M))
+                xy = _past_edge(end[i, 0], end[i, 1], cores[names[i]], np.arange(-half, half + 1e-6, 10.0), depth)
+                rr, cc = rasterio.transform.rowcol(r.transform, xy[..., 0].ravel(), xy[..., 1].ravel())
+                rr = np.asarray(rr, np.int64).reshape(xy.shape[:2])
+                cc = np.asarray(cc, np.int64).reshape(xy.shape[:2])
+                r0, c0 = max(int(rr.min()), 0), max(int(cc.min()), 0)
+                r1, c1 = min(int(rr.max()) + 1, r.height), min(int(cc.max()) + 1, r.width)
+                if r0 >= r1 or c0 >= c1:
+                    st["no_label"] += 1
+                    continue
+                a = r.read(1, window=Window(c0, r0, c1 - c0, r1 - r0))
+                inside = (rr >= r0) & (rr < r1) & (cc >= c0) & (cc < c1)
+                lab = np.full(rr.shape, -1, np.int64)
+                lab[inside] = a[rr[inside] - r0, cc[inside] - c0]
+                best, seen = -1, False
+                for row in lab:
+                    g = np.unique(row[row >= 0])
+                    if not len(g):
+                        continue
+                    seen = True
+                    j = pos.get_indexer(g)
+                    j = j[j >= 0]
+                    best = _first_target(j[_target_ok(j, i, into[q], names, zbot, fb8, z_m, z8_m)], i, names, area,
+                                         back, down)
+                    if best >= 0:
+                        break
+                if best >= 0:
+                    down[i], stitch[i] = best, STITCH_EDGE
+                    st["linked"] += 1
+                else:
+                    st["refused" if seen else "no_label"] += 1
+    return st
+
+
+def stitch_rec2_path(T: pd.DataFrame, edge: dict, down: np.ndarray, stitch: np.ndarray, cores: dict | None, rec2,
+                     z_m: float = FALLBACK_Z_M, z8_m: float = FALLBACK_Z_8M_M, snap_m: float = PATH_SNAP_M,
+                     walk_m: float = PATH_WALK_M) -> dict:
+    """The fourth stitch, for exits the receiving tile's routing gave no reach for (its cells past the crossing drain
+    into reaches it does not own, e.g. back across the edge on a flat): the REC2 reach at the exit's end (``relink``'s
+    match, on the larger of the in-tile area and the network area so far: the in-tile one is what failed), then
+    points every 20 m down REC2 for up to ``walk_m``; at the first point with an acceptable reach of the receiving
+    tile within ``snap_m`` (``_target_ok``), ``_first_target`` is the link. No area test, as ``stitch_catchments``.
+    In place; returns counts."""
+    from scipy.spatial import cKDTree
+
+    from .relink import RelinkParams, _radius
+
+    ex, into = _fallback_rows(T, down, cores)
+    st = {"tried": int(len(ex)), "linked": 0, "no_rec2": 0, "no_reach": 0}
+    if not len(ex) or rec2 is None:
+        return st
+    n = len(T)
+    seg_xy = np.vstack([edge["xy"], T[["start_x", "start_y"]].to_numpy(float), T[["mid_x", "mid_y"]].to_numpy(float),
+                        T[["end_x", "end_y"]].to_numpy(float)])
+    seg_row = np.r_[edge["k"], np.arange(n), np.arange(n), np.arange(n)]
+    tree = cKDTree(seg_xy)
+    names = T["tile"].astype(str).to_numpy()
+    zbot = T["z_bot"].to_numpy(float)
+    fb8 = _fallback8(T)
+    area = T["area_tile_km2"].to_numpy(float)
+    end = T[["end_x", "end_y"]].to_numpy(float)
+    back = _into_tiles(T, cores)
+    p = RelinkParams()
+    net = acc_sum(kahn(down), down, T["local_km2"].to_numpy(float))
+    a_ex = np.maximum(area[ex], net[ex])
+    hit = rec2.match(end[ex], a_ex, _radius(p, a_ex), p.match_ratio)
+    for q, i in enumerate(ex.tolist()):
+        if hit[q] < 0:
+            st["no_rec2"] += 1
+            continue
+        pts, _, _ = rec2.path(int(hit[q]), end[i], p.step_m, walk_m)
+        best = -1
+        for h in tree.query_ball_point(pts, snap_m):
+            if not h:
+                continue
+            j = np.unique(seg_row[np.asarray(h)])
+            j = j[j != i]
+            best = _first_target(j[_target_ok(j, i, into[q], names, zbot, fb8, z_m, z8_m)], i, names, area, back, down)
+            if best >= 0:
+                break
+        if best >= 0:
+            down[i], stitch[i] = best, STITCH_EDGE
+            st["linked"] += 1
+        else:
+            st["no_reach"] += 1
+    return st
 
 
 def _edge_lines(edge: dict):
@@ -352,6 +549,18 @@ def stitch_entries(T: pd.DataFrame, down: np.ndarray, stitch: np.ndarray, cores:
             down[i], stitch[i] = best, STITCH_EDGE
             n += 1
     return n
+
+
+def _fallback_log(T: pd.DataFrame, d0: np.ndarray, d1: np.ndarray, down: np.ndarray, top: int = 60) -> list[dict]:
+    """The links the third and fourth stitch made (biggest first): exit and target gid, tile, in-tile areas."""
+    gid = T["gid"].to_numpy(np.int64)
+    names = T["tile"].astype(str).to_numpy()
+    area = T["area_tile_km2"].to_numpy(float)
+    ch = np.flatnonzero(down != d0)
+    ch = ch[np.lexsort((gid[ch], -area[ch]))][:top]
+    return [{"gid": int(gid[i]), "tile": names[i], "area_tile_km2": round(float(area[i]), 3),
+             "to_gid": int(gid[down[i]]), "to_tile": names[down[i]], "to_area_tile_km2": round(float(area[down[i]]), 3),
+             "by": "catchment" if d1[i] != d0[i] else "rec2_path"} for i in ch]
 
 
 def _walk_to(x: int, target: int, down: np.ndarray, cap: int = 100_000) -> bool:
@@ -663,7 +872,8 @@ def network_fields(T: pd.DataFrame, down: np.ndarray, order: np.ndarray) -> dict
 
 
 def truncation(T: pd.DataFrame, pos: pd.Index, down: np.ndarray, order: np.ndarray, area: np.ndarray,
-               missing: np.ndarray | None = None):
+               missing: np.ndarray | None = None, rec2_at: np.ndarray | None = None,
+               area_mid: np.ndarray | None = None):
     """``truncated`` and the area missing upstream of each reach. A reach takes in area from outside its tile's core
     (``ext_in``: its in-tile area less its local area and its in-tile core upstream reaches' in-tile areas; the
     halo reaches above it and the REC2 inflows). That area must come from another tile's reaches linked into it; when
@@ -671,17 +881,33 @@ def truncation(T: pd.DataFrame, pos: pd.Index, down: np.ndarray, order: np.ndarr
     merge does after the zero-length reaches went). Missing areas are summed down the network; a reach is truncated
     when the missing area is over ``TRUNC_MIN_KM2`` and over ``TRUNC_TOL`` of the true area (network area +
     missing). The in-tile areas only say *that* area enters, not how much: a linked entry is complete whatever the
-    receiving tile's REC2 inflow said (on plateau divides REC2 and the LiDAR disagree)."""
+    receiving tile's REC2 inflow said (on plateau divides REC2 and the LiDAR disagree). Nor do they say *where*: when
+    two tiles route a river differently, the network can bring it in through another reach than the one whose
+    in-tile area holds it, and that reach's ``ext_in`` is then counted twice (rf-lxa.10: 94 % of the reaches flagged
+    so in the national merge had at least 90 % of REC2's area). So with ``rec2_at`` (REC2's area at the reach's
+    middle, ``rec2_match``) a reach whose ``area_mid`` is at least 1 - ``TRUNC_TOL`` of it is not truncated."""
     if missing is None:
         missing = open_entries(T, pos, down)
     miss = acc_sum(order, down, missing)
     trunc = (miss > TRUNC_MIN_KM2) & (miss > TRUNC_TOL * (area + miss))
+    if rec2_at is not None and area_mid is not None:
+        with np.errstate(invalid="ignore"):
+            trunc &= ~(np.asarray(area_mid, float) >= (1.0 - TRUNC_TOL) * np.asarray(rec2_at, float))
     return trunc, miss, missing > 0
 
 
-def open_entries(T: pd.DataFrame, pos: pd.Index, down: np.ndarray) -> np.ndarray:
+def open_entries(T: pd.DataFrame, pos: pd.Index, down: np.ndarray, lake_member: np.ndarray | None = None,
+                 cores: dict | None = None, unresolved: np.ndarray | None = None,
+                 near_m: float = OPEN_NEAR_M) -> np.ndarray:
     """Per reach, the area missing where it enters its tile's core (``truncation``): ``ext_in`` when that is
-    ``TRUNC_MIN_KM2`` or more and no reach of another tile links in, else 0."""
+    ``TRUNC_MIN_KM2`` or more and no reach of another tile links in, else 0. Not for the reaches of a lake with an
+    outlet (``lake_member``): their in-tile area is the lake's catchment routed across its flat surface, which the lake
+    node brings to the outlet from every member, in every tile. With ``cores`` (the merged tiles) and ``unresolved``
+    (rows of the exits left without a link), not where the tile across the core side nearest to the reach's start is
+    merged and no unresolved exit ends within ``near_m``: every cell of a merged core is counted once in the network,
+    so area from there can only go missing at an unresolved exit; otherwise the network brought it in through another
+    reach (the two tiles route the river differently: a flat lake spilling at another point, a braided bed) and
+    ``ext_in`` would count it twice (rf-lxa.10)."""
     gid = T["gid"].to_numpy(np.int64)
     ds = T["down_seg"].to_numpy(np.int64)
     inner = ~T["exits_core"].to_numpy(bool) & (ds >= 0)
@@ -695,7 +921,21 @@ def open_entries(T: pd.DataFrame, pos: pd.Index, down: np.ndarray) -> np.ndarray
     cross = ok & (tcode != tcode[np.maximum(down, 0)])
     linked = np.zeros(len(T), bool)
     linked[down[cross]] = True
-    return np.where(~linked & (ext_in >= TRUNC_MIN_KM2), ext_in, 0.0)
+    if lake_member is not None:
+        linked |= np.asarray(lake_member, bool)
+    miss = np.where(~linked & (ext_in >= TRUNC_MIN_KM2), ext_in, 0.0)
+    if cores:
+        from scipy.spatial import cKDTree
+
+        c = np.flatnonzero(miss > 0)
+        st_xy = T[["start_x", "start_y"]].to_numpy(float)
+        nb = crosses_into(st_xy[c, 0], st_xy[c, 1], T["tile"].astype(str).to_numpy()[c], cores).astype(str)
+        drop = np.isin(nb, list(cores))
+        if unresolved is not None and len(unresolved):
+            tree = cKDTree(T[["end_x", "end_y"]].to_numpy(float)[np.asarray(unresolved)])
+            drop &= np.array([not h for h in tree.query_ball_point(st_xy[c], near_m)], bool)
+        miss[c[drop]] = 0.0
+    return miss
 
 
 def sinuosity_1km(T: pd.DataFrame, down: np.ndarray, area: np.ndarray, half_m: float = 500.0) -> np.ndarray:
@@ -919,11 +1159,19 @@ def merge(tiles: list[str] | None = None, root: Path | None = None, out: Path | 
            max(c[2] for c in cores.values()), max(c[3] for c in cores.values())]
     rec2f = rec2_frame(ext) if rec2 is True else (rec2 if rec2 is not None and rec2 is not False else None)
     st_rel = {"eligible": 0, "linked": 0}
+    rg = None
     if rec2f is not None and len(rec2f):
         from .relink import Rec2Graph
 
-        st_rel = relink_rec2(T, edge, down, stitch, Rec2Graph.from_frame(rec2f), cores, log)
+        rg = Rec2Graph.from_frame(rec2f)
+        st_rel = relink_rec2(T, edge, down, stitch, rg, cores, log)
     t = lap("relink", t)
+    d0 = down.copy()
+    st_fb = {"catchment": stitch_catchments(T, down, stitch, cores, root)}
+    d1 = down.copy()
+    st_fb["rec2_path"] = stitch_rec2_path(T, edge, down, stitch, cores, rg)
+    st_fb["links"] = _fallback_log(T, d0, d1, down)
+    t = lap("fallback", t)
     cycles = break_cycles(down, stitch, T["area_tile_km2"].to_numpy(float), log)
     # outlets and open entries on the tiles' links, then the zero-length reaches go (rf-lxa.12)
     exits = T["exits_core"].to_numpy(bool)
@@ -933,7 +1181,9 @@ def merge(tiles: list[str] | None = None, root: Path | None = None, out: Path | 
     sink = {lid for lid, s in lake_sum.items() if s["outlet_row"] < 0 and not s["outlet_outside"]}
     okind = np.where(~ok & exits & np.isin(lake_id, list(sink)), OUT_SINK, okind).astype(np.uint8)
     stitch = np.where(~ok & sea, STITCH_IN, stitch).astype(np.uint8)
-    missing = open_entries(T, pos, down)
+    node_lakes = [lid for lid, s in lake_sum.items() if s["outlet_row"] >= 0]
+    missing = open_entries(T, pos, down, lake_member=np.isin(lake_id, node_lakes), cores=cores,
+                           unresolved=np.flatnonzero(okind == OUT_EDGE))
     T, down, stitch, okind, lake_id, missing, row_map, zfix, zero = drop_zero_length(T, pos, down, stitch, okind,
                                                                                       lake_id, missing, log)
     pos = pd.Index(T["gid"].to_numpy(np.int64))
@@ -954,9 +1204,6 @@ def merge(tiles: list[str] | None = None, root: Path | None = None, out: Path | 
     for k in ("area_km2", "area_mid_km2", "area_check", "ksn", "knick_ratio", "head_m", "relief_m", "melton",
               "upstream_flat_frac", "upstream_hard_frac", "upstream_lake_frac", "catch_lidar_share"):
         net[k] = F[k].astype(np.float32)
-    trunc, miss, open_ = truncation(T, pos, down, order, F["area_km2"], missing)
-    net["truncated"] = trunc
-    net["missing_up_km2"] = miss.astype(np.float32)
     net["sinuosity_1km"] = sinuosity_1km(T, down, F["area_km2"]).astype(np.float32)
     net["karst_up_frac"] = (karst_up(T, down, order, F["area_km2"]) if geology else np.full(len(T), np.nan)).astype(
         np.float32)
@@ -972,6 +1219,10 @@ def merge(tiles: list[str] | None = None, root: Path | None = None, out: Path | 
     for c in rm.columns:
         net[c] = rm[c].to_numpy()
     net["river"] = net["river_rec2"]               # LINZ names (river_linz) are joined later (stage ext)
+    trunc, miss, open_ = truncation(T, pos, down, order, F["area_km2"], missing, rm["rec2_area_at_km2"].to_numpy(),
+                                    F["area_mid_km2"])
+    net["truncated"] = trunc
+    net["missing_up_km2"] = miss.astype(np.float32)
     t = lap("rec2_match", t)
     fl = None
     if flood is True:
@@ -1002,6 +1253,7 @@ def merge(tiles: list[str] | None = None, root: Path | None = None, out: Path | 
     L["members"] = [lake_sum.get(int(i), {}).get("members", 0) for i in L["lake_id"]]
     L["outlet_from"] = [lake_sum.get(int(i), {}).get("outlet_from", "") for i in L["lake_id"]]
     summary = _summary(T, net, tiles, st_edge, st_rel, lake_sum, cycles, rerun, L, cores)
+    summary["fallback_stitch"] = st_fb
     summary["open_entries"] = int(open_.sum())
     summary["open_entries_gt_10km2"] = int((open_ & (T["area_tile_km2"].to_numpy() > 10)).sum())
     summary["zero_length"] = zero

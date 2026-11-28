@@ -78,7 +78,7 @@ What the Electricity Authority documents changed or confirmed (section and page 
 | Rangitata Diversion Race intake at Klondyke | **confirmed**: Figure 3-9 draws the race from just below flow site 69302 Rangitata at Klondyke, with 69304 Mayfield/Hinds at Intake on the race | Report 4, 3.7, p. 23 |
 | Lake Coleridge layout (Harper Diversion above the Oakden Canal intake, Wilberforce Canal intake, outlet gate) | **confirmed**: Figure 3-8; the outlet is "regulated by a control gate", spill seldom; the Harper and Wilberforce bunds wash out in floods | Report 4, 3.6, p. 22; Report 2, 2.2.6, p. 22 |
 | Taurewa and Tawhitikuri intakes | **exist**, on the Western Diversion between the Okupata and Mangatepopo intakes (Figure 2-3, Genesis schematic, not to scale); positions not given | Report 4, 2.2, p. 4 |
-| Monowai: intake at the lake outlet (approx) | **contradicted**: gates at the outlet, then about 6 km of river to the canal's weir; the marking is not changed (the 8 m network misroutes the lake, see Limits) | Report 4, 3.3, p. 19, Figure 3-5 |
+| Monowai: intake at the lake outlet (approx) | **contradicted**: gates at the outlet, then about 6 km of river to the canal's weir; modelled so since the 1 m network (rf-73f: outlet `dam`, weir `intake`, see Limits) | Report 4, 3.3, p. 19, Figure 3-5 |
 
 **Unconfirmed (as of rf-6u2, after the Electricity Authority check):** the Kaimai intake rates, residual flows,
 crest levels, catchments and the Mangakarengorengo spill days (search excerpts of the fast-track documents; Report 4
@@ -182,10 +182,9 @@ share (`hydro check` before and after: `data/analysis/hydro-6u2/ea2_*`).
   a 1,036 m pipeline to the powerhouse: only the river below the weir is bypassed (OSM maps the weir, from LINZ
   Topo50, at -45.77995, 167.59121, where its canal starts). The 8 m network instead routes the lake's outflow (231 km²)
   north over a steep reach that no LINZ or REC2 line follows into the Borland Burn, and carries the real Monowai (REC2:
-  243-280 km²) at only 2-14 km². The config still has an intake at the outlet, so the network's path (including the
-  Borland Burn below the junction) is marked diverted and the real Monowai is not marked. Making the outlet a `dam`
-  and adding the weir would flag that phantom path as merely regulated, i.e. bring it into the leads lists, so the
-  fix waits for a network fix (or an explicit exclusion of the phantom reaches).
+  243-280 km²) at only 2-14 km². The 1 m network (rf-lxa.10) follows the Monowai to the Waiau (249 km² at the weir,
+  REC2 278), so since rf-73f the outlet is a `dam` (the river below regulated) and the weir an `intake` (the river
+  below it diverted to the station's return by the Waiau).
 - **Rebuilds.** `hydro.columns` uses `data/nz/hydro.pkl` while it lines up with the table (same reaches, same
   order) and recomputes from the config otherwise; run `hydro attach` again after a national rebuild or a config
   change.

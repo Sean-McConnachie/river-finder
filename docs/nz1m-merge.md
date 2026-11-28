@@ -55,6 +55,21 @@ uv run river-finder nz1m merge [qid ...] [--out DIR]   # all done tiles by defau
      at O, and every unlinked reach that ends in the lake, links to O. Lake reaches below O are left alone.
    - **REC2 relink** (the 8 m merge's `relink.relink_outlets`): only for exits into a merged tile that are still
      unlinked.
+   - **The receiving tile's routing** (`stitch_catchments`, rf-lxa.10; `stitch` 1). For exits still unlinked: the
+     tile they cross into names, in `local_catchment_core.tif`, the core reach each of its 10 m cells first drains
+     into. From the core side nearest the end point outwards, 10 m at a time up to 250 m, along it within
+     clip(30 m + 2 x the end point's distance to the side, 30, 300 m): at the first depth that names an acceptable
+     reach, the link. Acceptable: a core reach of that tile whose bottom is at most 1 m above the exit's end (20 m
+     when either is on the 8 m fallback: each tile fits the fallback to the LiDAR around its own box, so two tiles'
+     heights there differ by metres), and no cycle. Those that do not leave their core straight back into the exit's
+     tile come first, then the largest in-tile area. No area test: where the first stitches fail, the receiving
+     tile's in-tile areas are what went wrong (its REC2 inflow took another path: across the plain beside a braided
+     bed, or across a flat its box edge cut).
+   - **REC2 path** (`stitch_rec2_path`; `stitch` 1). For exits the receiving tile's routing gave nothing for (its
+     cells past the edge drain into reaches it does not own, e.g. back across the edge on a flat): the REC2 reach at
+     the exit's end (the relink's match, on the larger of the in-tile and the network area so far), then points every
+     20 m down REC2 for up to 10 km; at the first point with an acceptable reach of the receiving tile within 100 m,
+     the link (same order). `merge.json` `fallback_stitch` has the counts and the 60 biggest links of both.
 3. **Cycle guard**: a topological sort; a cycle is reported in `merge.json` and cut at its weakest link (highest
    `stitch` code, then smallest area).
    - **Zero-length reaches** (rf-lxa.12) then leave the network. The tile job gives a channel link of 3-6 path cells
@@ -77,8 +92,13 @@ uv run river-finder nz1m merge [qid ...] [--out DIR]   # all done tiles by defau
 5. **Outlets and truncation.** `outlet_kind`: 1 sea (the reach ends at no data in its tile), 2 lake without an
    outlet, 3 box edge (no link into the next tile, or that tile is not merged). A reach is an open entry when area
    enters its tile's core there (from the halo or a REC2 inflow, 0.25 km2 or more) and no reach of another tile
-   links in. `missing_up_km2` sums those areas down the network; `truncated` is set where the missing area is more
-   than 10 % of the true area.
+   links in, unless (rf-lxa.10) it is a reach of a lake with an outlet (its in-tile area is the lake's catchment
+   routed across the flat surface; the lake node brings that to the outlet from every member), or the tile across its
+   core's nearest side is merged and no unresolved exit ends within 3 km (every cell of a merged core is counted once,
+   so area from there can only go missing at an unresolved exit; otherwise the network brought the river in through
+   another reach and the in-tile area would count it twice). `missing_up_km2` sums those areas down the network;
+   `truncated` is set where the missing area is more than 10 % of the true area and REC2 does not say the area is
+   there (`area_mid_km2` at least 90 % of `rec2_area_at_km2`).
 6. **Joins**: REC2 matched along the network (`rec2_nzsegment`, `rec2_area_km2`, `rec2_area_at_km2`, `rec2_dist_m`,
    `river_rec2`, `river`; below), REC1 MAF (`specific_maf`, `maf_m3s`, `specific_maf_matched`, `rec1_nzreach`), the
    river-guide `region`.
@@ -211,6 +231,47 @@ reaches against the national layers (`data/nz1m/analysis/national_cost.json`). F
 full-tile equivalents of ~5,300 reaches): **about 4-6 minutes and 3-4 GB** (the edge lines, the relink's point
 index and the REC layers; `x1.arrow` is concatenated in memory, ~1 GB). Outputs: `reaches.parquet` ~0.5 GB,
 `x1.arrow` ~0.4 GB, `network.parquet` ~0.15 GB. The lake surveys before the run add ~10 windows of 1-3 minutes.
+
+## The national run (rf-lxa.10, 2026-11-28)
+
+378 tiles (`data/nz1m/tiles/`, 11 GB), the lake table (838 lakes: 633 flat, 193 tidal, 12 holes; 186 nodes), one
+tile re-run for the lakes (`q08y11`), then the merge: **1,238,220 reaches, 304,473 km** (1,456 zero-length reaches
+dropped, 19 of them with their 10.9 km2), 135 s, 4.1 GB. Run log and script: `run.sh` / `run.log` of the run directory
+(a frozen worktree at 5a06945, which has the empty-tile fixes); the merge was re-run on `main` with the rules below.
+
+| | first merge | with the rf-lxa.10 rules |
+|---|---:|---:|
+| exits | 10,752 | 10,752 |
+| linked at the edge (same cell / 8 m / entry) | 10,380 (10,305 / 75 / 245 entry) | the same |
+| REC2 relink | 48 | 48 |
+| receiving tile's routing / REC2 path | - | 40 / 5 |
+| unresolved inside the country (over 1 km2) | 55 (36) | **10 (6)** |
+| truncated (10 km2 or more) | 8,452 (4,756) | **62 (0)** |
+| open entries (10 km2 or more) | 998 (281) | 6 (0) |
+| cycles | 0 | 0 |
+
+- **What the first merge left.** 36 exits of 1 km2 or more ended at an edge, among them the Rakaia (2,778 km2, at
+  SH1: the tile below took its REC2 inflow beside the braided bed and sent it across the plain into the Selwyn and
+  Te Waihora, so no reach of that tile carried the river where the tile above left it), the Pomahaka (1,117), the
+  upper Taieri on the Maniototo scroll plain (160 + 159 + 52 across one edge, each tile sending it into the other),
+  the Mangapu (189) and Stewart Island's Freshwater (95). All but the Rakaia and the Mangapu are on the 8 m fallback.
+- **Truncation was mostly double counting.** Of the 8,452 truncated reaches, the 6,193 with a REC2 match had at least
+  90 % of REC2's area in 94 %: Waikato (missing 1,844 km2 from Taupo's lake reaches), Waitaki (10,416), Waiau, Clutha
+  (Hawea: the tile below spills the lake 2 km east of where the lake's tile does), lower Taieri. The rules above
+  leave 62 truncated reaches, all under 10 km2 (55 of them on the Te Waihora shore, `q15y12`).
+- **Left unresolved (6 of 1 km2 or more).** The Pomahaka at the `q07y05` / `q07y04` edge (1,270 km2): on the 8 m
+  fallback `q07y04` puts the valley 5-10 m higher than `q07y05` and drains it back north for more than 10 km, so every
+  reach of `q07y04` near the river or REC2 leads back into the exit (a cycle). The river below the edge carries only
+  its own area and is not flagged (`q07y04` has no open entry for it). Two flows on the Te Waihora shore at 0.5 m (147
+  and 59 km2, into the tidal lake), two coastal streams at `q08y04` (13 and 2 km2), and four of under 1 km2. Fixing
+  the Pomahaka needs the fallback fitted the same way in both tiles (rf-lxa.14).
+- **Spot checks** against REC2 (area at the reach): Waikato at the Taupo Control Gates 3,461 km2 (3,439), at the sea
+  14,524 (14,473); Taramakau at Inchbonnie 467 (469); Gowan 413 (414); Monowai at the weir 249 (278), down the Monowai
+  to the Waiau (the 8 m network sent it into the Borland Burn, rf-73f); Rakaia at the sea 2,989 (2,831); Taieri 5,706
+  (5,705); Whanganui 7,133 (7,131); Waiau 8,205 (8,212); Kawarau 5,756 (5,738); Hawea 1,467 (1,476); Ruamahanga 3,354
+  (3,313); Clutha (Matau branch) 19,292 (20,571: the Koau branch takes the rest). Along every one of these the
+  network's median area is 1.00 x REC2's; the Selwyn has 1,171 km2 against 983 (the tile across the Rakaia sends some
+  of the plain north of the Rakaia into it).
 
 ## The issues this closes
 

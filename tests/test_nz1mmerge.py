@@ -6,6 +6,7 @@ import json
 import sys
 from pathlib import Path
 
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pytest
@@ -133,6 +134,151 @@ def test_stitch_takes_the_line_through_the_exit_point_and_skips_the_one_ending_t
     down, stitch = np.full(4, -1, np.int64), np.full(4, M.STITCH_NONE, np.uint8)
     st = M.stitch_edges(T, edge2, down, stitch)
     assert down[0] == -1 and st["area_ratio"] == 1
+
+
+CORES2 = {"q00y00": [0.0, 0.0, 1000.0, 1000.0], "q01y00": [1000.0, 0.0, 2000.0, 1000.0]}
+
+
+def _fallback_frame(rows):
+    T = _frame(rows)
+    for c, v in (("dem_source", "lidar"), ("mid_x", 0.0), ("mid_y", 0.0), ("local_km2", 0.1)):
+        if c not in T:
+            T[c] = v
+    for c, e in (("start_x", "end_x"), ("start_y", "end_y")):
+        T[c] = T[c].fillna(T[e]) if c in T else T[e]
+    return T
+
+
+def _labels(root, tid, cells: dict):
+    """A ``local_catchment_core.tif`` for ``tid``: -1 but ``{(x, y): gid}`` (10 m cells by their centre)."""
+    import rasterio
+
+    x0, y0, x1, y1 = CORES2[tid]
+    a = np.full(int((y1 - y0 + 200) / 10), -1, np.int64)
+    a = np.full((len(a), int((x1 - x0 + 200) / 10)), -1, np.int64)
+    tf = from_origin(x0 - 100, y1 + 100, 10.0, 10.0)
+    for (x, y), g in cells.items():
+        r, c = rasterio.transform.rowcol(tf, x, y)
+        a[r, c] = g
+    d = N.tile_dir(tid, root)
+    d.mkdir(parents=True, exist_ok=True)
+    with rasterio.open(d / "local_catchment_core.tif", "w", driver="GTiff", width=a.shape[1], height=a.shape[0],
+                       count=1, dtype="int64", crs="EPSG:2193", transform=tf, nodata=-1) as w:
+        w.write(a, 1)
+
+
+def test_catchment_stitch_takes_the_receiving_tiles_own_routing(tmp_path):
+    # A's reach 0 leaves its core 30 m before the east edge (its line ends at x 970); nothing of B passes there.
+    # B's labels past the edge: 15 m in, reach 2001 (2 km2) and 2002 (30 km2, but 40 m higher); 45 m in, 2003
+    # (5 km2, which leaves B's core straight back into A)
+    T = _fallback_frame([
+        {"gid": 10, "tile": "q00y00", "exits_core": True, "end_x": 970.0, "end_y": 500.0, "area_tile_km2": 80.0,
+         "z_bot": 10.0},
+        {"gid": 2001, "tile": "q01y00", "exits_core": False, "end_x": 1300.0, "end_y": 400.0, "area_tile_km2": 2.0,
+         "z_bot": 9.0},
+        {"gid": 2002, "tile": "q01y00", "exits_core": False, "end_x": 1300.0, "end_y": 600.0, "area_tile_km2": 30.0,
+         "z_bot": 50.0},
+        {"gid": 2003, "tile": "q01y00", "exits_core": True, "end_x": 1003.0, "end_y": 300.0, "area_tile_km2": 5.0,
+         "z_bot": 8.0}])
+    _labels(tmp_path, "q01y00", {(1015.0, 495.0): 2001, (1015.0, 515.0): 2002, (1045.0, 505.0): 2003})
+
+    def run(T):
+        down, stitch = np.full(len(T), -1, np.int64), np.full(len(T), M.STITCH_NONE, np.uint8)
+        st = M.stitch_catchments(T, down, stitch, CORES2, tmp_path)
+        return down, stitch, st
+
+    down, stitch, st = run(T)
+    assert down[0] == 1 and stitch[0] == M.STITCH_EDGE and st["linked"] == 1   # the shallowest depth, not too high
+    T.loc[1, "z_bot"] = 12.0                     # 2001 now 2 m higher than the exit: the next depth, 2003
+    down, _, st = run(T)
+    assert down[0] == 3
+    T.loc[[0, 2], "dem_source"] = "8m"           # on the 8 m fallback 20 m is allowed: 2002 (the larger) wins
+    T.loc[2, "z_bot"] = 25.0
+    down, _, st = run(T)
+    assert down[0] == 2
+    T.loc[2, "z_bot"] = 60.0
+    T.loc[3, "z_bot"] = 70.0
+    T.loc[1, "z_bot"] = 70.0
+    down, _, st = run(T)
+    assert down[0] == -1 and st["refused"] == 1  # labels, but none acceptable
+
+
+def test_fallback_targets_prefer_no_return_and_never_make_a_cycle():
+    T = _fallback_frame([
+        {"gid": 10, "tile": "q00y00", "exits_core": True, "end_x": 990.0, "end_y": 500.0, "area_tile_km2": 50.0},
+        {"gid": 2001, "tile": "q01y00", "exits_core": False, "end_x": 1300.0, "end_y": 500.0, "area_tile_km2": 2.0},
+        {"gid": 2002, "tile": "q01y00", "exits_core": True, "end_x": 1002.0, "end_y": 700.0, "area_tile_km2": 9.0}])
+    names = T["tile"].astype(str).to_numpy()
+    area = T["area_tile_km2"].to_numpy(float)
+    back = M._into_tiles(T, CORES2)
+    assert list(back) == ["q01y00", "", "q00y00"]
+    down = np.full(3, -1, np.int64)
+    j = np.array([1, 2])
+    assert M._first_target(j, 0, names, area, back, down) == 1     # 2002 returns into A: after 2001
+    down[1] = 0                                                      # 2001 drains into the exit: a cycle
+    assert M._first_target(j, 0, names, area, back, down) == 2
+    down[2] = 0
+    assert M._first_target(j, 0, names, area, back, down) == -1
+
+
+def test_rec2_path_stitch_links_the_first_reach_down_rec2():
+    from river_finder.relink import Rec2Graph
+
+    # REC2 runs from A (x 900) east into B along y 500; B's reaches: 2001 starts 400 m on, 60 m off the line (a cycle
+    # back to the exit), 2002 starts 900 m on, 30 m off the line
+    rec2 = gpd.GeoDataFrame({"nzsegment": [1, 2], "HydroID": [11, 12], "NextDownID": [12, -1],
+                             "cum_area_km2": [60.0, 61.0]},
+                            geometry=[shapely.LineString([(800, 500), (1200, 500)]),
+                                      shapely.LineString([(1200, 500), (3000, 500)])], crs=2193)
+    T = _fallback_frame([
+        {"gid": 10, "tile": "q00y00", "exits_core": True, "end_x": 990.0, "end_y": 500.0, "area_tile_km2": 50.0},
+        {"gid": 2001, "tile": "q01y00", "exits_core": False, "end_x": 1500.0, "end_y": 900.0, "area_tile_km2": 3.0,
+         "start_x": 1400.0, "start_y": 560.0},
+        {"gid": 2002, "tile": "q01y00", "exits_core": False, "end_x": 2500.0, "end_y": 530.0, "area_tile_km2": 1.0,
+         "start_x": 1900.0, "start_y": 530.0}])
+    edge = {"xy": np.zeros((0, 2)), "k": np.zeros(0, np.int64), "last": np.zeros(0, bool)}
+    down, stitch = np.full(3, -1, np.int64), np.full(3, M.STITCH_NONE, np.uint8)
+    down[1] = 0
+    st = M.stitch_rec2_path(T, edge, down, stitch, CORES2, Rec2Graph.from_frame(rec2))
+    assert down[0] == 2 and stitch[0] == M.STITCH_EDGE and st["linked"] == 1
+    down[:] = -1
+    down[0] = -1
+    T.loc[0, "area_tile_km2"] = 1000.0           # no REC2 reach of a similar area: nothing
+    st = M.stitch_rec2_path(T, edge, down, stitch, CORES2, Rec2Graph.from_frame(rec2))
+    assert down[0] == -1 and st["no_rec2"] == 1
+
+
+def test_open_entries_from_a_merged_tile_need_an_unresolved_exit_near():
+    # B's reach 1 takes 40 km2 in from its halo (A's side) and nothing links in
+    T = _fallback_frame([
+        {"gid": 10, "tile": "q00y00", "exits_core": True, "end_x": 990.0, "end_y": 100.0, "area_tile_km2": 40.0},
+        {"gid": 2001, "tile": "q01y00", "exits_core": False, "end_x": 1300.0, "end_y": 500.0, "area_tile_km2": 40.0,
+         "local_km2": 0.5, "start_x": 1005.0, "start_y": 500.0}])
+    pos = pd.Index(T["gid"].to_numpy(np.int64))
+    down = np.full(2, -1, np.int64)
+    assert M.open_entries(T, pos, down)[1] == pytest.approx(39.5)                       # no cores: as before
+    assert M.open_entries(T, pos, down, cores={"q01y00": CORES2["q01y00"]})[1] > 0   # A not merged
+    assert M.open_entries(T, pos, down, cores=CORES2)[1] == 0                         # A merged, no exit lost
+    assert M.open_entries(T, pos, down, cores=CORES2, unresolved=np.array([0]))[1] > 0   # A's exit 400 m away
+    T.loc[0, "end_y"] = 4000.0
+    assert M.open_entries(T, pos, down, cores=CORES2, unresolved=np.array([0]))[1] == 0
+    assert M.open_entries(T, pos, down, lake_member=np.array([False, True]))[1] == 0  # a lake node's member
+
+
+def test_rec2_clears_truncation_where_the_area_is_there():
+    T = _fallback_frame([{"gid": 1, "tile": "q00y00", "exits_core": False, "end_x": 0.0, "end_y": 0.0,
+                          "area_tile_km2": 1.0},
+                         {"gid": 2, "tile": "q00y00", "exits_core": False, "end_x": 0.0, "end_y": 0.0,
+                          "area_tile_km2": 1.0}])
+    pos = pd.Index([1, 2])
+    down = np.array([1, -1], np.int64)
+    order = M.kahn(down)
+    area = np.array([10.0, 20.0])
+    missing = np.array([30.0, 0.0])
+    tr, miss, _ = M.truncation(T, pos, down, order, area, missing)
+    assert tr.tolist() == [True, True] and miss.tolist() == [30.0, 30.0]
+    tr, _, _ = M.truncation(T, pos, down, order, area, missing, rec2_at=np.array([10.5, np.nan]), area_mid=area)
+    assert tr.tolist() == [False, True]          # REC2 has 10.5 km2 where the network has 10; no REC2: as before
 
 
 def test_lake_nodes_redirect_to_the_one_outlet_without_cycles():

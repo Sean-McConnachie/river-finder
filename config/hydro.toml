@@ -1006,9 +1006,10 @@ operator = "Pioneer Energy"
 note = """Lake Monowai outlet control and a canal to the power station near the Waiau. EA Report 4 (3.3, p. 19, Figure 3-5):
 gates at the outlet control the lake, then "Water flows down the river for about 6 km into a lake formed by a weir
 across the river" and an 856 m canal and a 1,036 m pipeline take it to the powerhouse, so only the river below the weir
-is bypassed (OSM maps the weir at -45.77995, 167.59121, at the head of the canal). Not modelled that way (rf-6u2): the
-8 m network routes the lake's outflow north into the Borland Burn instead of down the Monowai (REC2), so the marking
-still starts at the outlet and follows the network's path."""
+is bypassed (OSM maps the weir at -45.77995, 167.59121, at the head of the canal). Modelled so since the 1 m network
+(rf-73f): the outlet gates regulate the river, the weir takes it into the canal and the station returns it by the Waiau.
+The 8 m network routed the lake's outflow north into the Borland Burn instead of down the Monowai (REC2); the 1 m
+network follows the Monowai to the Waiau (249 km2 at the weir, REC2 278)."""
 sources = ["https://en.wikipedia.org/wiki/List_of_power_stations_in_New_Zealand",
            "https://www.emi.ea.govt.nz/Environment/Datasets/HydrologicalModellingDataset/1_InfrastructureAndHydroConstraintAttributes/HMD%20Report%204%20-%20Hydro-power%20Schemes%20Background%20and%20Descriptions.pdf"]
 
@@ -1016,10 +1017,19 @@ sources = ["https://en.wikipedia.org/wiki/List_of_power_stations_in_New_Zealand"
 id = "monowai_gates"
 name = "Lake Monowai outlet"
 river = "Monowai River"
-role = "intake"
+role = "dam"
 lat = -45.8069
 lon = 167.5284
-note = "approx: lake outlet (the control gates; the canal's weir is about 6 km down the river, see the scheme note)"
+note = "approx: lake outlet (the control gates: the river below is regulated; EA Report 4, 3.3, p. 19)"
+
+[[scheme.point]]
+id = "monowai_weir"
+name = "Monowai weir (canal intake)"
+river = "Monowai River"
+role = "intake"
+lat = -45.77995
+lon = 167.59121
+note = "osm weir, at the head of the 856 m canal, about 6 km below the outlet (EA Report 4, 3.3, p. 19, Figure 3-5)"
 
 [[scheme.point]]
 id = "monowai_ps"
